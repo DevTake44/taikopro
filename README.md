@@ -30,7 +30,7 @@
 npm install
 npm run dev
 ```
-
+ 
 ## 未完了・要確認の作業
 
 - 旧`purchase_lines`/`purchases_detail`からの`purchases`テーブルへのデータ移行(元の仕入CSV全期間分が必要)
