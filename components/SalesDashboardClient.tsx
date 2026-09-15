@@ -687,16 +687,18 @@ function MatrixTotalCell({
     if (isPct) {
       const d = Math.round((v - cmpV) * 10) / 10;
       bottom = (
-        <span className={d >= 0 ? "val-pos" : "val-neg"}>
-          {compareLabel}比 {d >= 0 ? "+" : ""}{d}pt
-        </span>
+        <>
+          {compareLabel} {cmpV.toFixed(1)}%
+          <span className={d >= 0 ? "val-pos" : "val-neg"}> ({d >= 0 ? "+" : ""}{d}pt)</span>
+        </>
       );
     } else {
       const d = v - cmpV;
       bottom = (
-        <span className={d >= 0 ? "val-pos" : "val-neg"}>
-          {compareLabel}比 {d >= 0 ? "+" : ""}{jpn(d)}
-        </span>
+        <>
+          {compareLabel} {jpn(cmpV)}
+          <span className={d >= 0 ? "val-pos" : "val-neg"}> ({d >= 0 ? "+" : ""}{jpn(d)})</span>
+        </>
       );
     }
   }
