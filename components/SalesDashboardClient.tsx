@@ -381,10 +381,11 @@ function fiscalYearLabel(year: number, CUR: number): string {
   return `${year}年度`;
 }
 
+type MonthCellPair = { base: MonthCell; cmp: MonthCell | null };
 type MatrixMergedRow = {
   code: string;
   name: string;
-  cells: MonthCell[]; // 基準期間、12ヶ月分
+  cells: MonthCellPair[]; // 基準期間・対比期間、12ヶ月分ずつ
   total_s: number;
   total_p: number;
   total_m: number | null;
@@ -396,6 +397,17 @@ function metricValue(metric: Metric, v: { total_s: number; total_p: number; tota
   if (metric === "purchase") return v.total_p;
   if (metric === "profit") return v.total_s - v.total_p;
   return v.total_m;
+}
+
+function monthMetricValue(metric: Metric, c: MonthCell): number | null {
+  if (metric === "sales") return c.s;
+  if (metric === "purchase") return c.p;
+  if (metric === "profit") return c.s - c.p;
+  return c.m;
+}
+
+function toMonthCell(c: { s: number; p: number }): MonthCell {
+  return { s: c.s, p: c.p, m: c.s ? Math.round(((c.s - c.p) / c.s) * 1000) / 10 : null };
 }
 
 function MatrixPage({ data }: { data: DashboardData }) {
@@ -427,15 +439,14 @@ function MatrixPage({ data }: { data: DashboardData }) {
     // 仕入だけ先に入っていても計算・表示しない(buildDashboard.ts側で既に抑制済みなので、
     // ここではそのままs/pを使うだけでよい)。
     return baseRows.map((r) => {
-      const cells: MonthCell[] = r.months.map((c) => ({
-        s: c.s,
-        p: c.p,
-        m: c.s ? Math.round(((c.s - c.p) / c.s) * 1000) / 10 : null,
+      const cmpRow = compareByCode.get(r.code);
+      const cells: MonthCellPair[] = r.months.map((c, i) => ({
+        base: toMonthCell(c),
+        cmp: compareSet ? toMonthCell(cmpRow?.months[i] ?? { s: 0, p: 0 }) : null,
       }));
       const total_s = r.total_s;
       const total_p = r.total_p;
       const total_m = total_s ? Math.round(((total_s - total_p) / total_s) * 1000) / 10 : null;
-      const cmpRow = compareByCode.get(r.code);
       const cmp = compareSet
         ? {
             total_s: cmpRow?.total_s ?? 0,
@@ -470,16 +481,24 @@ function MatrixPage({ data }: { data: DashboardData }) {
   }
 
   const colTotals = new Array(12).fill(0).map(() => ({ s: 0, p: 0 }));
+  const colCmpTotals = new Array(12).fill(0).map(() => ({ s: 0, p: 0 }));
   rows.forEach((r) => {
     r.cells.forEach((c, i) => {
-      colTotals[i].s += c.s;
-      colTotals[i].p += c.p;
+      colTotals[i].s += c.base.s;
+      colTotals[i].p += c.base.p;
+      if (c.cmp) {
+        colCmpTotals[i].s += c.cmp.s;
+        colCmpTotals[i].p += c.cmp.p;
+      }
     });
   });
   const grand: MatrixMergedRow = {
     code: "",
     name: "合計",
-    cells: colTotals.map((c) => ({ s: c.s, p: c.p, m: c.s ? Math.round(((c.s - c.p) / c.s) * 1000) / 10 : null })),
+    cells: colTotals.map((c, i) => ({
+      base: toMonthCell(c),
+      cmp: compareSet ? toMonthCell(colCmpTotals[i]) : null,
+    })),
     total_s: rows.reduce((a, r) => a + r.total_s, 0),
     total_p: rows.reduce((a, r) => a + r.total_p, 0),
     total_m: null,
@@ -495,6 +514,7 @@ function MatrixPage({ data }: { data: DashboardData }) {
   if (grand.cmp) {
     grand.cmp.total_m = grand.cmp.total_s ? Math.round(((grand.cmp.total_s - grand.cmp.total_p) / grand.cmp.total_s) * 1000) / 10 : null;
   }
+  const compareLabel = compareSet ? fiscalYearLabel(compareYear as number, CUR) : null;
 
   return (
     <div className="page active">
@@ -589,9 +609,9 @@ function MatrixPage({ data }: { data: DashboardData }) {
                   <td className="codecol">{r.code}</td>
                   <td className="namecol">{r.name}</td>
                   {r.cells.map((c, i) => (
-                    <MatrixCell key={i} metric={metric} cur={c} />
+                    <MatrixCell key={i} metric={metric} base={c.base} cmp={c.cmp} compareLabel={compareLabel} />
                   ))}
-                  <MatrixTotalCell metric={metric} row={r} compareLabel={compareSet ? fiscalYearLabel(compareYear as number, CUR) : null} />
+                  <MatrixTotalCell metric={metric} row={r} compareLabel={compareLabel} />
                 </tr>
               ))}
             </tbody>
@@ -600,9 +620,9 @@ function MatrixPage({ data }: { data: DashboardData }) {
                 <td className="codecol" />
                 <td className="namecol">合計</td>
                 {grand.cells.map((c, i) => (
-                  <MatrixCell key={i} metric={metric} cur={c} />
+                  <MatrixCell key={i} metric={metric} base={c.base} cmp={c.cmp} compareLabel={compareLabel} />
                 ))}
-                <MatrixTotalCell metric={metric} row={grand} compareLabel={compareSet ? fiscalYearLabel(compareYear as number, CUR) : null} />
+                <MatrixTotalCell metric={metric} row={grand} compareLabel={compareLabel} />
               </tr>
             </tfoot>
           </table>
@@ -619,38 +639,59 @@ function MatrixPage({ data }: { data: DashboardData }) {
 
 function MatrixCell({
   metric,
-  cur,
+  base,
+  cmp,
+  compareLabel,
 }: {
   metric: Metric;
-  cur: { s: number; p: number; m: number | null };
+  base: MonthCell;
+  cmp: MonthCell | null;
+  compareLabel: string | null;
 }) {
-  const s = cur.s;
-  if (metric === "sales") {
-    if (s === 0) {
-      if (cur.p && cur.p > 0) {
-        return (
-          <td>
-            <span className="cell-s" style={{ color: "#c8ccd4" }}>0</span>
-            <span className="cell-m" style={{ color: "#e08a1e" }}>仕{jpn(cur.p)}</span>
-          </td>
-        );
-      }
-      return <td><span className="cell-s" style={{ color: "#c8ccd4" }}>0</span></td>;
+  const isPct = metric === "margin";
+  const v = monthMetricValue(metric, base);
+
+  let topEl: React.ReactNode;
+  let tdClass = "";
+  if (metric === "sales" && base.s === 0 && base.p > 0) {
+    topEl = (
+      <>
+        <span className="cell-s" style={{ color: "#c8ccd4" }}>0</span>
+        <span className="cell-m" style={{ color: "#e08a1e" }}>仕{jpn(base.p)}</span>
+      </>
+    );
+  } else if (v == null) {
+    topEl = <span className="cell-s" style={{ color: "#c8ccd4" }}>―</span>;
+  } else if (metric === "sales" && v === 0) {
+    topEl = <span className="cell-s" style={{ color: "#c8ccd4" }}>0</span>;
+  } else if (metric === "profit") {
+    topEl = <span className={`cell-s ${v >= 0 ? "val-pos" : "val-neg"}`}>{v >= 0 ? "+" : ""}{jpn(v)}</span>;
+  } else if (isPct) {
+    const good = v >= 10;
+    tdClass = good ? "cell-good" : "cell-bad";
+    topEl = <span className={`cell-s ${good ? "m-good" : "m-bad"}`}>{v.toFixed(1)}%</span>;
+  } else {
+    topEl = <span className="cell-s">{jpn(v)}</span>;
+  }
+
+  let bottomEl: React.ReactNode = null;
+  if (cmp) {
+    const cmpV = monthMetricValue(metric, cmp);
+    if (v != null && cmpV != null) {
+      const d = isPct ? Math.round((v - cmpV) * 10) / 10 : v - cmpV;
+      bottomEl = (
+        <span className={d >= 0 ? "val-pos" : "val-neg"}>
+          {compareLabel} {isPct ? `${cmpV.toFixed(1)}%` : jpn(cmpV)} ({d >= 0 ? "+" : ""}
+          {isPct ? `${d}pt` : jpn(d)})
+        </span>
+      );
     }
-    return <td><span className="cell-s">{jpn(s)}</span></td>;
   }
-  if (metric === "purchase") {
-    return <td><span className="cell-s">{jpn(cur.p)}</span></td>;
-  }
-  if (metric === "profit") {
-    const profit = s - cur.p;
-    return <td><span className={`cell-s ${profit >= 0 ? "val-pos" : "val-neg"}`}>{profit >= 0 ? "+" : ""}{jpn(profit)}</span></td>;
-  }
-  if (cur.m == null) return <td><span className="cell-s" style={{ color: "#c8ccd4" }}>―</span></td>;
-  const good = cur.m >= 10;
+
   return (
-    <td className={good ? "cell-good" : "cell-bad"}>
-      <span className={`cell-s ${good ? "m-good" : "m-bad"}`}>{cur.m.toFixed(1)}%</span>
+    <td className={tdClass}>
+      <div>{topEl}</div>
+      {bottomEl && <div style={{ fontSize: 9.5, color: "#9aa3b2", marginTop: 1 }}>{bottomEl}</div>}
     </td>
   );
 }
