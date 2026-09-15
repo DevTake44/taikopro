@@ -681,8 +681,7 @@ function MatrixCell({
       const d = isPct ? Math.round((v - cmpV) * 10) / 10 : v - cmpV;
       bottomEl = (
         <span className={d >= 0 ? "val-pos" : "val-neg"}>
-          {compareLabel} {isPct ? `${cmpV.toFixed(1)}%` : jpn(cmpV)} ({d >= 0 ? "+" : ""}
-          {isPct ? `${d}pt` : jpn(d)})
+          {compareLabel}比 {d >= 0 ? "+" : ""}{isPct ? `${d}pt` : jpn(d)}
         </span>
       );
     }
@@ -728,18 +727,16 @@ function MatrixTotalCell({
     if (isPct) {
       const d = Math.round((v - cmpV) * 10) / 10;
       bottom = (
-        <>
-          {compareLabel} {cmpV.toFixed(1)}%
-          <span className={d >= 0 ? "val-pos" : "val-neg"}> ({d >= 0 ? "+" : ""}{d}pt)</span>
-        </>
+        <span className={d >= 0 ? "val-pos" : "val-neg"}>
+          {compareLabel}比 {d >= 0 ? "+" : ""}{d}pt
+        </span>
       );
     } else {
       const d = v - cmpV;
       bottom = (
-        <>
-          {compareLabel} {jpn(cmpV)}
-          <span className={d >= 0 ? "val-pos" : "val-neg"}> ({d >= 0 ? "+" : ""}{jpn(d)})</span>
-        </>
+        <span className={d >= 0 ? "val-pos" : "val-neg"}>
+          {compareLabel}比 {d >= 0 ? "+" : ""}{jpn(d)}
+        </span>
       );
     }
   }

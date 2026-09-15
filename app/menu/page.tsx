@@ -12,7 +12,7 @@ const SALES_LINKS: MenuLink[] = [
   {
     href: "/sales",
     title: "経営報告・全体サマリー・月次マトリクス・目標対比",
-    description: "役員・経営層向け。売上・利益の全社状況を確認します。",
+    description: "売上・利益の全社状況を確認します。",
   },
   {
     href: "/sales/profit",
@@ -39,7 +39,7 @@ export default function MenuPage() {
         </div>
       </header>
 
-      <h2 className="blk" style={{ marginTop: 0 }}>売上管理(役員・経営層向け)</h2>
+      <h2 className="blk" style={{ marginTop: 0 }}>売上管理</h2>
       <MenuGrid links={SALES_LINKS} />
 
       <h2 className="blk">社内DX(社員が日々使う実務ツール)</h2>
