@@ -1,7 +1,12 @@
 export const maxDuration = 60;
 
 import { fetchAllMonthlyRows } from "@/lib/fetchMonthly";
+import { fetchStockDetailRows } from "@/lib/fetchStockDetail";
+import { fetchPurchaseLots, fetchStockShipments } from "@/lib/fetchStockMovement";
 import { buildDashboard } from "@/lib/buildDashboard";
+import { buildStockDetail } from "@/lib/buildStockDetail";
+import { buildStockMovement } from "@/lib/buildStockMovement";
+import type { StockMovementData } from "@/lib/buildStockMovement";
 import { ymFromDate } from "@/lib/fiscal";
 import SalesDashboardClient from "@/components/SalesDashboardClient";
 
@@ -14,7 +19,7 @@ export default async function SalesPage({
   searchParams?: { until?: string };
 }) {
   try {
-    const rows = await fetchAllMonthlyRows();
+    const [rows, stockRows] = await Promise.all([fetchAllMonthlyRows(), fetchStockDetailRows()]);
 
     // 「何月度まで見るか」の絞り込み機能。
     // 例えば8月分の仕入データがまだ入力途中で確定していない時、8月を除いて
@@ -29,9 +34,29 @@ export default async function SalesPage({
       : rows;
 
     const data = selectedUntil ? buildDashboard(rowsForDashboard) : fullDataset;
+    const stockDetail = buildStockDetail(stockRows, data.summary.CUR, data.summary.PREV);
+
+    // 不動在庫チェックは、まだ環境変数が未設定の場合もあるため、ここで失敗しても
+    // 他のタブは表示できるように、別途catchする。
+    let stockMovement: StockMovementData | null = null;
+    let stockMovementError: string | null = null;
+    try {
+      const [purchaseLots, shipments] = await Promise.all([fetchPurchaseLots(), fetchStockShipments()]);
+      const today = new Date().toISOString().slice(0, 10);
+      stockMovement = buildStockMovement(purchaseLots, shipments, today);
+    } catch (e) {
+      stockMovementError = e instanceof Error ? e.message : "不明なエラーが発生しました。";
+    }
 
     return (
-      <SalesDashboardClient data={data} availableMonths={availableMonths} selectedUntil={selectedUntil} />
+      <SalesDashboardClient
+        data={data}
+        stockDetail={stockDetail}
+        stockMovement={stockMovement}
+        stockMovementError={stockMovementError}
+        availableMonths={availableMonths}
+        selectedUntil={selectedUntil}
+      />
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "不明なエラーが発生しました。";

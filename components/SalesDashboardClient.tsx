@@ -4,11 +4,14 @@ import { useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import type { DashboardData, MonthCell } from "@/lib/types";
+import type { StockDetailData } from "@/lib/buildStockDetail";
+import type { StockMovementData } from "@/lib/buildStockMovement";
 import { yen, jpn, oku, monL } from "@/lib/format";
 import { monthsOfFiscalYear } from "@/lib/fiscal";
+import { StockCheckContent } from "./StockCheckClient";
 import TrendChart from "./TrendChart";
 
-type MainTab = "report" | "overview" | "matrix" | "goal";
+type MainTab = "report" | "overview" | "matrix" | "goal" | "stock";
 type OvMode = "cur" | "prev" | "yoy";
 type Dim = "loc" | "staff" | "cust";
 type Metric = "sales" | "purchase" | "profit" | "margin";
@@ -17,10 +20,16 @@ const dimName: Record<Dim, string> = { loc: "拠点", staff: "担当者", cust: 
 
 export default function SalesDashboardClient({
   data,
+  stockDetail,
+  stockMovement,
+  stockMovementError,
   availableMonths,
   selectedUntil,
 }: {
   data: DashboardData;
+  stockDetail: StockDetailData;
+  stockMovement: StockMovementData | null;
+  stockMovementError: string | null;
   availableMonths: string[];
   selectedUntil: string | null;
 }) {
@@ -84,6 +93,9 @@ export default function SalesDashboardClient({
           <button className={mainTab === "goal" ? "active" : ""} onClick={() => setMainTab("goal")}>
             目標追跡
           </button>
+          <button className={mainTab === "stock" ? "active" : ""} onClick={() => setMainTab("stock")}>
+            在庫
+          </button>
         </div>
       </header>
 
@@ -91,8 +103,11 @@ export default function SalesDashboardClient({
       {mainTab === "overview" && <OverviewPage data={data} />}
       {mainTab === "matrix" && <MatrixPage data={data} />}
       {mainTab === "goal" && <GoalPage data={data} />}
+      {mainTab === "stock" && (
+        <StockCheckContent stockDetail={stockDetail} stockMovement={stockMovement} stockMovementError={stockMovementError} />
+      )}
       <p className="foot-note">
-        実データに基づくダッシュボードです。在庫仕入(拠点90・91の商品別・仕入先別内訳)・不動在庫チェックは「社内DX」メニューでご覧いただけます。
+        実データに基づくダッシュボードです。不動在庫チェックの詳細は「社内DX」メニューからも確認できます。
       </p>
     </div>
   );
@@ -235,7 +250,7 @@ function ReportPage({ data }: { data: DashboardData }) {
       </div>
 
       <p style={{ fontSize: 11, color: "var(--ink-faint)", padding: "0 20px 16px" }}>
-        詳しい拠点別・担当者別の内訳は「月別マトリクス」タブ、個別の目標達成状況は「目標追跡」タブでご覧いただけます。在庫仕入の商品別・仕入先別の内訳、不動在庫チェックは「社内DX」メニューにあります。
+        詳しい拠点別・担当者別の内訳は「月別マトリクス」タブ、個別の目標達成状況は「目標追跡」タブ、在庫仕入の商品別・仕入先別の内訳や不動在庫チェックは「在庫」タブでご覧いただけます。
       </p>
     </div>
   );
@@ -365,7 +380,7 @@ function StockSection({ data }: { data: DashboardData }) {
         </div>
       </div>
       <p style={{ fontSize: 11, color: "var(--ink-faint)", padding: "8px 20px 0" }}>
-        商品別・仕入先別の詳しい内訳、不動在庫チェックは「社内DX」メニューでご覧いただけます。
+        商品別・仕入先別の詳しい内訳、不動在庫チェックは「在庫」タブでご覧いただけます。
       </p>
     </>
   );

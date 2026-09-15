@@ -7,9 +7,10 @@ import type { StockMovementData, StockMovementItem } from "@/lib/buildStockMovem
 import { yen, jpn, monL } from "@/lib/format";
 import TrendChart from "./TrendChart";
 
-// 「不動在庫チェック」画面(社内DX)。sales-dashboardの旧ダッシュボードの「在庫」タブを
-// そのまま独立したページに移設したもの(ロジックは変更していない)。
-export default function StockCheckClient({
+// 「不動在庫チェック」の中身(タブ・ページ両方から使えるよう分離)。
+// sales-dashboardの旧ダッシュボードの「在庫」タブをそのまま移設したもの
+// (ロジックは変更していない)。
+export function StockCheckContent({
   stockDetail,
   stockMovement,
   stockMovementError,
@@ -38,19 +39,6 @@ export default function StockCheckClient({
   const monthlyRows = sd.monthly.map((m) => ({ ...m, diff: m.cur - m.prev }));
 
   return (
-    <div className="wrap">
-      <header className="top">
-        <div className="title">
-          <h1>不動在庫チェック</h1>
-          <p>在庫仕入(拠点90・91)の内訳と、出荷実績との突き合わせによる不動在庫候補の一覧です。</p>
-        </div>
-        <div className="maintabs">
-          <Link href="/dx" className="ghost-btn-inline" style={{ padding: "8px 18px" }}>
-            ← 社内DXメニュー
-          </Link>
-        </div>
-      </header>
-
       <div className="page active">
         <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
           <KpiCard
@@ -170,6 +158,30 @@ export default function StockCheckClient({
           このページの「今期の在庫仕入額」は今期・前期の比較を表示しています。「不動在庫チェック」は、仕入と出荷実績を商品ごとに突き合わせて、現在も残っていると推定される在庫と、その在庫期間を計算しています。在庫商品ごとの詳しい売上推移(伸びている/落ちている等)は、今後の課題として残っています。
         </p>
       </div>
+  );
+}
+
+// /dx/stock 単独ページ用(ヘッダー・戻るリンク付き)。タブとして埋め込む場合は
+// StockCheckContentを直接使う(components/SalesDashboardClient.tsxの「在庫」タブ参照)。
+export default function StockCheckClient(props: {
+  stockDetail: StockDetailData;
+  stockMovement: StockMovementData | null;
+  stockMovementError: string | null;
+}) {
+  return (
+    <div className="wrap">
+      <header className="top">
+        <div className="title">
+          <h1>不動在庫チェック</h1>
+          <p>在庫仕入(拠点90・91)の内訳と、出荷実績との突き合わせによる不動在庫候補の一覧です。</p>
+        </div>
+        <div className="maintabs">
+          <Link href="/dx" className="ghost-btn-inline" style={{ padding: "8px 18px" }}>
+            ← 社内DXメニュー
+          </Link>
+        </div>
+      </header>
+      <StockCheckContent {...props} />
     </div>
   );
 }
