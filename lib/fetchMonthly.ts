@@ -1,32 +1,31 @@
 import { getSupabaseServerClient } from "./supabaseServer";
+import { fetchAllPagesConcurrent } from "./fetchPaged";
 import type { MonthlyRow } from "./types";
 
 const PAGE_SIZE = 1000; // Supabaseの1回のリクエストで安全に取れる件数
 
 /**
  * v_monthly ビューの全行を取得する。
- * 件数が多い（数万行）ため、1000件ずつに分けて何度も取得し、最後に1つにまとめる。
+ * 件数が多い(9万件超)ため、複数ページを同時並行で取得する(fetchPaged.ts参照)。
+ * 以前は1ページずつ順番に取得しており、約100回の往復が積み重なって画面表示が
+ * 遅くなっていた。
  */
 export async function fetchAllMonthlyRows(): Promise<MonthlyRow[]> {
   const supabase = getSupabaseServerClient();
-  const rows: MonthlyRow[] = [];
-  let from = 0;
-  while (true) {
-    const to = from + PAGE_SIZE - 1;
-    const { data, error } = await supabase
-      .from("v_monthly")
-      .select(
-        "month, fiscal_year, location_code, location_name, staff_code, staff_name, customer_code, customer_name, sales_amount, purchase_amount, profit, margin_pct, has_purchase"
-      )
-      .order("sort_id", { ascending: true })
-      .range(from, to);
-    if (error) {
-      throw new Error(`Supabaseからのデータ取得に失敗しました: ${error.message}`);
-    }
-    if (!data || data.length === 0) break;
-    rows.push(...(data as MonthlyRow[]));
-    if (data.length < PAGE_SIZE) break; // これが最後のページ
-    from += PAGE_SIZE;
+  try {
+    return await fetchAllPagesConcurrent<MonthlyRow>(
+      (from, to) =>
+        supabase
+          .from("v_monthly")
+          .select(
+            "month, fiscal_year, location_code, location_name, staff_code, staff_name, customer_code, customer_name, sales_amount, purchase_amount, profit, margin_pct, has_purchase"
+          )
+          .order("sort_id", { ascending: true })
+          .range(from, to),
+      { pageSize: PAGE_SIZE, concurrency: 10 }
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    throw new Error(`Supabaseからのデータ取得に失敗しました: ${message}`);
   }
-  return rows;
 }

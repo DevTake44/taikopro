@@ -7,6 +7,9 @@ import type {
   Summary,
   StockData,
   MonthCell,
+  YearDimRow,
+  YearMatrixSet,
+  YearMonthCell,
 } from "./types";
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -193,15 +196,62 @@ const prev_tp_same = acc.prev.slice(0, latestPiForA).reduce((a, c) => a + c.p, 0
   const cust_total_count = mat_cust_all.length;
   const mat_cust = mat_cust_all.slice(0, 100);
 
-  // 月別マトリクス専用: 前々期(PREV2)のデータがあれば「前期 vs 前々期」ペアも作る。
-  // 期首(10月)直後は今期がまだ1ヶ月分しかなく「今期 vs 前期」が役に立たないため。
-  const PREV2 = PREV - 1;
-  const hasPrev2Data = withYm.some((r) => r.fiscal_year === PREV2);
-  const mat_loc_prev = hasPrev2Data ? buildMatrix("location_code", "location_name", PREV, PREV2, prev_months, 12) : null;
-  const mat_staff_prev = hasPrev2Data ? buildMatrix("staff_code", "staff_name", PREV, PREV2, prev_months, 12) : null;
-  const mat_cust_prev_all = hasPrev2Data ? buildMatrix("customer_code", "customer_name", PREV, PREV2, prev_months, 12) : null;
-  const cust_total_count_prev = mat_cust_prev_all?.length ?? 0;
-  const mat_cust_prev = mat_cust_prev_all ? mat_cust_prev_all.slice(0, 100) : null;
+  // 月別マトリクス専用: 会計年度ごとに独立した月次データ(表示期間・対比期間を
+  // 画面側で自由に選べるようにするため)。年度は「今期(CUR)」と同じ扱いの年度だけ、
+  // 会社全体でまだ売上が1件も無い月の仕入を抑制する(過去の完結した年度は抑制しない)。
+  function buildYearDim(dimKey: DimKey, nameKey: NameKey, year: number): YearDimRow[] {
+    const map = new Map<string, { months: { s: number; p: number }[]; name: string }>();
+    for (const r of withYm) {
+      if (r.fiscal_year !== year) continue;
+      const code = r[dimKey];
+      if (!code) continue;
+      if (!map.has(code)) {
+        map.set(code, { months: Array.from({ length: 12 }, () => ({ s: 0, p: 0 })), name: code });
+      }
+      const acc = map.get(code)!;
+      const name = r[nameKey];
+      if (name) acc.name = name;
+      const i = periodIndexOf(r.ym);
+      acc.months[i].s += r.sales_amount;
+      acc.months[i].p += r.purchase_amount;
+    }
+
+    const suppressFutureMonths = year === CUR;
+    const rows: YearDimRow[] = [];
+    for (const [code, acc] of map) {
+      const months: YearMonthCell[] = acc.months.map((c, i) => {
+        const ym = monthsOfFiscalYear(year)[i];
+        const monthHasAnySales = !suppressFutureMonths || salesMonthsWithData.has(ym);
+        return { s: roundYen(c.s), p: monthHasAnySales ? roundYen(c.p) : 0 };
+      });
+      const total_s = months.reduce((a, m) => a + m.s, 0);
+      const total_p = months.reduce((a, m) => a + m.p, 0);
+      rows.push({ code, name: acc.name, months, total_s, total_p });
+    }
+    rows.sort((a, b) => b.total_s - a.total_s);
+    return rows;
+  }
+
+  // sales_monthlyの取り込み開始時期がpurchases_detailより遅いため、古い会計年度は
+  // 仕入だけあって売上が1件も無いことがある(2026-09時点でFY2023がこれに該当)。
+  // 月別マトリクスの「表示期間・対比期間」の選択肢としては、売上のある年度だけを出す。
+  const allFiscalYears = Array.from(new Set(withYm.map((r) => r.fiscal_year))).sort((a, b) => a - b);
+  const salesByFiscalYear = new Map<number, number>();
+  for (const r of withYm) {
+    salesByFiscalYear.set(r.fiscal_year, (salesByFiscalYear.get(r.fiscal_year) ?? 0) + r.sales_amount);
+  }
+  const fiscalYears = allFiscalYears.filter((y) => (salesByFiscalYear.get(y) ?? 0) > 0);
+
+  const matrixByYear: Record<number, YearMatrixSet> = {};
+  for (const y of allFiscalYears) {
+    const custAll = buildYearDim("customer_code", "customer_name", y);
+    matrixByYear[y] = {
+      loc: buildYearDim("location_code", "location_name", y),
+      staff: buildYearDim("staff_code", "staff_name", y),
+      cust: custAll.slice(0, 100),
+      cust_total_count: custAll.length,
+    };
+  }
 
   const STOCK_CODES = new Set(["90", "91"]);
   const curStock = new Array(12).fill(0);
@@ -245,10 +295,8 @@ const prev_tp_same = acc.prev.slice(0, latestPiForA).reduce((a, c) => a + c.p, 0
     mat_staff,
     mat_cust,
     cust_total_count,
-    mat_loc_prev,
-    mat_staff_prev,
-    mat_cust_prev,
-    cust_total_count_prev,
+    fiscalYears,
+    matrixByYear,
     stock,
   };
 }

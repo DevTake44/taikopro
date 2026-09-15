@@ -61,6 +61,24 @@ export type StockData = {
   n_cur: number;
   yoy_pct: number | null;
 };
+// 月別マトリクス専用: 会計年度ごとの、拠点/担当者/得意先別の月次データ。
+// 「今期 vs 前期」のように2期をあらかじめ固定でペアにするのではなく、画面側で
+// 表示期間・対比期間を自由に選べるようにするため、年度ごとに独立した形で持つ。
+export type YearMonthCell = { s: number; p: number };
+export type YearDimRow = {
+  code: string;
+  name: string;
+  months: YearMonthCell[]; // 12ヶ月分(その会計年度の10月始まり)
+  total_s: number;
+  total_p: number;
+};
+export type YearMatrixSet = {
+  loc: YearDimRow[];
+  staff: YearDimRow[];
+  cust: YearDimRow[]; // 得意先は当該年度の売上上位100件のみ
+  cust_total_count: number; // 得意先の全件数(絞り込み前)
+};
+
 export type DashboardData = {
   summary: Summary;
   cur_months: string[];
@@ -72,12 +90,8 @@ export type DashboardData = {
   mat_staff: MatrixRow[];
   mat_cust: MatrixRow[];
   cust_total_count: number;
-  // 月別マトリクス専用: 前々期 vs 前期(=今期を基準にした「1つ前のペア」)の比較データ。
-  // 期首(10月)直後は今期がまだ1ヶ月分しかなく「今期 vs 前期」が役に立たないため、
-  // 1年ずらしたペアも見られるようにしたもの。データが3期分無い場合はnull。
-  mat_loc_prev: MatrixRow[] | null;
-  mat_staff_prev: MatrixRow[] | null;
-  mat_cust_prev: MatrixRow[] | null;
-  cust_total_count_prev: number;
+  // 会計年度(例: 2025)をキーにした、月別マトリクス用の生データ。
+  fiscalYears: number[]; // データが存在する会計年度の一覧(昇順)
+  matrixByYear: Record<number, YearMatrixSet>;
   stock: StockData;
 };

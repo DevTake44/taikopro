@@ -3,15 +3,15 @@
 import { useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import type { DashboardData, MatrixRow } from "@/lib/types";
+import type { DashboardData, MonthCell } from "@/lib/types";
 import { yen, jpn, oku, monL } from "@/lib/format";
+import { monthsOfFiscalYear } from "@/lib/fiscal";
 import TrendChart from "./TrendChart";
 
 type MainTab = "report" | "overview" | "matrix" | "goal";
 type OvMode = "cur" | "prev" | "yoy";
 type Dim = "loc" | "staff" | "cust";
 type Metric = "sales" | "purchase" | "profit" | "margin";
-type PeriodPair = "cur_prev" | "prev_prev2";
 
 const dimName: Record<Dim, string> = { loc: "拠点", staff: "担当者", cust: "得意先" };
 
@@ -372,32 +372,83 @@ function StockSection({ data }: { data: DashboardData }) {
 }
 
 /* ============ 月別マトリクス ============ */
+
+// 会計年度→表示ラベル(今期/前期/前々期/それ以前)を作る
+function fiscalYearLabel(year: number, CUR: number): string {
+  if (year === CUR) return "今期";
+  if (year === CUR - 1) return "前期";
+  if (year === CUR - 2) return "前々期";
+  return `${year}年度`;
+}
+
+type MatrixMergedRow = {
+  code: string;
+  name: string;
+  cells: MonthCell[]; // 基準期間、12ヶ月分
+  total_s: number;
+  total_p: number;
+  total_m: number | null;
+  cmp: { total_s: number; total_p: number; total_m: number | null } | null; // 対比期間(選んでいなければnull)
+};
+
+function metricValue(metric: Metric, v: { total_s: number; total_p: number; total_m: number | null }): number | null {
+  if (metric === "sales") return v.total_s;
+  if (metric === "purchase") return v.total_p;
+  if (metric === "profit") return v.total_s - v.total_p;
+  return v.total_m;
+}
+
 function MatrixPage({ data }: { data: DashboardData }) {
   const [dim, setDim] = useState<Dim>("loc");
   const [metric, setMetric] = useState<Metric>("sales");
-  const [sortKey, setSortKey] = useState<"code" | "name" | "cur_ts">("cur_ts");
+  const [sortKey, setSortKey] = useState<"code" | "name" | "total">("total");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filter, setFilter] = useState("");
 
-  const hasPrevPair = data.mat_loc_prev !== null;
-  const [periodPair, setPeriodPair] = useState<PeriodPair>("cur_prev");
-  const effectivePair: PeriodPair = hasPrevPair ? periodPair : "cur_prev";
+  const CUR = data.summary.CUR;
+  const years = data.fiscalYears; // 昇順
+  const latestYear = years[years.length - 1];
+  const [baseYear, setBaseYear] = useState<number>(latestYear);
+  const [compareYear, setCompareYear] = useState<number | "none">(
+    years.length >= 2 ? years[years.length - 2] : "none"
+  );
 
-  const rowsAll =
-    effectivePair === "cur_prev"
-      ? dim === "loc"
-        ? data.mat_loc
-        : dim === "staff"
-        ? data.mat_staff
-        : data.mat_cust
-      : dim === "loc"
-      ? data.mat_loc_prev ?? []
-      : dim === "staff"
-      ? data.mat_staff_prev ?? []
-      : data.mat_cust_prev ?? [];
+  const baseSet = data.matrixByYear[baseYear];
+  const compareSet = compareYear === "none" ? null : data.matrixByYear[compareYear];
+
+  const baseMonths = useMemo(() => monthsOfFiscalYear(baseYear), [baseYear]);
+
+  const mergedAll = useMemo<MatrixMergedRow[]>(() => {
+    const baseRows = dim === "loc" ? baseSet.loc : dim === "staff" ? baseSet.staff : baseSet.cust;
+    const compareRows = compareSet ? (dim === "loc" ? compareSet.loc : dim === "staff" ? compareSet.staff : compareSet.cust) : null;
+    const compareByCode = new Map((compareRows ?? []).map((r) => [r.code, r]));
+
+    // 今期(CUR)扱いの年度のときだけ、会社全体でまだ売上が1件も無い月は
+    // 仕入だけ先に入っていても計算・表示しない(buildDashboard.ts側で既に抑制済みなので、
+    // ここではそのままs/pを使うだけでよい)。
+    return baseRows.map((r) => {
+      const cells: MonthCell[] = r.months.map((c) => ({
+        s: c.s,
+        p: c.p,
+        m: c.s ? Math.round(((c.s - c.p) / c.s) * 1000) / 10 : null,
+      }));
+      const total_s = r.total_s;
+      const total_p = r.total_p;
+      const total_m = total_s ? Math.round(((total_s - total_p) / total_s) * 1000) / 10 : null;
+      const cmpRow = compareByCode.get(r.code);
+      const cmp = compareSet
+        ? {
+            total_s: cmpRow?.total_s ?? 0,
+            total_p: cmpRow?.total_p ?? 0,
+            total_m: cmpRow && cmpRow.total_s ? Math.round(((cmpRow.total_s - cmpRow.total_p) / cmpRow.total_s) * 1000) / 10 : null,
+          }
+        : null;
+      return { code: r.code, name: r.name, cells, total_s, total_p, total_m, cmp };
+    });
+  }, [baseSet, compareSet, dim]);
 
   const rows = useMemo(() => {
-    let r = rowsAll;
+    let r = mergedAll;
     if (filter) {
       const f = filter.toLowerCase();
       r = r.filter((row) => (row.name + row.code).toLowerCase().includes(f));
@@ -405,12 +456,12 @@ function MatrixPage({ data }: { data: DashboardData }) {
     r = [...r].sort((a, b) => {
       if (sortKey === "code") return sortDir === "asc" ? Number(a.code) - Number(b.code) : Number(b.code) - Number(a.code);
       if (sortKey === "name") return sortDir === "asc" ? a.name.localeCompare(b.name, "ja") : b.name.localeCompare(a.name, "ja");
-      return sortDir === "asc" ? a.cur_ts - b.cur_ts : b.cur_ts - a.cur_ts;
+      return sortDir === "asc" ? a.total_s - b.total_s : b.total_s - a.total_s;
     });
     return r;
-  }, [rowsAll, filter, sortKey, sortDir]);
+  }, [mergedAll, filter, sortKey, sortDir]);
 
-  function onSort(k: "code" | "name" | "cur_ts") {
+  function onSort(k: "code" | "name" | "total") {
     if (k === sortKey) setSortDir(sortDir === "asc" ? "desc" : "asc");
     else {
       setSortKey(k);
@@ -418,28 +469,32 @@ function MatrixPage({ data }: { data: DashboardData }) {
     }
   }
 
-  const months = effectivePair === "cur_prev" ? data.cur_months : data.prev_months;
-
-  const colS = new Array(months.length).fill(0);
-  const colPS = new Array(months.length).fill(0);
-  const colP = new Array(months.length).fill(0);
-  const colPP = new Array(months.length).fill(0);
+  const colTotals = new Array(12).fill(0).map(() => ({ s: 0, p: 0 }));
   rows.forEach((r) => {
-    r.cur.forEach((c, i) => {
-      colS[i] += c.s;
-      colP[i] += c.p;
-    });
-    r.prev.forEach((c, i) => {
-      colPS[i] += c.s;
-      colPP[i] += c.p;
+    r.cells.forEach((c, i) => {
+      colTotals[i].s += c.s;
+      colTotals[i].p += c.p;
     });
   });
-  const gS = rows.reduce((a, r) => a + r.cur_ts, 0);
-  const gPS = rows.reduce((a, r) => a + r.prev_ts, 0);
-  const gP = rows.reduce((a, r) => a + r.cur_tp, 0);
-    const gPP = rows.reduce((a, r) => a + r.prev_tp, 0);
-  const gPS_same = rows.reduce((a, r) => a + r.prev_ts_same, 0);
-  const gPP_same = rows.reduce((a, r) => a + r.prev_tp_same, 0);
+  const grand: MatrixMergedRow = {
+    code: "",
+    name: "合計",
+    cells: colTotals.map((c) => ({ s: c.s, p: c.p, m: c.s ? Math.round(((c.s - c.p) / c.s) * 1000) / 10 : null })),
+    total_s: rows.reduce((a, r) => a + r.total_s, 0),
+    total_p: rows.reduce((a, r) => a + r.total_p, 0),
+    total_m: null,
+    cmp: compareSet
+      ? {
+          total_s: rows.reduce((a, r) => a + (r.cmp?.total_s ?? 0), 0),
+          total_p: rows.reduce((a, r) => a + (r.cmp?.total_p ?? 0), 0),
+          total_m: null,
+        }
+      : null,
+  };
+  grand.total_m = grand.total_s ? Math.round(((grand.total_s - grand.total_p) / grand.total_s) * 1000) / 10 : null;
+  if (grand.cmp) {
+    grand.cmp.total_m = grand.cmp.total_s ? Math.round(((grand.cmp.total_s - grand.cmp.total_p) / grand.cmp.total_s) * 1000) / 10 : null;
+  }
 
   return (
     <div className="page active">
@@ -484,25 +539,37 @@ function MatrixPage({ data }: { data: DashboardData }) {
               </button>
             ))}
           </div>
-          <div className="tabs">
-            <span style={{ fontSize: 12, color: "var(--ink-faint)", padding: "0 8px", alignSelf: "center" }}>
-              対比:
-            </span>
-            <button
-              className={effectivePair === "cur_prev" ? "active" : ""}
-              onClick={() => setPeriodPair("cur_prev")}
+        </div>
+        <div className="card-head" style={{ paddingTop: 0, flexWrap: "wrap", gap: 16 }}>
+          <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            表示期間:
+            <select
+              value={baseYear}
+              onChange={(e) => setBaseYear(Number(e.target.value))}
+              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
             >
-              今期 vs 前期
-            </button>
-            <button
-              className={effectivePair === "prev_prev2" ? "active" : ""}
-              onClick={() => setPeriodPair("prev_prev2")}
-              disabled={!hasPrevPair}
-              title={hasPrevPair ? undefined : "前々期分のデータがまだありません"}
+              {[...years].reverse().map((y) => (
+                <option key={y} value={y}>
+                  {fiscalYearLabel(y, CUR)}({y}年度)
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            対比期間:
+            <select
+              value={compareYear}
+              onChange={(e) => setCompareYear(e.target.value === "none" ? "none" : Number(e.target.value))}
+              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
             >
-              前期 vs 前々期
-            </button>
-          </div>
+              <option value="none">対比なし</option>
+              {[...years].reverse().map((y) => (
+                <option key={y} value={y} disabled={y === baseYear}>
+                  {fiscalYearLabel(y, CUR)}({y}年度)
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="matwrap">
           <table className="mat">
@@ -510,10 +577,10 @@ function MatrixPage({ data }: { data: DashboardData }) {
               <tr>
                 <th className="codecol" onClick={() => onSort("code")}>コード</th>
                 <th className="namecol" onClick={() => onSort("name")}>{dimName[dim]}</th>
-                {months.map((m) => (
+                {baseMonths.map((m) => (
                   <th key={m}>{monL(m)}</th>
                 ))}
-                <th className="totcol" onClick={() => onSort("cur_ts")}>トータル</th>
+                <th className="totcol" onClick={() => onSort("total")}>トータル</th>
               </tr>
             </thead>
             <tbody>
@@ -521,10 +588,10 @@ function MatrixPage({ data }: { data: DashboardData }) {
                 <tr key={r.code}>
                   <td className="codecol">{r.code}</td>
                   <td className="namecol">{r.name}</td>
-                  {r.cur.map((c, i) => (
+                  {r.cells.map((c, i) => (
                     <MatrixCell key={i} metric={metric} cur={c} />
                   ))}
-                  <MatrixTotalCell metric={metric} row={r} />
+                  <MatrixTotalCell metric={metric} row={r} compareLabel={compareSet ? fiscalYearLabel(compareYear as number, CUR) : null} />
                 </tr>
               ))}
             </tbody>
@@ -532,35 +599,18 @@ function MatrixPage({ data }: { data: DashboardData }) {
               <tr>
                 <td className="codecol" />
                 <td className="namecol">合計</td>
-                {months.map((_m, i) => (
-                  <MatrixCell key={i} metric={metric} cur={{ s: colS[i], p: colP[i], m: colS[i] ? round1(((colS[i] - colP[i]) / colS[i]) * 100) : null }} />
+                {grand.cells.map((c, i) => (
+                  <MatrixCell key={i} metric={metric} cur={c} />
                 ))}
-                <MatrixTotalCell
-                  metric={metric}
-                  row={{
-                    code: "",
-                    name: "",
-                    cur: [],
-                    prev: [],
-                    cur_ts: gS,
-                    cur_tp: gP,
-                    cur_tm: gS ? round1(((gS - gP) / gS) * 100) : null,
-                    prev_ts: gPS,
-                    prev_tp: gPP,
-                    prev_ts_same: gPS_same,
-                    prev_tp_same: gPP_same,
-                    prev_tm: null,
-                    target: null,
-                  }}
-                />
+                <MatrixTotalCell metric={metric} row={grand} compareLabel={compareSet ? fiscalYearLabel(compareYear as number, CUR) : null} />
               </tr>
             </tfoot>
           </table>
         </div>
         <p style={{ fontSize: 11, color: "var(--ink-faint)", padding: "8px 20px 16px" }}>
           {dim === "cust"
-            ? `得意先は売上上位100件(全${(effectivePair === "cur_prev" ? data.cust_total_count : data.cust_total_count_prev).toLocaleString()}件)。検索で絞込。`
-            : "4つのボタンで表示を切替。粗利率は10%以上=緑/未満=赤。"}
+            ? `得意先は売上上位100件(全${baseSet.cust_total_count.toLocaleString()}件)。検索で絞込。`
+            : "4つのボタンで表示を切替。粗利率は10%以上=緑/未満=赤。対比期間を選ぶと、トータル列に対比先との差も表示されます。"}
         </p>
       </div>
     </div>
@@ -605,16 +655,58 @@ function MatrixCell({
   );
 }
 
-function MatrixTotalCell({ metric, row }: { metric: Metric; row: MatrixRow }) {
-  if (metric === "sales") return <td className="totcol"><span className="cell-s">{jpn(row.cur_ts)}</span></td>;
-  if (metric === "purchase") return <td className="totcol"><span className="cell-s">{jpn(row.cur_tp)}</span></td>;
-  if (metric === "profit") {
-    const profit = row.cur_ts - row.cur_tp;
-    return <td className="totcol"><span className={`cell-s ${profit >= 0 ? "val-pos" : "val-neg"}`}>{profit >= 0 ? "+" : ""}{jpn(profit)}</span></td>;
+function MatrixTotalCell({
+  metric,
+  row,
+  compareLabel,
+}: {
+  metric: Metric;
+  row: MatrixMergedRow;
+  compareLabel: string | null;
+}) {
+  const v = metricValue(metric, row);
+  const isPct = metric === "margin";
+  const topEl =
+    v == null ? (
+      <span className="cell-s">―</span>
+    ) : metric === "profit" ? (
+      <span className={`cell-s ${v >= 0 ? "val-pos" : "val-neg"}`}>{v >= 0 ? "+" : ""}{jpn(v)}</span>
+    ) : isPct ? (
+      <span className={`cell-s ${v >= 10 ? "m-good" : "m-bad"}`}>{v.toFixed(1)}%</span>
+    ) : (
+      <span className="cell-s">{jpn(v)}</span>
+    );
+
+  if (!row.cmp) {
+    return <td className="totcol">{topEl}</td>;
   }
-  if (row.cur_tm == null) return <td className="totcol">―</td>;
-  const good = row.cur_tm >= 10;
-  return <td className="totcol"><span className={`cell-s ${good ? "m-good" : "m-bad"}`}>{row.cur_tm.toFixed(1)}%</span></td>;
+
+  const cmpV = metricValue(metric, row.cmp);
+  let bottom: React.ReactNode = "―";
+  if (v != null && cmpV != null) {
+    if (isPct) {
+      const d = Math.round((v - cmpV) * 10) / 10;
+      bottom = (
+        <span className={d >= 0 ? "val-pos" : "val-neg"}>
+          {compareLabel}比 {d >= 0 ? "+" : ""}{d}pt
+        </span>
+      );
+    } else {
+      const d = v - cmpV;
+      bottom = (
+        <span className={d >= 0 ? "val-pos" : "val-neg"}>
+          {compareLabel}比 {d >= 0 ? "+" : ""}{jpn(d)}
+        </span>
+      );
+    }
+  }
+
+  return (
+    <td className="totcol">
+      <div>{topEl}</div>
+      <div style={{ fontSize: 10, color: "#9aa3b2", marginTop: 2 }}>{bottom}</div>
+    </td>
+  );
 }
 /* ============ 目標追跡 ============ */
 function GoalPage({ data }: { data: DashboardData }) {
