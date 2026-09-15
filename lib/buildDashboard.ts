@@ -108,10 +108,14 @@ export function buildDashboard(rows: MonthlyRow[]): DashboardData {
   type DimKey = "location_code" | "staff_code" | "customer_code";
   type NameKey = "location_name" | "staff_name" | "customer_name";
 
-  function buildMatrix(dimKey: DimKey, nameKey: NameKey): MatrixRow[] {
+  // yA=手前の期(cur側)、yB=比較対象の期(prev側)。yAが今期(CUR)の場合だけ、
+  // 「会社全体でまだ売上が1件も無い月は仕入だけ先に入っていても計算・表示しない」
+  // という抑制を行う(過去の完結した期にはこの抑制は不要)。
+  function buildMatrix(dimKey: DimKey, nameKey: NameKey, yA: number, yB: number, monthsA: string[], latestPiForA: number): MatrixRow[] {
     type Acc = { cur: { s: number; p: number }[]; prev: { s: number; p: number }[] };
     const map = new Map<string, Acc>();
     const nameMap = new Map<string, string>();
+    const suppressFutureMonths = yA === CUR;
 
     for (const r of withYm) {
       const code = r[dimKey];
@@ -127,10 +131,10 @@ export function buildDashboard(rows: MonthlyRow[]): DashboardData {
       if (name) nameMap.set(code, name);
 
       const i = periodIndexOf(r.ym);
-      if (r.fiscal_year === CUR) {
+      if (r.fiscal_year === yA) {
         acc.cur[i].s += r.sales_amount;
         acc.cur[i].p += r.purchase_amount;
-      } else if (r.fiscal_year === PREV) {
+      } else if (r.fiscal_year === yB) {
         acc.prev[i].s += r.sales_amount;
         acc.prev[i].p += r.purchase_amount;
       }
@@ -141,8 +145,8 @@ export function buildDashboard(rows: MonthlyRow[]): DashboardData {
       const cur: MonthCell[] = acc.cur.map((c, i) => {
         // その月、会社全体でまだ売上が1件も無いなら(=まだ売上データが未入力の月なら)、
         // 仕入だけ先に入っていても、その月の仕入・粗利は計算・表示しない。
-        const ym = cur_months[i];
-        const monthHasAnySales = salesMonthsWithData.has(ym);
+        const ym = monthsA[i];
+        const monthHasAnySales = !suppressFutureMonths || salesMonthsWithData.has(ym);
         const s = roundYen(c.s);
         const p = monthHasAnySales ? roundYen(c.p) : 0;
         return {
@@ -156,8 +160,8 @@ const cur_ts = cur.reduce((a, c) => a + c.s, 0);
 const cur_tp = cur.reduce((a, c) => a + c.p, 0);
 const prev_ts = acc.prev.reduce((a, c) => a + c.s, 0);
 const prev_tp = acc.prev.reduce((a, c) => a + c.p, 0);
-const prev_ts_same = acc.prev.slice(0, latest_pi).reduce((a, c) => a + c.s, 0);
-const prev_tp_same = acc.prev.slice(0, latest_pi).reduce((a, c) => a + c.p, 0);
+const prev_ts_same = acc.prev.slice(0, latestPiForA).reduce((a, c) => a + c.s, 0);
+const prev_tp_same = acc.prev.slice(0, latestPiForA).reduce((a, c) => a + c.p, 0);
       const prev_tm = prev_ts ? round1(((prev_ts - prev_tp) / prev_ts) * 100) : null;
       const cur_tm = cur_ts ? round1(((cur_ts - cur_tp) / cur_ts) * 100) : null;
       const target = prev_tm !== null ? round1(prev_tm + 3) : null;
@@ -183,11 +187,21 @@ const prev_tp_same = acc.prev.slice(0, latest_pi).reduce((a, c) => a + c.p, 0);
     return rows;
   }
 
-  const mat_loc = buildMatrix("location_code", "location_name");
-  const mat_staff = buildMatrix("staff_code", "staff_name");
-  const mat_cust_all = buildMatrix("customer_code", "customer_name");
+  const mat_loc = buildMatrix("location_code", "location_name", CUR, PREV, cur_months, latest_pi);
+  const mat_staff = buildMatrix("staff_code", "staff_name", CUR, PREV, cur_months, latest_pi);
+  const mat_cust_all = buildMatrix("customer_code", "customer_name", CUR, PREV, cur_months, latest_pi);
   const cust_total_count = mat_cust_all.length;
   const mat_cust = mat_cust_all.slice(0, 100);
+
+  // 月別マトリクス専用: 前々期(PREV2)のデータがあれば「前期 vs 前々期」ペアも作る。
+  // 期首(10月)直後は今期がまだ1ヶ月分しかなく「今期 vs 前期」が役に立たないため。
+  const PREV2 = PREV - 1;
+  const hasPrev2Data = withYm.some((r) => r.fiscal_year === PREV2);
+  const mat_loc_prev = hasPrev2Data ? buildMatrix("location_code", "location_name", PREV, PREV2, prev_months, 12) : null;
+  const mat_staff_prev = hasPrev2Data ? buildMatrix("staff_code", "staff_name", PREV, PREV2, prev_months, 12) : null;
+  const mat_cust_prev_all = hasPrev2Data ? buildMatrix("customer_code", "customer_name", PREV, PREV2, prev_months, 12) : null;
+  const cust_total_count_prev = mat_cust_prev_all?.length ?? 0;
+  const mat_cust_prev = mat_cust_prev_all ? mat_cust_prev_all.slice(0, 100) : null;
 
   const STOCK_CODES = new Set(["90", "91"]);
   const curStock = new Array(12).fill(0);
@@ -231,6 +245,10 @@ const prev_tp_same = acc.prev.slice(0, latest_pi).reduce((a, c) => a + c.p, 0);
     mat_staff,
     mat_cust,
     cust_total_count,
+    mat_loc_prev,
+    mat_staff_prev,
+    mat_cust_prev,
+    cust_total_count_prev,
     stock,
   };
 }

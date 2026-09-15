@@ -10,7 +10,8 @@ import TrendChart from "./TrendChart";
 type MainTab = "report" | "overview" | "matrix" | "goal";
 type OvMode = "cur" | "prev" | "yoy";
 type Dim = "loc" | "staff" | "cust";
-type Metric = "sales" | "purchase" | "profit" | "prevprofit" | "profitdiff" | "yoyamt" | "yoydiff" | "yoypct" | "margin";
+type Metric = "sales" | "purchase" | "profit" | "margin";
+type PeriodPair = "cur_prev" | "prev_prev2";
 
 const dimName: Record<Dim, string> = { loc: "拠点", staff: "担当者", cust: "得意先" };
 
@@ -378,7 +379,22 @@ function MatrixPage({ data }: { data: DashboardData }) {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filter, setFilter] = useState("");
 
-  const rowsAll = dim === "loc" ? data.mat_loc : dim === "staff" ? data.mat_staff : data.mat_cust;
+  const hasPrevPair = data.mat_loc_prev !== null;
+  const [periodPair, setPeriodPair] = useState<PeriodPair>("cur_prev");
+  const effectivePair: PeriodPair = hasPrevPair ? periodPair : "cur_prev";
+
+  const rowsAll =
+    effectivePair === "cur_prev"
+      ? dim === "loc"
+        ? data.mat_loc
+        : dim === "staff"
+        ? data.mat_staff
+        : data.mat_cust
+      : dim === "loc"
+      ? data.mat_loc_prev ?? []
+      : dim === "staff"
+      ? data.mat_staff_prev ?? []
+      : data.mat_cust_prev ?? [];
 
   const rows = useMemo(() => {
     let r = rowsAll;
@@ -402,7 +418,7 @@ function MatrixPage({ data }: { data: DashboardData }) {
     }
   }
 
-  const months = data.cur_months;
+  const months = effectivePair === "cur_prev" ? data.cur_months : data.prev_months;
 
   const colS = new Array(months.length).fill(0);
   const colPS = new Array(months.length).fill(0);
@@ -460,11 +476,6 @@ function MatrixPage({ data }: { data: DashboardData }) {
                 ["sales", "売上金額"],
                 ["purchase", "仕入額"],
                 ["profit", "粗利額"],
-                ["prevprofit", "前期粗利額"],
-                ["profitdiff", "粗利 昨対差額"],
-                ["yoyamt", "昨対金額"],
-                ["yoydiff", "昨対差額"],
-                ["yoypct", "前年比(%)"],
                 ["margin", "粗利率"],
               ] as [Metric, string][]
             ).map(([m, label]) => (
@@ -472,6 +483,25 @@ function MatrixPage({ data }: { data: DashboardData }) {
                 {label}
               </button>
             ))}
+          </div>
+          <div className="tabs">
+            <span style={{ fontSize: 12, color: "var(--ink-faint)", padding: "0 8px", alignSelf: "center" }}>
+              対比:
+            </span>
+            <button
+              className={effectivePair === "cur_prev" ? "active" : ""}
+              onClick={() => setPeriodPair("cur_prev")}
+            >
+              今期 vs 前期
+            </button>
+            <button
+              className={effectivePair === "prev_prev2" ? "active" : ""}
+              onClick={() => setPeriodPair("prev_prev2")}
+              disabled={!hasPrevPair}
+              title={hasPrevPair ? undefined : "前々期分のデータがまだありません"}
+            >
+              前期 vs 前々期
+            </button>
           </div>
         </div>
         <div className="matwrap">
@@ -492,7 +522,7 @@ function MatrixPage({ data }: { data: DashboardData }) {
                   <td className="codecol">{r.code}</td>
                   <td className="namecol">{r.name}</td>
                   {r.cur.map((c, i) => (
-                    <MatrixCell key={i} metric={metric} cur={c} prevS={r.prev[i]?.s ?? 0} prevP={r.prev[i]?.p ?? 0} />
+                    <MatrixCell key={i} metric={metric} cur={c} />
                   ))}
                   <MatrixTotalCell metric={metric} row={r} />
                 </tr>
@@ -503,7 +533,7 @@ function MatrixPage({ data }: { data: DashboardData }) {
                 <td className="codecol" />
                 <td className="namecol">合計</td>
                 {months.map((_m, i) => (
-                  <MatrixCell key={i} metric={metric} cur={{ s: colS[i], p: colP[i], m: colS[i] ? round1(((colS[i] - colP[i]) / colS[i]) * 100) : null }} prevS={colPS[i]} prevP={colPP[i]} />
+                  <MatrixCell key={i} metric={metric} cur={{ s: colS[i], p: colP[i], m: colS[i] ? round1(((colS[i] - colP[i]) / colS[i]) * 100) : null }} />
                 ))}
                 <MatrixTotalCell
                   metric={metric}
@@ -529,8 +559,8 @@ function MatrixPage({ data }: { data: DashboardData }) {
         </div>
         <p style={{ fontSize: 11, color: "var(--ink-faint)", padding: "8px 20px 16px" }}>
           {dim === "cust"
-            ? `得意先は売上上位100件(全${data.cust_total_count.toLocaleString()}件)。検索で絞込。`
-            : "9つのボタンで表示を切替。粗利率は10%以上=緑/未満=赤。"}
+            ? `得意先は売上上位100件(全${(effectivePair === "cur_prev" ? data.cust_total_count : data.cust_total_count_prev).toLocaleString()}件)。検索で絞込。`
+            : "4つのボタンで表示を切替。粗利率は10%以上=緑/未満=赤。"}
         </p>
       </div>
     </div>
@@ -540,18 +570,11 @@ function MatrixPage({ data }: { data: DashboardData }) {
 function MatrixCell({
   metric,
   cur,
-  prevS,
-  prevP,
 }: {
   metric: Metric;
   cur: { s: number; p: number; m: number | null };
-  prevS: number;
-  prevP: number;
 }) {
   const s = cur.s;
-  if (s === 0 && (metric === "profitdiff" || metric === "yoyamt" || metric === "yoydiff" || metric === "yoypct")) {
-    return <td><span className="cell-s" style={{ color: "#c8ccd4" }}>―</span></td>;
-  }
   if (metric === "sales") {
     if (s === 0) {
       if (cur.p && cur.p > 0) {
@@ -573,40 +596,11 @@ function MatrixCell({
     const profit = s - cur.p;
     return <td><span className={`cell-s ${profit >= 0 ? "val-pos" : "val-neg"}`}>{profit >= 0 ? "+" : ""}{jpn(profit)}</span></td>;
   }
-  if (metric === "prevprofit") {
-    const prevProfit = prevS - prevP;
-    return <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{jpn(prevProfit)}</span></td>;
-  }
-  if (metric === "profitdiff") {
-    const curProfit = s - cur.p;
-    const prevProfit = prevS - prevP;
-    const d = curProfit - prevProfit;
-    return <td><span className={`cell-s ${d >= 0 ? "val-pos" : "val-neg"}`}>{d >= 0 ? "+" : ""}{jpn(d)}</span></td>;
-  }
-  if (metric === "yoyamt") return <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{jpn(prevS)}</span></td>;
-  if (metric === "yoydiff") {
-    const d = s - prevS;
-    return <td><span className={`cell-s ${d >= 0 ? "val-pos" : "val-neg"}`}>{d >= 0 ? "+" : ""}{jpn(d)}</span></td>;
-  }
-  if (metric === "yoypct") {
-    if (!prevS) return <td><span className="cell-s" style={{ color: "#c8ccd4" }}>―</span></td>;
-    const p = (s / prevS) * 100;
-    return <td><span className={`cell-s ${p >= 100 ? "val-pos" : "val-neg"}`}>{p.toFixed(0)}%</span></td>;
-  }
   if (cur.m == null) return <td><span className="cell-s" style={{ color: "#c8ccd4" }}>―</span></td>;
   const good = cur.m >= 10;
   return (
     <td className={good ? "cell-good" : "cell-bad"}>
       <span className={`cell-s ${good ? "m-good" : "m-bad"}`}>{cur.m.toFixed(1)}%</span>
-    </td>
-  );
-}
-
-function TwoTierCell({ top, bottom }: { top: React.ReactNode; bottom: React.ReactNode }) {
-  return (
-    <td className="totcol">
-      <div>{top}</div>
-      <div style={{ fontSize: 10, color: "#9aa3b2", marginTop: 2 }}>{bottom}</div>
     </td>
   );
 }
@@ -617,51 +611,6 @@ function MatrixTotalCell({ metric, row }: { metric: Metric; row: MatrixRow }) {
   if (metric === "profit") {
     const profit = row.cur_ts - row.cur_tp;
     return <td className="totcol"><span className={`cell-s ${profit >= 0 ? "val-pos" : "val-neg"}`}>{profit >= 0 ? "+" : ""}{jpn(profit)}</span></td>;
-  }
-  if (metric === "prevprofit") {
-    const prevProfit = row.prev_ts - row.prev_tp;
-    return <td className="totcol"><span className="cell-s" style={{ color: "#9aa3b2" }}>{jpn(prevProfit)}</span></td>;
-  }
-  if (metric === "profitdiff") {
-    const curProfit = row.cur_ts - row.cur_tp;
-    const sameProfit = row.prev_ts_same - row.prev_tp_same;
-    const fullProfit = row.prev_ts - row.prev_tp;
-    const dSame = curProfit - sameProfit;
-    const dFull = curProfit - fullProfit;
-    return (
-      <TwoTierCell
-        top={<span className={`cell-s ${dSame >= 0 ? "val-pos" : "val-neg"}`}>{dSame >= 0 ? "+" : ""}{jpn(dSame)}</span>}
-        bottom={<>{dFull >= 0 ? "+" : ""}{jpn(dFull)}(通年)</>}
-      />
-    );
-  }
-  if (metric === "yoyamt") {
-    return (
-      <TwoTierCell
-        top={<span className="cell-s" style={{ color: "#9aa3b2" }}>{jpn(row.prev_ts_same)}</span>}
-        bottom={<>{jpn(row.prev_ts)}(通年)</>}
-      />
-    );
-  }
-  if (metric === "yoydiff") {
-    const dSame = row.cur_ts - row.prev_ts_same;
-    const dFull = row.cur_ts - row.prev_ts;
-    return (
-      <TwoTierCell
-        top={<span className={`cell-s ${dSame >= 0 ? "val-pos" : "val-neg"}`}>{dSame >= 0 ? "+" : ""}{jpn(dSame)}</span>}
-        bottom={<>{dFull >= 0 ? "+" : ""}{jpn(dFull)}(通年)</>}
-      />
-    );
-  }
-  if (metric === "yoypct") {
-    const pSame = row.prev_ts_same ? (row.cur_ts / row.prev_ts_same) * 100 : null;
-    const pFull = row.prev_ts ? (row.cur_ts / row.prev_ts) * 100 : null;
-    return (
-      <TwoTierCell
-        top={pSame == null ? "―" : <span className={`cell-s ${pSame >= 100 ? "val-pos" : "val-neg"}`}>{pSame.toFixed(0)}%</span>}
-        bottom={pFull == null ? <>―(通年)</> : <>{pFull.toFixed(0)}%(通年)</>}
-      />
-    );
   }
   if (row.cur_tm == null) return <td className="totcol">―</td>;
   const good = row.cur_tm >= 10;

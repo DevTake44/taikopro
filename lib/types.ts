@@ -72,5 +72,12 @@ export type DashboardData = {
   mat_staff: MatrixRow[];
   mat_cust: MatrixRow[];
   cust_total_count: number;
+  // 月別マトリクス専用: 前々期 vs 前期(=今期を基準にした「1つ前のペア」)の比較データ。
+  // 期首(10月)直後は今期がまだ1ヶ月分しかなく「今期 vs 前期」が役に立たないため、
+  // 1年ずらしたペアも見られるようにしたもの。データが3期分無い場合はnull。
+  mat_loc_prev: MatrixRow[] | null;
+  mat_staff_prev: MatrixRow[] | null;
+  mat_cust_prev: MatrixRow[] | null;
+  cust_total_count_prev: number;
   stock: StockData;
 };
