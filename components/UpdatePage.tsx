@@ -2,6 +2,9 @@
 import { useState, type DragEvent } from "react";
 import Link from "next/link";
 import Papa from "papaparse";
+import type { TableStatus } from "@/lib/fetchDataStatus";
+import DataStatusTable from "./DataStatusTable";
+import RiekiUploadBoxes from "./RiekiUploadBoxes";
 import { decodeCsvBuffer } from "@/lib/csvDecode";
 import { transformSalesCsv } from "@/lib/salesTransform";
 import { transformPurchasesCsv } from "@/lib/purchasesTransform";
@@ -103,7 +106,7 @@ function SalesUploadBox() {
 
   return (
     <UploadBoxShell
-      title="① 売上データの更新"
+      title="① 売上データ(月次集計・経営報告用)"
       description="販売管理からダウンロードした売上CSVを、そのままアップロードしてください。文字コード(CP932/UTF-8)は自動で判定します。対象月度の中でCSVに存在しない行(統合・削除された得意先など)は自動的に削除されます。"
       file={file}
       setFile={setFile}
@@ -163,7 +166,7 @@ function PurchasesUploadBox() {
 
   return (
     <UploadBoxShell
-      title="② 仕入データの更新"
+      title="② 仕入データ(新purchasesテーブル・仕入価格検索用)"
       description="仕入明細ファイル(CSV)を、そのままアップロードしてください。伝票消費税行の除外、仕入先コード7の除外、担当者コード0の補完などは自動で行われます(統合版の新purchasesテーブルに反映されます。受注番号・受注行番号の列見出しは実ファイルでの確認が必要です)。"
       file={file}
       setFile={setFile}
@@ -482,7 +485,13 @@ function RefreshButton() {
   );
 }
 
-export default function UpdatePage() {
+export default function UpdatePage({
+  statuses,
+  statusError,
+}: {
+  statuses: TableStatus[];
+  statusError: string | null;
+}) {
   return (
     <div className="wrap" style={{ maxWidth: 900 }}>
       <header className="top">
@@ -496,10 +505,12 @@ export default function UpdatePage() {
       </header>
       <div className="page active">
         <RefreshButton />
+        <DataStatusTable statuses={statuses} error={statusError} />
         <SalesUploadBox />
         <PurchasesUploadBox />
         <ProductMasterUploadBox />
         <SupplierMasterUploadBox />
+        <RiekiUploadBoxes />
       </div>
     </div>
   );
