@@ -114,6 +114,36 @@ export type TransferPendingLine = {
   created_at: string;
 };
 
+// public.shipping_note_mapping テーブルの1行の型(運賃照合・送り状番号↔受注番号の対応表)
+export type ShippingNoteMappingRow = {
+  id: number;
+  waybill_no: string;
+  order_no: string | null;
+  package_count: number | null;
+  carrier_code: string | null;
+  carrier_name: string | null;
+  customer_code: string | null;
+  customer_name: string | null;
+  rep_code: string | null;
+  issue_date: string | null;
+  created_at: string;
+};
+
+// 運賃照合(FreightCheck)専用: sales_linesから必要な列だけに絞った型
+export type FreightSalesLine = {
+  order_no: string | null;
+  order_line: string | null;
+  branch_code: string | null;
+  rep_code: string | null;
+  delivery_note_no: string | null;
+  customer_code: string | null;
+  customer_name: string | null;
+  item_code: string | null;
+  sell_price: number | null;
+  assumed_cost: number | null;
+  delivery_date: string | null;
+};
+
 export type DashboardData = {
   summary: Summary;
   cur_months: string[];

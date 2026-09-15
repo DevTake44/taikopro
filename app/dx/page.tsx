@@ -30,6 +30,31 @@ const TOOLS: ToolLink[] = [
     description: "拠点間の社内間取引額を、確定分・未納品を合わせて拠点×場所別に集計します。",
   },
   {
+    href: "/dx/benrinet-check",
+    title: "べんりネット照合",
+    description: "べんりネットのCSVと自社請求データをその場で突き合わせ、差異を確認します。",
+  },
+  {
+    href: "/dx/payable-check",
+    title: "買掛月報照合",
+    description: "営業所別買掛残高と買掛残高(全社)のCSVを支払先単位で突き合わせます。",
+  },
+  {
+    href: "/dx/life-check",
+    title: "ライフ照合(受注番号さがし)",
+    description: "ライフの受領実績CSVの各明細が、太幸のどの受注番号に対応するかを探します。",
+  },
+  {
+    href: "/dx/life-billing-check",
+    title: "ライフ請求金額照合",
+    description: "ライフの受領実績CSVと太幸の請求出力CSVの月次請求金額を突き合わせます。",
+  },
+  {
+    href: "/dx/freight-check",
+    title: "運賃照合",
+    description: "運送会社の請求データと得意先への運賃請求額を突き合わせ、運賃利益を確認します。",
+  },
+  {
     href: "/dx/upload",
     title: "データ更新",
     description: "各画面のもとになる売上・仕入・商品マスタ・仕入先マスタのCSVをアップロードして反映します。",
