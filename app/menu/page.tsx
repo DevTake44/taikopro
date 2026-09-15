@@ -19,6 +19,11 @@ const SALES_LINKS: MenuLink[] = [
     title: "売上利益",
     description: "受注番号単位の売上・原価・利益を、得意先・物件・担当などで切り替えて確認します。",
   },
+  {
+    href: "/sales/profit-summary",
+    title: "拠点・営業・得意先 利益",
+    description: "運賃実費まで引いた最終利益・最終粗利率を、拠点別・営業担当別・得意先別に確認します。",
+  },
 ];
 
 const DX_LINKS: MenuLink[] = [
