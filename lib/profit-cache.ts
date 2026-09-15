@@ -1,0 +1,110 @@
+import type { ProfitOrder, ProfitLine, ProfitSummaryRow } from "@/lib/profitTypes";
+
+/**
+ * 売上利益ダッシュボードのブラウザ内キャッシュ(2026-08-27追加)
+ *
+ * 背景: 売上利益画面は8万8千件超のデータをAPIから約30回に分けて読み込んでおり、
+ * メニューに戻ってから再度開くたびに、この読み込みを毎回最初からやり直していた
+ * (next/linkによる画面遷移の高速化やstaleTimesの設定は、サーバー側のページ本体の
+ * キャッシュには効くが、このコンポーネントがマウントされるたびにuseEffectの中で
+ * 自前で行っているAPI読み込みまでは効かないため)。
+ *
+ * 対策: 読み込み終わったデータを、このモジュール(ブラウザのJSが読み込まれている間だけ
+ * 生きているメモリ上の変数)に保持しておく。next/linkでの画面遷移はページ全体を
+ * 再読み込みしない(SPA的な遷移)ため、一度読み込んだあとはメニュー⇔売上利益を
+ * 何度行き来してもこの変数は保持され、2回目以降は再取得せず一瞬で表示できる。
+ *
+ * ブラウザのlocalStorage/sessionStorageに保存しない理由: 8万8千件をJSON化すると
+ * 約30MB程度になり、多くのブラウザのストレージ上限(5〜10MB程度)を超えて
+ * 保存自体に失敗する可能性が高いため、メモリ上のみで保持する方式にしている。
+ * そのためブラウザを完全に再読み込み(F5やURL再入力)した場合は失われ、その時は
+ * 通常通り最初から読み込み直す(これは想定通りの動作)。
+ *
+ * 更新: 「データ更新」ページでのアップロードが成功した際(UploadForm.tsx)、
+ * このキャッシュを明示的に破棄している。それ以外は自動更新せず、画面上の
+ * 「更新」ボタンによる手動更新のみとしている(安全のため、まずは手動更新から)。
+ */
+
+type ProfitCacheEntry = {
+  orders: ProfitOrder[];
+  loadedAt: number;
+};
+
+let cache: ProfitCacheEntry | null = null;
+
+export function getProfitCache(): ProfitCacheEntry | null {
+  return cache;
+}
+
+export function setProfitCache(orders: ProfitOrder[]): void {
+  cache = { orders, loadedAt: Date.now() };
+}
+
+export function clearProfitCache(): void {
+  cache = null;
+  clearProfitLinesCache();
+  clearProfitSummaryCache();
+}
+
+/**
+ * 経営マトリクス(月別集計)専用の行単位データのキャッシュ(2026-08-31追加)。
+ * 考え方はorders用のキャッシュと同じだが、取得範囲(since)によって中身が
+ * 変わるため、sinceも一緒に覚えておき、次に必要なsinceと一致する場合だけ使う
+ * (前期データが新たにアップロードされてsinceが古くなった場合などに、
+ * 古い範囲のキャッシュを誤って使い回さないため)。
+ *
+ * 2026-09-07時点: 経営マトリクスの読み込み元は下のprofit_summaryベースの
+ * キャッシュ(getProfitSummaryCache等)に切り替わっており、この関数群自体は
+ * 呼び出し元が無くなっている。/api/profit-lines・ProfitLine型は将来また
+ * 行単位データが必要になった場合のために残してあるだけなので、ここも
+ * 削除はせず残してある(実害はない)。
+ */
+type ProfitLinesCacheEntry = {
+  since: string;
+  lines: ProfitLine[];
+  loadedAt: number;
+};
+
+let linesCache: ProfitLinesCacheEntry | null = null;
+
+export function getProfitLinesCache(since: string): ProfitLinesCacheEntry | null {
+  return linesCache && linesCache.since === since ? linesCache : null;
+}
+
+export function setProfitLinesCache(since: string, lines: ProfitLine[]): void {
+  linesCache = { since, lines, loadedAt: Date.now() };
+}
+
+export function clearProfitLinesCache(): void {
+  linesCache = null;
+}
+
+/**
+ * 経営マトリクス(月別集計)専用データのキャッシュ(2026-09-07変更)。
+ *
+ * 背景: 経営マトリクスは従来v_profit_lines(明細行、件数が増え続ける。2026-09時点で
+ * 295,591行)を毎回全件ページング取得して画面側で月別集計していたため、データが
+ * 増えるほど開くのが遅くなる問題があった。事前集計テーブルprofit_summary(期間×
+ * 拠点×営業担当×得意先の粒度、2026-09時点で19,945行と明細より桁違いに少なく、
+ * 今後もアップロード件数ではなく組み合わせ数でしか増えないため増加が緩やか)に
+ * 読み込み元を切り替えた。全期間分をまとめて取得しても十分小さいため、行単位版
+ * (上のProfitLinesCacheEntry)と違ってsinceによる絞り込み・出し分けは不要にした。
+ */
+type ProfitSummaryCacheEntry = {
+  rows: ProfitSummaryRow[];
+  loadedAt: number;
+};
+
+let summaryCache: ProfitSummaryCacheEntry | null = null;
+
+export function getProfitSummaryCache(): ProfitSummaryCacheEntry | null {
+  return summaryCache;
+}
+
+export function setProfitSummaryCache(rows: ProfitSummaryRow[]): void {
+  summaryCache = { rows, loadedAt: Date.now() };
+}
+
+export function clearProfitSummaryCache(): void {
+  summaryCache = null;
+}

@@ -1,0 +1,144 @@
+/* このファイルは、これまで確認してきたデザイン見本のCSSをそのまま移植したものです */
+* { box-sizing: border-box; }
+html, body { padding: 0; margin: 0; }
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#1a1f2b;--ink-soft:#5b6472;--ink-faint:#9aa3b2;
+    --line:#e8ebf0;--brand:#2563d9;--pos:#0f9d58;--neg:#d9483b;--amber:#e08a1e;
+    --radius:14px;--shadow:0 1px 2px rgba(20,30,50,.04),0 6px 20px rgba(20,30,50,.05);
+    font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5}
+  .wrap{max-width:1400px;margin:0 auto;padding:24px 20px 60px}
+  header.top{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:18px}
+  .title h1{font-size:21px;font-weight:700}.title p{font-size:12.5px;color:var(--ink-faint);margin-top:2px}
+  .maintabs{display:inline-flex;background:#eef0f4;padding:4px;border-radius:10px;gap:4px}
+  .maintabs button{border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink-soft);padding:8px 18px;border-radius:7px;cursor:pointer}
+  .maintabs button.active{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .page{display:none}.page.active{display:block}
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}
+  .kpi .label{font-size:12px;color:var(--ink-soft);font-weight:600}
+  .kpi .value{font-size:22px;font-weight:750;margin-top:8px;font-variant-numeric:tabular-nums;line-height:1.1}
+  .kpi .value .unit{font-size:13px;font-weight:600;color:var(--ink-soft)}
+  .kpi .foot{font-size:11px;color:var(--ink-faint);margin-top:8px}
+  .kpi.primary{background:linear-gradient(180deg,#2563d9,#1e50b5);border-color:transparent}
+  .kpi.primary .label{color:#c5d7fb}.kpi.primary .value{color:#fff}.kpi.primary .foot{color:#a9c2f6}
+  .kpi.hit{background:#f0f9f3;border-color:#bfe6cd}.kpi.miss{background:#fdf6ec;border-color:#f0dcb8}
+  .kpi .badge{display:inline-block;font-size:11px;font-weight:650;padding:3px 9px;border-radius:999px;margin-top:10px}
+  .b-hit{color:var(--pos);background:#e7f6ee}.b-miss{color:var(--amber);background:#fdf1de}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .card-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:16px 20px 4px}
+  .card-head h2{font-size:14.5px;font-weight:700}.card-head .sub{font-size:12px;color:var(--ink-faint)}
+  .legend{display:flex;gap:16px;padding:2px 20px 0;flex-wrap:wrap}
+  .legend span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft)}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .chart-box{padding:8px 16px 18px;height:300px;position:relative;margin-top:6px}
+  .tabs{display:flex;gap:4px;background:#eef0f4;padding:4px;border-radius:10px;flex-wrap:wrap}
+  .tabs button{border:0;background:transparent;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink-soft);padding:6px 13px;border-radius:7px;cursor:pointer}
+  .tabs button.active{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .search{border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:13px;font-family:inherit;width:220px}
+  .matwrap{overflow-x:auto;margin-top:10px}
+  table.mat{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+  table.mat th{font-size:11px;color:var(--ink-faint);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;background:var(--card);cursor:pointer;user-select:none}
+  table.mat th.namecol,table.mat th.codecol{text-align:left}
+  table.mat th.totcol{border-left:2px solid var(--line);background:#fbfcfe}
+  table.mat td{font-size:12px;padding:7px 10px;border-bottom:1px solid #f4f6f8;text-align:right;white-space:nowrap}
+  table.mat td.codecol{color:var(--ink-faint);font-size:11px;text-align:left}
+  table.mat td.namecol{text-align:left;font-weight:600;position:sticky;left:0;background:var(--card)}
+  table.mat td.totcol{border-left:2px solid var(--line);background:#fbfcfe;font-weight:700}
+  table.mat tr:hover td{background:#fafbfc}table.mat tr:hover td.namecol{background:#fafbfc}
+  .cell-s{display:block;font-weight:600}.cell-m{display:block;font-size:10.5px;margin-top:1px;font-weight:600}
+  .m-good{color:var(--pos)}.m-bad{color:var(--neg)}
+  .cell-good{background:#f2faf5}.cell-bad{background:#fdf3f2}
+  .val-pos{color:var(--pos)}.val-neg{color:var(--neg)}
+  tfoot.mat-foot td{font-size:12px;font-weight:750;padding:10px 10px;border-top:2px solid var(--brand);background:#eef3fd;text-align:right}
+  tfoot.mat-foot td.namecol{text-align:left}
+  h2.blk{font-size:15px;font-weight:700;margin:24px 6px 12px}
+  .goaltable{width:100%;border-collapse:collapse}
+  .goaltable th{font-size:11.5px;color:var(--ink-faint);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--line);text-align:right;cursor:pointer;white-space:nowrap}
+  .goaltable th:first-child,.goaltable th:nth-child(2){text-align:left}
+  .goaltable td{font-size:13px;padding:11px 14px;border-bottom:1px solid #f2f4f7;text-align:right;font-variant-numeric:tabular-nums}
+  .goaltable td:first-child,.goaltable td:nth-child(2){text-align:left}
+  .goaltable td:nth-child(2){font-weight:600}
+  .goaltable tr:hover{background:#fafbfc}
+  .status{font-size:12px;font-weight:650;padding:3px 10px;border-radius:6px}
+  .st-hit{color:var(--pos);background:#e7f6ee}.st-miss{color:var(--neg);background:#fdecea}
+  .foot-note{margin-top:20px;font-size:11.5px;color:var(--ink-faint);text-align:center}
+  .badge-demo{display:inline-block;background:#e7f6ee;color:#0a6b3b;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;border:1px solid #bfe6cd;margin-left:10px}
+  @media(max-width:920px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+  .ghost-btn-inline{color:var(--brand);text-decoration:none;font-weight:600}
+  .ghost-btn-inline:hover{text-decoration:underline}
+
+/* ==========================================================================
+   以下、rieki-check-appから移植した画面(売上利益など)専用のスタイル。
+   sales-dashboard側の .page (タブ切替の display:none 用) 等と名前が衝突するため、
+   .rk スコープの中でだけ有効になるようにしている。移植元は rieki-check-app の
+   app/globals.css。
+   ========================================================================== */
+:root{--rk-bg:#f5f6f8;--rk-card-bg:#ffffff;--rk-border:#e3e5e9;--rk-text:#1b1f24;
+  --rk-text-muted:#6b7280;--rk-critical:#c0392b;--rk-warning:#8a6400;--rk-good:#1e7d45;
+  --rk-neutral:#6b7280;--rk-direct:#2a78d6;--rk-stock:#eb6834;}
+
+.rk{max-width:1200px;margin:0 auto;padding:24px 20px 60px;color:var(--rk-text);font-size:14px;display:block}
+.rk h1{font-size:20px;margin:0 0 4px}
+.rk .subtitle{color:var(--rk-text-muted);font-size:13px;margin:0 0 20px}
+.rk .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.rk .kpi-tile{background:var(--rk-card-bg);border:1px solid var(--rk-border);border-radius:10px;padding:14px 16px}
+.rk .kpi-tile .label{font-size:12px;color:var(--rk-text-muted)}
+.rk .kpi-tile .value{font-size:22px;font-weight:600;margin-top:4px}
+.rk .card{background:var(--rk-card-bg);border:1px solid var(--rk-border);border-radius:10px;padding:18px 20px;box-shadow:none}
+.rk table{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+.rk th,.rk td{padding:7px 8px;border-bottom:1px solid var(--rk-border);border-right:1px solid var(--rk-border);text-align:left;white-space:nowrap;overflow:hidden;vertical-align:top}
+.rk th:last-child,.rk td:last-child{border-right:none}
+.rk th{color:var(--rk-text-muted);font-weight:600;font-size:12px}
+.rk td.num,.rk th.num{text-align:right}
+.rk .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}
+.rk .badge.cat-direct{color:var(--rk-direct);background:rgba(42,120,214,0.12)}
+.rk .badge.cat-stock{color:var(--rk-stock);background:rgba(235,104,52,0.12)}
+.rk .badge.critical{color:var(--rk-critical);background:rgba(192,57,43,0.12)}
+.rk .badge.warning{color:var(--rk-warning);background:rgba(220,180,40,0.18)}
+.rk .badge.good{color:var(--rk-good);background:rgba(30,125,69,0.12)}
+.rk .badge.neutral{color:var(--rk-neutral);background:rgba(107,114,128,0.12)}
+.rk .table-scroll{overflow-x:auto}
+.rk .table-scroll-v{max-height:640px;overflow-y:auto}
+.rk .table-scroll-v thead th{position:sticky;top:0;background:var(--rk-card-bg);z-index:2}
+.rk .mat-sticky-name{position:sticky;left:0;background:var(--rk-card-bg);z-index:1;box-shadow:2px 0 4px -2px rgba(0,0,0,.12)}
+.rk .mat-sticky-total{position:sticky;right:0;background:var(--rk-card-bg);z-index:1;box-shadow:-2px 0 4px -2px rgba(0,0,0,.12)}
+.rk thead .mat-sticky-name,.rk thead .mat-sticky-total{z-index:3}
+.rk .cell-sub{font-size:11px;color:var(--rk-text-muted)}
+.rk .filter-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.rk .filter-field{display:flex;flex-direction:column;gap:4px}
+.rk .filter-field label{font-size:11.5px;color:var(--rk-text-muted)}
+.rk .filter-field select,.rk .filter-field input{padding:7px 9px;border:1px solid var(--rk-border);border-radius:6px;font-size:13px;background:var(--rk-card-bg);color:var(--rk-text)}
+.rk .segmented{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.rk .segmented button{padding:6px 10px;border:1px solid var(--rk-border);background:var(--rk-card-bg);border-radius:6px;font-size:12.5px;cursor:pointer;color:var(--rk-text)}
+.rk .segmented button.active{background:var(--rk-direct);color:#fff;border-color:var(--rk-direct)}
+.rk .segmented input[type="date"]{padding:6px 8px;border:1px solid var(--rk-border);border-radius:6px;font-size:12.5px}
+.rk .chip-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.rk .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;background:rgba(42,120,214,0.10);color:var(--rk-direct);border:1px solid rgba(42,120,214,0.3);border-radius:999px;padding:4px 6px 4px 12px}
+.rk .chip button{background:none;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:2px 5px;border-radius:50%}
+.rk .chip button:hover{background:rgba(42,120,214,0.18)}
+.rk .filter-actions{display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:14px;border-top:1px solid var(--rk-border)}
+.rk .ghost-btn{padding:7px 14px;border:1px solid var(--rk-border);background:var(--rk-card-bg);border-radius:6px;font-size:13px;cursor:pointer;color:var(--rk-text)}
+.rk .ghost-btn:hover{background:var(--rk-bg)}
+.rk .result-count{font-size:12.5px;color:var(--rk-text-muted)}
+.rk td.clickable-cell,.rk span.clickable-cell{cursor:pointer}
+.rk td.clickable-cell:hover{text-decoration:underline;text-decoration-color:rgba(107,114,128,0.5)}
+.rk th.sortable-th{cursor:pointer;user-select:none}
+.rk th.sortable-th:hover{color:var(--rk-text)}
+.rk .empty-state{text-align:center;color:var(--rk-text-muted);padding:24px!important}
+.rk .truncate-cell{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rk .wrap-2line-cell{max-width:118px;white-space:normal;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rk .actual-price-cell{font-weight:700}
+.rk .record-panel{border:1px solid var(--rk-border);border-radius:8px;overflow:hidden}
+.rk .record-head{background:var(--rk-bg);border-bottom:1px solid var(--rk-border);padding:6px 10px}
+.rk .record-head-line{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;font-size:11px;color:var(--rk-text-muted);font-weight:600}
+.rk .record-head-line + .record-head-line{margin-top:4px}
+.rk .sortable-field{cursor:pointer;user-select:none}
+.rk .sortable-field:hover{color:var(--rk-text)}
+.rk .record-body{max-height:640px;overflow-y:auto}
+.rk .record-item{padding:6px 10px;border-bottom:1px solid var(--rk-border)}
+.rk .record-item:last-child{border-bottom:none}
+.rk .record-item:hover{background:var(--rk-bg)}
+.rk .record-line{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;font-size:12.5px;padding:2px 0}
+.rk .record-line .rf-value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rk .record-line .rf-value.num{text-align:right}
