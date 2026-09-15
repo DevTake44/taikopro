@@ -341,8 +341,8 @@ export default function ProfitSummary() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
             <h1>拠点・営業・得意先 利益</h1>
             <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
-              <Link href="/sales" className="ghost-btn" style={{ textDecoration: "none" }}>
-                ← 売上管理メニュー
+              <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
+                ← メインメニュー
               </Link>
             </div>
           </div>
@@ -362,8 +362,8 @@ export default function ProfitSummary() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
           <h1>拠点・営業・得意先 利益</h1>
           <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
-            <Link href="/sales" className="ghost-btn" style={{ textDecoration: "none" }}>
-              ← 売上管理メニュー
+            <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
+              ← メインメニュー
             </Link>
           </div>
         </div>
@@ -383,8 +383,8 @@ export default function ProfitSummary() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
         <h1>拠点・営業・得意先 利益</h1>
         <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
-          <Link href="/sales" className="ghost-btn" style={{ textDecoration: "none" }}>
-            ← 売上管理メニュー
+          <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
+            ← メインメニュー
           </Link>
         </div>
       </div>

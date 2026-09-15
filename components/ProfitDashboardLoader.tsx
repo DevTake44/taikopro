@@ -383,8 +383,8 @@ export default function ProfitDashboardLoader() {
               <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
                 データ更新
               </Link>
-              <Link href="/sales" className="ghost-btn" style={{ textDecoration: "none" }}>
-                ← 売上管理メニュー
+              <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
+                ← メインメニュー
               </Link>
             </div>
           </div>
@@ -411,8 +411,8 @@ export default function ProfitDashboardLoader() {
             <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
               データ更新
             </Link>
-            <Link href="/sales" className="ghost-btn" style={{ textDecoration: "none" }}>
-              ← 売上管理メニュー
+            <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
+              ← メインメニュー
             </Link>
           </div>
         </div>
