@@ -430,33 +430,54 @@ function MatrixPage({ data }: { data: DashboardData }) {
 
   const baseMonths = useMemo(() => monthsOfFiscalYear(baseYear), [baseYear]);
 
+  // 対比は「今期と同じ月数分(同期間)」で揃える。経営レポートの「前期(同期間)」と
+  // 基準を合わせるため(前期の通期と比べると、今期がまだ進行中の月では差額が
+  // 大きくズレて見えてしまう)。会社全体(拠点別の合計)で、実際に売上が計上されている
+  // 月の数を数える。
+  const baseMonthCount = useMemo(() => {
+    const totals = new Array(12).fill(0);
+    for (const r of baseSet.loc) {
+      r.months.forEach((m, i) => {
+        totals[i] += m.s;
+      });
+    }
+    let count = 0;
+    totals.forEach((s, i) => {
+      if (s > 0) count = i + 1;
+    });
+    return count || 12;
+  }, [baseSet]);
+
   const mergedAll = useMemo<MatrixMergedRow[]>(() => {
     const baseRows = dim === "loc" ? baseSet.loc : dim === "staff" ? baseSet.staff : baseSet.cust;
     const compareRows = compareSet ? (dim === "loc" ? compareSet.loc : dim === "staff" ? compareSet.staff : compareSet.cust) : null;
     const compareByCode = new Map((compareRows ?? []).map((r) => [r.code, r]));
 
-    // 今期(CUR)扱いの年度のときだけ、会社全体でまだ売上が1件も無い月は
-    // 仕入だけ先に入っていても計算・表示しない(buildDashboard.ts側で既に抑制済みなので、
-    // ここではそのままs/pを使うだけでよい)。
     return baseRows.map((r) => {
       const cmpRow = compareByCode.get(r.code);
       const cells: MonthCellPair[] = r.months.map((c, i) => ({
         base: toMonthCell(c),
-        cmp: compareSet ? toMonthCell(cmpRow?.months[i] ?? { s: 0, p: 0 }) : null,
+        // 今期がまだ到達していない月(baseMonthCountより先)は対比を出さない
+        // (比べる相手が無い月に差額だけ出ると誤解を招くため)。
+        cmp: compareSet && i < baseMonthCount ? toMonthCell(cmpRow?.months[i] ?? { s: 0, p: 0 }) : null,
       }));
       const total_s = r.total_s;
       const total_p = r.total_p;
       const total_m = total_s ? Math.round(((total_s - total_p) / total_s) * 1000) / 10 : null;
+      // トータル欄の対比も、今期と同じ月数分(同期間)だけを合計する。
+      const cmpSameMonths = (cmpRow?.months ?? []).slice(0, baseMonthCount);
+      const cmpTotalS = cmpSameMonths.reduce((a, m) => a + m.s, 0);
+      const cmpTotalP = cmpSameMonths.reduce((a, m) => a + m.p, 0);
       const cmp = compareSet
         ? {
-            total_s: cmpRow?.total_s ?? 0,
-            total_p: cmpRow?.total_p ?? 0,
-            total_m: cmpRow && cmpRow.total_s ? Math.round(((cmpRow.total_s - cmpRow.total_p) / cmpRow.total_s) * 1000) / 10 : null,
+            total_s: cmpTotalS,
+            total_p: cmpTotalP,
+            total_m: cmpTotalS ? Math.round(((cmpTotalS - cmpTotalP) / cmpTotalS) * 1000) / 10 : null,
           }
         : null;
       return { code: r.code, name: r.name, cells, total_s, total_p, total_m, cmp };
     });
-  }, [baseSet, compareSet, dim]);
+  }, [baseSet, compareSet, dim, baseMonthCount]);
 
   const rows = useMemo(() => {
     let r = mergedAll;
@@ -497,7 +518,7 @@ function MatrixPage({ data }: { data: DashboardData }) {
     name: "合計",
     cells: colTotals.map((c, i) => ({
       base: toMonthCell(c),
-      cmp: compareSet ? toMonthCell(colCmpTotals[i]) : null,
+      cmp: compareSet && i < baseMonthCount ? toMonthCell(colCmpTotals[i]) : null,
     })),
     total_s: rows.reduce((a, r) => a + r.total_s, 0),
     total_p: rows.reduce((a, r) => a + r.total_p, 0),
