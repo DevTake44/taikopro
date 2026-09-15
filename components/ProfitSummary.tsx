@@ -338,7 +338,14 @@ export default function ProfitSummary() {
     if (initialError) {
       return (
         <div className="rk">
-          <h1>拠点・営業・得意先 利益</h1>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+            <h1>拠点・営業・得意先 利益</h1>
+            <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+              <Link href="/sales" className="ghost-btn" style={{ textDecoration: "none" }}>
+                ← 売上管理メニュー
+              </Link>
+            </div>
+          </div>
           <div className="card">
             <p>データの取得に失敗しました。</p>
             <pre style={{ whiteSpace: "pre-wrap", color: "#c0392b" }}>{initialError}</pre>
@@ -352,9 +359,17 @@ export default function ProfitSummary() {
 
     return (
       <div className="rk">
-        <h1>拠点・営業・得意先 利益</h1>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+          <h1>拠点・営業・得意先 利益</h1>
+          <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+            <Link href="/sales" className="ghost-btn" style={{ textDecoration: "none" }}>
+              ← 売上管理メニュー
+            </Link>
+          </div>
+        </div>
         <div className="card">
           <p>
+            <span className="spinner" />
             読み込み中… {loadedCount.toLocaleString("ja-JP")}
             {total !== null ? ` / ${total.toLocaleString("ja-JP")}` : ""} 件
           </p>
@@ -389,7 +404,14 @@ export default function ProfitSummary() {
           )}
         </span>
         <button className="ghost-btn" onClick={() => runLoad(true)} disabled={refreshing}>
-          {refreshing ? "更新中…" : "更新"}
+          {refreshing ? (
+            <>
+              <span className="spinner" />
+              更新中…
+            </>
+          ) : (
+            "更新"
+          )}
         </button>
         {refreshError && <span style={{ color: "#c0392b", fontSize: 12.5 }}>更新に失敗しました: {refreshError}</span>}
       </div>

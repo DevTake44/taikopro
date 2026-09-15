@@ -1,5 +1,6 @@
 export const maxDuration = 60;
 
+import Link from "next/link";
 import { fetchAllMonthlyRows } from "@/lib/fetchMonthly";
 import { fetchStockDetailRows } from "@/lib/fetchStockDetail";
 import { fetchPurchaseLots, fetchStockShipments } from "@/lib/fetchStockMovement";
@@ -69,6 +70,11 @@ export default async function SalesPage({
         <p style={{ fontSize: 13, color: "#888", marginTop: 16 }}>
           Vercelの環境変数(SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)が正しく設定されているか、
           Supabase側でデータが正しく入っているかを確認してください。
+        </p>
+        <p style={{ marginTop: 20 }}>
+          <Link href="/menu" className="ghost-btn-inline">
+            ← メインメニュー
+          </Link>
         </p>
       </div>
     );

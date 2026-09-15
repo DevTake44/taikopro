@@ -339,11 +339,15 @@ function UploadBox({
             )}
             {status.running && !status.refreshing && (
               <div style={{ color: "#2563d9", marginTop: 4 }}>
+                <span className="spinner" />
                 {mode === "replace" ? "置き換え中…" : mode === "accumulate" ? "取り込み中…" : "アップロード中…"}
               </div>
             )}
             {status.refreshing && (
-              <div style={{ color: "#2563d9", marginTop: 4 }}>値上げ検知・売上利益等の集計を更新中…(数十秒かかる場合があります)</div>
+              <div style={{ color: "#2563d9", marginTop: 4 }}>
+                <span className="spinner" />
+                値上げ検知・売上利益等の集計を更新中…(数十秒かかる場合があります)
+              </div>
             )}
             {status.finished && status.errors.length === 0 && (
               <div style={{ color: "var(--pos)", marginTop: 4 }}>

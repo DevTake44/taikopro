@@ -675,7 +675,7 @@ export default function LifeBillingCheck() {
             <div style={{ marginTop: 10, fontSize: 12.5 }}>
               <div>ファイル: {lifeState.fileName}</div>
               {lifeState.encoding && <div className="cell-sub">文字コード: {lifeState.encoding}</div>}
-              {lifeState.loading && <div style={{ color: "var(--rk-direct)" }}>読み込み中…</div>}
+              {lifeState.loading && <div style={{ color: "var(--rk-direct)" }}><span className="spinner" />読み込み中…</div>}
               {!lifeState.loading && lifeLines.length > 0 && (
                 <div style={{ color: "var(--rk-good)" }}>{lifeLines.length.toLocaleString("ja-JP")}件を読み込みました</div>
               )}
@@ -724,7 +724,7 @@ export default function LifeBillingCheck() {
             <div style={{ marginTop: 10, fontSize: 12.5 }}>
               <div>ファイル: {taikoState.fileName}</div>
               {taikoState.encoding && <div className="cell-sub">文字コード: {taikoState.encoding}</div>}
-              {taikoState.loading && <div style={{ color: "var(--rk-direct)" }}>読み込み中…</div>}
+              {taikoState.loading && <div style={{ color: "var(--rk-direct)" }}><span className="spinner" />読み込み中…</div>}
               {!taikoState.loading && taikoLines.length > 0 && (
                 <div style={{ color: "var(--rk-good)" }}>{taikoLines.length.toLocaleString("ja-JP")}件を読み込みました</div>
               )}

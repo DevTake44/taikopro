@@ -174,18 +174,18 @@ function matMonthCell(metric: MatMetric, cur: MonthCell, prev: MonthCell) {
     if (!s && !cur.c) return <span className="cell-sub">0</span>;
     const p = s - cur.c;
     return (
-      <span style={{ color: p < 0 ? "var(--critical)" : "var(--good)", fontWeight: 600 }}>{fmtSigned(p)}</span>
+      <span style={{ color: p < 0 ? "var(--rk-critical)" : "var(--rk-good)", fontWeight: 600 }}>{fmtSigned(p)}</span>
     );
   }
   if (metric === "margin") {
     if (!s) return <span className="cell-sub">―</span>;
     const m = ((s - cur.c) / s) * 100;
-    return <span style={{ color: m >= 10 ? "var(--good)" : "var(--critical)" }}>{m.toFixed(1)}%</span>;
+    return <span style={{ color: m >= 10 ? "var(--rk-good)" : "var(--rk-critical)" }}>{m.toFixed(1)}%</span>;
   }
   // yoy: その月の今期売上 ÷ 前期同月売上
   if (!prev.s) return <span className="cell-sub">―</span>;
   const pct = (s / prev.s) * 100;
-  return <span style={{ color: pct >= 100 ? "var(--good)" : "var(--critical)" }}>{pct.toFixed(0)}%</span>;
+  return <span style={{ color: pct >= 100 ? "var(--rk-good)" : "var(--rk-critical)" }}>{pct.toFixed(0)}%</span>;
 }
 
 function matTotalCell(metric: MatMetric, row: MatRow) {
@@ -198,13 +198,13 @@ function matTotalCell(metric: MatMetric, row: MatRow) {
   if (metric === "profit") {
     const p = row.cur_ts - row.cur_tc;
     return (
-      <span style={{ color: p < 0 ? "var(--critical)" : "var(--good)", fontWeight: 700 }}>{fmtYen(p)}</span>
+      <span style={{ color: p < 0 ? "var(--rk-critical)" : "var(--rk-good)", fontWeight: 700 }}>{fmtYen(p)}</span>
     );
   }
   if (metric === "margin") {
     if (row.cur_tm === null) return <span className="cell-sub">―</span>;
     return (
-      <span style={{ color: row.cur_tm >= 10 ? "var(--good)" : "var(--critical)", fontWeight: 700 }}>
+      <span style={{ color: row.cur_tm >= 10 ? "var(--rk-good)" : "var(--rk-critical)", fontWeight: 700 }}>
         {row.cur_tm.toFixed(1)}%
       </span>
     );
@@ -213,7 +213,7 @@ function matTotalCell(metric: MatMetric, row: MatRow) {
   const pctSame = row.prev_ts_same ? (row.cur_ts / row.prev_ts_same) * 100 : null;
   return (
     <div>
-      <div style={{ fontWeight: 700, color: pctSame === null ? undefined : pctSame >= 100 ? "var(--good)" : "var(--critical)" }}>
+      <div style={{ fontWeight: 700, color: pctSame === null ? undefined : pctSame >= 100 ? "var(--rk-good)" : "var(--rk-critical)" }}>
         {pctSame === null ? "―" : `${pctSame.toFixed(0)}%`}
       </div>
       <div className="cell-sub" style={{ marginTop: 2 }}>
@@ -760,7 +760,7 @@ export default function ProfitDashboard({
             データ更新
           </Link>
           <Link href="/sales" className="ghost-btn" style={{ textDecoration: "none" }}>
-            ← 売上管理に戻る
+            ← 売上管理メニュー
           </Link>
         </div>
       </div>
@@ -832,7 +832,7 @@ export default function ProfitDashboard({
         {matrixLinesError ? (
           <div className="card" style={{ padding: "12px 16px", background: "rgba(192,57,43,0.06)" }}>
             <p style={{ margin: 0 }}>経営マトリクス用データの読み込みに失敗しました。</p>
-            <pre style={{ whiteSpace: "pre-wrap", color: "var(--critical)", margin: "6px 0" }}>{matrixLinesError}</pre>
+            <pre style={{ whiteSpace: "pre-wrap", color: "var(--rk-critical)", margin: "6px 0" }}>{matrixLinesError}</pre>
             {onRetryMatrixLines && (
               <button className="ghost-btn" onClick={onRetryMatrixLines}>
                 もう一度読み込む
@@ -841,6 +841,7 @@ export default function ProfitDashboard({
           </div>
         ) : matrixLines === null ? (
           <p className="empty-state">
+            <span className="spinner" />
             経営マトリクスを読み込み中…
             {/* 2026-09-04追加: 進捗件数が全く出ないと「止まっている」ように見えて
                 途中で再読み込みされ、いつまで経っても終わらない不具合の原因になって
@@ -1066,7 +1067,7 @@ export default function ProfitDashboard({
         </div>
         <div className="kpi-tile">
           <div className="label">利益合計</div>
-          <div className="value" style={{ color: totals.profit < 0 ? "var(--critical)" : undefined }}>
+          <div className="value" style={{ color: totals.profit < 0 ? "var(--rk-critical)" : undefined }}>
             {fmtYen(totals.profit)}
           </div>
         </div>
@@ -1155,7 +1156,7 @@ export default function ProfitDashboard({
                       <span className="rf-value num">{fmtYen(g.cost)}</span>
                       <span
                         className="rf-value num"
-                        style={{ color: g.profit < 0 ? "var(--critical)" : undefined, fontWeight: 600 }}
+                        style={{ color: g.profit < 0 ? "var(--rk-critical)" : undefined, fontWeight: 600 }}
                       >
                         {fmtYen(g.profit)}
                       </span>
@@ -1216,7 +1217,7 @@ export default function ProfitDashboard({
                       <td className="num">{g.orderCount.toLocaleString("ja-JP")}</td>
                       <td className="num">{fmtYen(g.revenue)}</td>
                       <td className="num">{fmtYen(g.cost)}</td>
-                      <td className="num" style={{ color: g.profit < 0 ? "var(--critical)" : undefined, fontWeight: 600 }}>
+                      <td className="num" style={{ color: g.profit < 0 ? "var(--rk-critical)" : undefined, fontWeight: 600 }}>
                         {fmtYen(g.profit)}
                       </td>
                       <td className="num">{fmtPct(m)}</td>

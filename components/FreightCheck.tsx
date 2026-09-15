@@ -1023,7 +1023,16 @@ export default function FreightCheck({
           }}
         >
           <span style={{ fontSize: 13, color: dragOver ? "var(--rk-direct)" : undefined }}>
-            {dragOver ? "ここにドロップ" : "ここに請求CSVをドラッグ&ドロップ、またはクリックして選択"}
+            {fileState.loading ? (
+              <>
+                <span className="spinner" />
+                読み込み中…
+              </>
+            ) : dragOver ? (
+              "ここにドロップ"
+            ) : (
+              "ここに請求CSVをドラッグ&ドロップ、またはクリックして選択"
+            )}
           </span>
           <input
             type="file"
@@ -1190,7 +1199,14 @@ export default function FreightCheck({
                 cursor: freightAggregation.rows.length === 0 || freightSaveState.saving ? "not-allowed" : "pointer",
               }}
             >
-              {freightSaveState.saving ? "保存中…" : "この集計をDBに保存(拠点/営業/得意先別の利益計算用)"}
+              {freightSaveState.saving ? (
+                <>
+                  <span className="spinner" />
+                  保存中…
+                </>
+              ) : (
+                "この集計をDBに保存(拠点/営業/得意先別の利益計算用)"
+              )}
             </button>
             <p className="cell-sub" style={{ marginTop: 6 }}>
               同じ期間×運送会社×請求元の組み合わせを再保存すると、その分だけ上書き(洗い替え)されます(他の請求元・期間のデータは残ります)。
@@ -1232,9 +1248,14 @@ export default function FreightCheck({
                     onClick={downloadFaxRequestXlsx}
                     disabled={selectedFaxKeys.size === 0 || faxExporting}
                   >
-                    {faxExporting
-                      ? "作成中…"
-                      : `選択した${selectedFaxKeys.size}件を西濃FAX依頼用Excelで出力`}
+                    {faxExporting ? (
+                      <>
+                        <span className="spinner" />
+                        作成中…
+                      </>
+                    ) : (
+                      `選択した${selectedFaxKeys.size}件を西濃FAX依頼用Excelで出力`
+                    )}
                   </button>
                 </div>
               </div>

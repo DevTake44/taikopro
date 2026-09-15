@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import ProfitDashboard from "./ProfitDashboard";
 import type { ProfitOrder, ProfitSummaryRow } from "@/lib/profitTypes";
 import {
@@ -376,7 +377,17 @@ export default function ProfitDashboardLoader() {
     if (initialError) {
       return (
         <div className="rk">
-          <h1>売上利益</h1>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <h1>売上利益</h1>
+            <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+              <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
+                データ更新
+              </Link>
+              <Link href="/sales" className="ghost-btn" style={{ textDecoration: "none" }}>
+                ← 売上管理メニュー
+              </Link>
+            </div>
+          </div>
           <div className="card">
             <p>データの取得に失敗しました。</p>
             <pre style={{ whiteSpace: "pre-wrap", color: "#c0392b" }}>{initialError}</pre>
@@ -394,9 +405,20 @@ export default function ProfitDashboardLoader() {
 
     return (
       <div className="rk">
-        <h1>売上利益</h1>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <h1>売上利益</h1>
+          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+            <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
+              データ更新
+            </Link>
+            <Link href="/sales" className="ghost-btn" style={{ textDecoration: "none" }}>
+              ← 売上管理メニュー
+            </Link>
+          </div>
+        </div>
         <div className="card">
           <p>
+            <span className="spinner" />
             読み込み中… {loadedCount.toLocaleString("ja-JP")}
             {total !== null ? ` / ${total.toLocaleString("ja-JP")}` : ""} 件
           </p>
@@ -426,7 +448,14 @@ export default function ProfitDashboardLoader() {
         )}
       </span>
       <button className="ghost-btn" onClick={() => runLoad(true)} disabled={refreshing}>
-        {refreshing ? "更新中…" : "更新"}
+        {refreshing ? (
+          <>
+            <span className="spinner" />
+            更新中…
+          </>
+        ) : (
+          "更新"
+        )}
       </button>
       {refreshError && (
         <span style={{ color: "#c0392b", fontSize: 12.5 }}>更新に失敗しました: {refreshError}</span>

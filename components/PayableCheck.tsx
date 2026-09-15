@@ -545,7 +545,7 @@ export default function PayableCheck() {
               <div>ファイル: {branchState.fileName}</div>
               {branchState.encoding && <div className="cell-sub">文字コード: {branchState.encoding}</div>}
               {branchTargetMonth && <div className="cell-sub">対象年月: {branchTargetMonth}</div>}
-              {branchState.loading && <div style={{ color: "var(--rk-direct)" }}>読み込み中…</div>}
+              {branchState.loading && <div style={{ color: "var(--rk-direct)" }}><span className="spinner" />読み込み中…</div>}
               {!branchState.loading && branchRecords.length > 0 && (
                 <div style={{ color: "var(--rk-good)" }}>{branchRecords.length.toLocaleString("ja-JP")}件を読み込みました</div>
               )}
@@ -592,7 +592,7 @@ export default function PayableCheck() {
               <div>ファイル: {totalState.fileName}</div>
               {totalState.encoding && <div className="cell-sub">文字コード: {totalState.encoding}</div>}
               {totalTargetMonth && <div className="cell-sub">対象年月: {totalTargetMonth}</div>}
-              {totalState.loading && <div style={{ color: "var(--rk-direct)" }}>読み込み中…</div>}
+              {totalState.loading && <div style={{ color: "var(--rk-direct)" }}><span className="spinner" />読み込み中…</div>}
               {!totalState.loading && totalRecords.length > 0 && (
                 <div style={{ color: "var(--rk-good)" }}>{totalRecords.length.toLocaleString("ja-JP")}件を読み込みました</div>
               )}

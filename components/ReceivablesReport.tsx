@@ -625,7 +625,16 @@ export default function ReceivablesReport() {
           }}
         >
           <span style={{ fontSize: 13, color: dragOver ? "var(--rk-direct)" : undefined }}>
-            {dragOver ? "ここにドロップ" : "ここに売掛残高CSVをドラッグ&ドロップ、またはクリックして選択"}
+            {fileState.loading ? (
+              <>
+                <span className="spinner" />
+                読み込み中…
+              </>
+            ) : dragOver ? (
+              "ここにドロップ"
+            ) : (
+              "ここに売掛残高CSVをドラッグ&ドロップ、またはクリックして選択"
+            )}
           </span>
           <input
             type="file"

@@ -1,5 +1,6 @@
 export const maxDuration = 60;
 
+import Link from "next/link";
 import { fetchStockDetailRows } from "@/lib/fetchStockDetail";
 import { fetchPurchaseLots, fetchStockShipments } from "@/lib/fetchStockMovement";
 import { buildDashboard } from "@/lib/buildDashboard";
@@ -38,6 +39,11 @@ export default async function StockCheckPage() {
           データの読み込みでエラーが発生しました
         </h1>
         <p style={{ fontSize: 14, color: "#555", lineHeight: 1.6 }}>{message}</p>
+        <p style={{ marginTop: 20 }}>
+          <Link href="/dx" className="ghost-btn-inline">
+            ← 社内DXメニュー
+          </Link>
+        </p>
       </div>
     );
   }

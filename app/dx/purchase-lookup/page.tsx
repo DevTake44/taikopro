@@ -129,7 +129,14 @@ export default function PurchaseLookupPage() {
             cursor: loading || query.trim() === "" ? "not-allowed" : "pointer",
           }}
         >
-          {loading ? "検索中…" : "検索"}
+          {loading ? (
+            <>
+              <span className="spinner" />
+              検索中…
+            </>
+          ) : (
+            "検索"
+          )}
         </button>
         <button
           onClick={handleReset}

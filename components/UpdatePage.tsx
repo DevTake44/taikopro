@@ -401,6 +401,7 @@ function UploadBoxShell({
               cursor: !file || busy ? "not-allowed" : "pointer",
             }}
           >
+            {busy && <span className="spinner" />}
             {statusText}
           </button>
         </div>
@@ -472,7 +473,14 @@ function RefreshButton() {
             cursor: state === "loading" ? "not-allowed" : "pointer",
           }}
         >
-          {state === "loading" ? "更新しています…" : "今すぐ画面データを更新する"}
+          {state === "loading" ? (
+            <>
+              <span className="spinner" />
+              更新しています…
+            </>
+          ) : (
+            "今すぐ画面データを更新する"
+          )}
         </button>
         {message && (
           <p style={{ marginTop: 12, fontSize: 13, color: state === "error" ? "var(--neg)" : "var(--pos)" }}>

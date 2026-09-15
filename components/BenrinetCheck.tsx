@@ -587,7 +587,7 @@ export default function BenrinetCheck() {
             <div style={{ marginTop: 10, fontSize: 12.5 }}>
               <div>ファイル: {benrinetState.fileName}</div>
               {benrinetState.encoding && <div className="cell-sub">文字コード: {benrinetState.encoding}</div>}
-              {benrinetState.loading && <div style={{ color: "var(--rk-direct)" }}>読み込み中…</div>}
+              {benrinetState.loading && <div style={{ color: "var(--rk-direct)" }}><span className="spinner" />読み込み中…</div>}
               {!benrinetState.loading && benrinetRecords.length > 0 && (
                 <div style={{ color: "var(--rk-good)" }}>{benrinetRecords.length.toLocaleString("ja-JP")}件を読み込みました</div>
               )}
@@ -636,7 +636,7 @@ export default function BenrinetCheck() {
             <div style={{ marginTop: 10, fontSize: 12.5 }}>
               <div>ファイル: {invoiceState.fileName}</div>
               {invoiceState.encoding && <div className="cell-sub">文字コード: {invoiceState.encoding}</div>}
-              {invoiceState.loading && <div style={{ color: "var(--rk-direct)" }}>読み込み中…</div>}
+              {invoiceState.loading && <div style={{ color: "var(--rk-direct)" }}><span className="spinner" />読み込み中…</div>}
               {!invoiceState.loading && invoiceRecords.length > 0 && (
                 <div style={{ color: "var(--rk-good)" }}>{invoiceRecords.length.toLocaleString("ja-JP")}件を読み込みました</div>
               )}

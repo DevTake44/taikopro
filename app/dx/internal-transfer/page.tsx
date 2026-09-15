@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import type { InternalTransferLine, TransferPendingLine } from "@/lib/types";
 import InternalTransferDashboard from "@/components/InternalTransferDashboard";
@@ -46,7 +47,12 @@ export default async function InternalTransferPage() {
   if (error) {
     return (
       <div className="rk">
-        <h1>社内間金額</h1>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <h1>社内間金額</h1>
+          <Link href="/dx" className="ghost-btn" style={{ textDecoration: "none" }}>
+            ← 社内DXメニュー
+          </Link>
+        </div>
         <div className="card">
           <p>データの取得に失敗しました。環境変数(SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)が正しく設定されているか確認してください。</p>
           <pre style={{ whiteSpace: "pre-wrap", color: "#c0392b" }}>{error.message}</pre>

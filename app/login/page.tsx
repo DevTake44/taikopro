@@ -44,7 +44,14 @@ async function handleSubmit(e: FormEvent<HTMLFormElement>) {
           disabled={loading}
           style={{ width: "100%", padding: "10px 12px", fontSize: 14, background: "#2563d9", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}
         >
-          {loading ? "確認中..." : "入る"}
+          {loading ? (
+            <>
+              <span className="spinner" />
+              確認中...
+            </>
+          ) : (
+            "入る"
+          )}
         </button>
       </form>
     </div>

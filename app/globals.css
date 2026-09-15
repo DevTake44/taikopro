@@ -69,6 +69,15 @@ html, body { padding: 0; margin: 0; }
   .ghost-btn-inline:hover{text-decoration:underline}
 
 /* ==========================================================================
+   読み込み中であることを明示するための共通スピナー。特定のスコープ(.rk等)に
+   依存せず、どのページ・どのボタンの中でも使えるようにcurrentColorベースにしている。
+   ========================================================================== */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(0,0,0,.15);border-top-color:currentColor;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:7px;flex:none}
+.spinner-lg{width:30px;height:30px;border-width:3px;margin-right:0}
+.loading-shell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:280px;color:#6b7280;font-size:13.5px;text-align:center}
+
+/* ==========================================================================
    以下、rieki-check-appから移植した画面(売上利益など)専用のスタイル。
    sales-dashboard側の .page (タブ切替の display:none 用) 等と名前が衝突するため、
    .rk スコープの中でだけ有効になるようにしている。移植元は rieki-check-app の
