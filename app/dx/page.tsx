@@ -25,6 +25,11 @@ const TOOLS: ToolLink[] = [
     description: "仕入・売上データから値上げの兆候を検知して一覧表示します。",
   },
   {
+    href: "/dx/internal-transfer",
+    title: "社内間金額",
+    description: "拠点間の社内間取引額を、確定分・未納品を合わせて拠点×場所別に集計します。",
+  },
+  {
     href: "/dx/upload",
     title: "データ更新",
     description: "各画面のもとになる売上・仕入・商品マスタ・仕入先マスタのCSVをアップロードして反映します。",
