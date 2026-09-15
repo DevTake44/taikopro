@@ -1,19 +1,18 @@
 "use client";
-// rieki-check-appの「データ更新」から移植した4つのアップロード枠(売上明細・仕入明細・
-// 社内間・送り状問合せ)。sales_monthly/purchases/product_master/supplier_masterとは
-// 別の生データ(sales_lines・purchase_lines・stock_transfer_pending・shipping_note_mapping)
-// を更新する。売上利益・不動在庫チェック・社内間金額・運賃照合・値上げ検知が対象。
+// rieki-check-appの「データ更新」から移植したアップロード枠(売上明細・社内間・
+// 送り状問合せ)。sales_monthly/purchases/product_master/supplier_masterとは
+// 別の生データ(sales_lines・stock_transfer_pending・shipping_note_mapping)を更新する。
+// 売上利益・不動在庫チェック・社内間金額・運賃照合が対象(値上げ検知はpurchasesテーブルを
+// 使うため、②の仕入データアップロードで更新される)。
 import { useState, type DragEvent } from "react";
 import Papa from "papaparse";
 import {
   mapSalesRow,
-  mapPurchaseRow,
   mapTransferRow,
   mapShippingNoteRow,
 } from "@/lib/row-mapping";
 import type {
   SalesRowInsert,
-  PurchaseRowInsert,
   TransferRowInsert,
   ShippingNoteRowInsert,
 } from "@/lib/row-mapping";
@@ -109,11 +108,10 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-type Kind = "salesLines" | "purchaseLines" | "transfer" | "shippingNote";
+type Kind = "salesLines" | "transfer" | "shippingNote";
 
 const ENDPOINT: Record<Kind, string> = {
   salesLines: "/api/upload/sales-lines",
-  purchaseLines: "/api/upload/purchase-lines",
   transfer: "/api/upload/transfer",
   shippingNote: "/api/upload/shipping-note",
 };
@@ -152,11 +150,10 @@ function UploadBox({
     const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
     const dataRows = parsed.data.slice(1); // 1行目はヘッダー行なので除外
 
-    const mapper =
-      kind === "salesLines" ? mapSalesRow : kind === "purchaseLines" ? mapPurchaseRow : kind === "transfer" ? mapTransferRow : mapShippingNoteRow;
+    const mapper = kind === "salesLines" ? mapSalesRow : kind === "transfer" ? mapTransferRow : mapShippingNoteRow;
     const mapped = dataRows
       .map((cols) => mapper(cols))
-      .filter((r): r is SalesRowInsert | PurchaseRowInsert | TransferRowInsert | ShippingNoteRowInsert => r !== null);
+      .filter((r): r is SalesRowInsert | TransferRowInsert | ShippingNoteRowInsert => r !== null);
 
     // transferは対象外の行が最初から捨てられる設計なので、0件でも異常ではない。
     if (mapped.length === 0 && kind !== "transfer") {
@@ -223,7 +220,7 @@ function UploadBox({
       return;
     }
 
-    // salesLines / purchaseLines: 1000件ずつバッチ送信
+    // salesLines: 1000件ずつバッチ送信
     const batches = chunk(mapped, BATCH_SIZE);
     setStatus((s) => ({ ...s, totalRows: mapped.length, totalBatches: batches.length }));
     const allDuplicateWarnings: DuplicateWarning[] = [];
@@ -439,20 +436,14 @@ export default function RiekiUploadBoxes() {
         mode="batch"
       />
       <UploadBox
-        kind="purchaseLines"
-        title="⑥ 仕入明細データ(purchase_lines・値上げ検知用)"
-        description="仕入実績データ(55列)と同じ列構成のCSVを選択してください。値上げ検知ダッシュボードの対象です(②の仕入データ(新purchasesテーブル)とは別のデータです)。"
-        mode="batch"
-      />
-      <UploadBox
         kind="transfer"
-        title="⑦ 社内間(未納品の拠点間移動)"
+        title="⑥ 社内間(未納品の拠点間移動)"
         description="受注出力CSV(受注データ、売上データと同じ54列構成)を選択してください。手配区分=在庫かつ納入先名1に「太幸」を含む行だけを取り込みます。アップロードのたびに既存データを全件削除してから置き換えます。"
         mode="replace"
       />
       <UploadBox
         kind="shippingNote"
-        title="⑧ 送り状問合せデータ(運賃照合用)"
+        title="⑦ 送り状問合せデータ(運賃照合用)"
         description="送り状問合せCSVを選択してください(得意先コード・受注番号・運送会社名・送り状番号などを含む列構成)。送り状番号をキーに蓄積(upsert)され、発行日が3か月より前の古いデータは自動的に削除されます。"
         mode="accumulate"
       />

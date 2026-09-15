@@ -166,8 +166,8 @@ function PurchasesUploadBox() {
 
   return (
     <UploadBoxShell
-      title="② 仕入データ(新purchasesテーブル・仕入価格検索用)"
-      description="仕入明細ファイル(CSV)を、そのままアップロードしてください。伝票消費税行の除外、仕入先コード7の除外、担当者コード0の補完などは自動で行われます(統合版の新purchasesテーブルに反映されます。受注番号・受注行番号の列見出しは実ファイルでの確認が必要です)。"
+      title="② 仕入データ(purchasesテーブル・仕入価格検索/値上げ検知用)"
+      description="仕入明細ファイル(CSV)を、そのままアップロードしてください。伝票消費税行の除外、仕入先コード7の除外、担当者コード0の補完などは自動で行われます(統合版のpurchasesテーブルに反映され、仕入価格検索・値上げ検知ダッシュボードの両方に使われます。受注番号・受注行番号の列見出しは実ファイルでの確認が必要です)。"
       file={file}
       setFile={setFile}
       progress={progress}

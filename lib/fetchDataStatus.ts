@@ -32,7 +32,6 @@ type TableConfig = {
 
 const TABLES: TableConfig[] = [
   { key: "salesLines", label: "売上明細データ(sales_lines)", table: "sales_lines", dateColumn: "delivery_date", dateColumnLabel: "納品日" },
-  { key: "purchaseLines", label: "仕入明細データ(purchase_lines)", table: "purchase_lines", dateColumn: "purchase_date", dateColumnLabel: "仕入日" },
   { key: "transfer", label: "社内間(未納品の拠点間移動)", table: "stock_transfer_pending", dateColumn: "order_date", dateColumnLabel: "受注日" },
   { key: "shippingNote", label: "送り状問合せデータ(運賃照合用)", table: "shipping_note_mapping", dateColumn: "issue_date", dateColumnLabel: "発行日" },
 ];

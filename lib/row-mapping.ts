@@ -1,5 +1,5 @@
-// 売上(uriage.csv)・仕入(2025仕入.xlsxと同じ列構成のCSV)の生データ行(文字列配列)を、
-// Supabaseのテーブル(sales_lines / purchase_lines)にそのまま insert/upsert できる形へ変換する。
+// 売上(uriage.csv)の生データ行(文字列配列)を、Supabaseのテーブル(sales_lines)に
+// そのまま insert/upsert できる形へ変換する。
 //
 // 列番号(0始まり)は、過去にPythonで解析した際に確定させたものと同じ。
 // 売上側: 0=得意先コード, 2=得意先名1, 11=受注番号, 12=受注行番号, 15=納品書番号,
@@ -7,16 +7,6 @@
 //         27=品番, 29=品名, 34=受注総数量, 37=納品総数量, 39=販売単価, 40=金額,
 //         42=出荷場所コード(AQ列), 43=出荷場所名(AR列), 46=件名(物件名), 49=手配区分,
 //         50=仕入先コード(AY列), 51=仕入先名1, 53=原価(BB列)
-// 仕入側: 2=仕入先名1, 15=仕入番号, 16=仕入行番号, 17=受注番号, 18=受注行番号,
-//         22=仕入年月日, 27=品番, 29=品名, 36=仕入バラ数(AK列、参考・未使用),
-//         37=仕入総数量(AL列、使用), 39=単価, 52=得意先名1(納品先名)
-//
-// 注意(2026-08-06にユーザーと確認済み): 仕入数量は36列目(仕入バラ数)ではなく
-// 37列目(仕入総数量)を使う。仕入は「6ケース×8入＋バラ2」のようにケース単位で
-// 納品されることがあり、36列目の「仕入バラ数」はその端数(バラ)の数だけしか
-// 表さない(例: 上記の例なら2)。37列目の「仕入総数量」はケース×入数分も含めた
-// 本当の合計数量(上記の例なら50)を表しており、直送カテゴリの値上げ検知
-// (受注番号・行番号ごとに仕入単価を数量加重平均する処理)にはこちらを使う必要がある。
 //
 // 注意(2026-07-30に判明): 売上側のqtyは「受注総数量(34列目)」ではなく
 // 「納品総数量(37列目)」を使う。1つの受注が複数回・複数月に分けて納品される場合や、
@@ -97,22 +87,7 @@ export type TransferRowInsert = {
   assumed_cost: number | null;
 };
 
-export type PurchaseRowInsert = {
-  order_no: string | null;
-  order_line: string | null;
-  purchase_no: string | null;
-  purchase_line: string | null;
-  purchase_date: string | null;
-  supplier_name: string | null;
-  customer_name: string | null;
-  item_code: string | null;
-  item_name: string | null;
-  qty: number | null;
-  unit_price: number | null;
-};
-
 const MIN_SALES_COLS = 54;
-const MIN_PURCHASE_COLS = 55;
 
 // 保持対象の会計期間(会社の期は9/20区切り、2期分): 2024/9/21〜2026/9/20。
 // Supabase無料枠(500MB)の容量を、気づかないうちに超えてしまうことがないよう、
@@ -325,37 +300,5 @@ export function mapShippingNoteRow(cols: string[]): ShippingNoteRowInsert | null
     customer_name: textOrNull(cols, 1),
     rep_code: textOrNull(cols, 5),
     issue_date: dateOrNull(cols, 10),
-  };
-}
-
-export function mapPurchaseRow(cols: string[]): PurchaseRowInsert | null {
-  if (isBlankRow(cols)) return null;
-  if (cols.length < MIN_PURCHASE_COLS) return null;
-
-  const item_name = textOrNull(cols, 29);
-
-  // 「伝票消費税」行は仕入側にも存在する(2026-07-30時点、実データで33,715件・
-  // purchase_lines全体の約8%を確認)。仕入番号(purchase_no)もNULLのため、一意制約で
-  // 重複判定できず、同じファイルを再アップロードするたびに増殖してしまう。
-  // 値上げ検知にも使えないデータのため取り込まない(売上側のmapSalesRowと同じ理由)。
-  if (item_name === "伝票消費税") return null;
-
-  const purchase_date = dateOrNull(cols, 22);
-
-  // 対象2期間(2024/9/21〜2026/9/20)より前・後の仕入日は取り込まない。
-  if (isOutsideRetentionWindow(purchase_date)) return null;
-
-  return {
-    order_no: textOrNull(cols, 17),
-    order_line: textOrNull(cols, 18),
-    purchase_no: textOrNull(cols, 15),
-    purchase_line: textOrNull(cols, 16),
-    purchase_date,
-    supplier_name: textOrNull(cols, 2),
-    customer_name: textOrNull(cols, 52),
-    item_code: textOrNull(cols, 27),
-    item_name: textOrNull(cols, 29),
-    qty: numOrNull(cols, 37),
-    unit_price: numOrNull(cols, 39),
   };
 }
