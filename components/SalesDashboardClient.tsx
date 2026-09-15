@@ -535,7 +535,6 @@ function MatrixPage({ data }: { data: DashboardData }) {
   if (grand.cmp) {
     grand.cmp.total_m = grand.cmp.total_s ? Math.round(((grand.cmp.total_s - grand.cmp.total_p) / grand.cmp.total_s) * 1000) / 10 : null;
   }
-  const compareLabel = compareSet ? fiscalYearLabel(compareYear as number, CUR) : null;
 
   return (
     <div className="page active">
@@ -630,9 +629,9 @@ function MatrixPage({ data }: { data: DashboardData }) {
                   <td className="codecol">{r.code}</td>
                   <td className="namecol">{r.name}</td>
                   {r.cells.map((c, i) => (
-                    <MatrixCell key={i} metric={metric} base={c.base} cmp={c.cmp} compareLabel={compareLabel} />
+                    <MatrixCell key={i} metric={metric} base={c.base} cmp={c.cmp} />
                   ))}
-                  <MatrixTotalCell metric={metric} row={r} compareLabel={compareLabel} />
+                  <MatrixTotalCell metric={metric} row={r} />
                 </tr>
               ))}
             </tbody>
@@ -641,9 +640,9 @@ function MatrixPage({ data }: { data: DashboardData }) {
                 <td className="codecol" />
                 <td className="namecol">合計</td>
                 {grand.cells.map((c, i) => (
-                  <MatrixCell key={i} metric={metric} base={c.base} cmp={c.cmp} compareLabel={compareLabel} />
+                  <MatrixCell key={i} metric={metric} base={c.base} cmp={c.cmp} />
                 ))}
-                <MatrixTotalCell metric={metric} row={grand} compareLabel={compareLabel} />
+                <MatrixTotalCell metric={metric} row={grand} />
               </tr>
             </tfoot>
           </table>
@@ -658,116 +657,87 @@ function MatrixPage({ data }: { data: DashboardData }) {
   );
 }
 
+// 対比期間が選ばれている月は、差額のみを1行で表示する(実額とは並べない)。
+// 対比が無い月(対比なし・今期がまだ到達していない月)は、これまで通り実額を表示する。
 function MatrixCell({
   metric,
   base,
   cmp,
-  compareLabel,
 }: {
   metric: Metric;
   base: MonthCell;
   cmp: MonthCell | null;
-  compareLabel: string | null;
 }) {
   const isPct = metric === "margin";
   const v = monthMetricValue(metric, base);
 
-  let topEl: React.ReactNode;
-  let tdClass = "";
-  if (metric === "sales" && base.s === 0 && base.p > 0) {
-    topEl = (
-      <>
-        <span className="cell-s" style={{ color: "#c8ccd4" }}>0</span>
-        <span className="cell-m" style={{ color: "#e08a1e" }}>仕{jpn(base.p)}</span>
-      </>
-    );
-  } else if (v == null) {
-    topEl = <span className="cell-s" style={{ color: "#c8ccd4" }}>―</span>;
-  } else if (metric === "sales" && v === 0) {
-    topEl = <span className="cell-s" style={{ color: "#c8ccd4" }}>0</span>;
-  } else if (metric === "profit") {
-    topEl = <span className={`cell-s ${v >= 0 ? "val-pos" : "val-neg"}`}>{v >= 0 ? "+" : ""}{jpn(v)}</span>;
-  } else if (isPct) {
-    const good = v >= 10;
-    tdClass = good ? "cell-good" : "cell-bad";
-    topEl = <span className={`cell-s ${good ? "m-good" : "m-bad"}`}>{v.toFixed(1)}%</span>;
-  } else {
-    topEl = <span className="cell-s">{jpn(v)}</span>;
-  }
-
-  let bottomEl: React.ReactNode = null;
   if (cmp) {
     const cmpV = monthMetricValue(metric, cmp);
-    if (v != null && cmpV != null) {
-      const d = isPct ? Math.round((v - cmpV) * 10) / 10 : v - cmpV;
-      bottomEl = (
-        <span className={d >= 0 ? "val-pos" : "val-neg"}>
-          {compareLabel}比 {d >= 0 ? "+" : ""}{isPct ? `${d}pt` : jpn(d)}
-        </span>
-      );
+    if (v == null || cmpV == null) {
+      return <td><span className="cell-s" style={{ color: "#c8ccd4" }}>―</span></td>;
     }
+    const d = isPct ? Math.round((v - cmpV) * 10) / 10 : v - cmpV;
+    return (
+      <td>
+        <span className={`cell-s ${d >= 0 ? "val-pos" : "val-neg"}`}>
+          {d >= 0 ? "+" : ""}{isPct ? `${d}pt` : jpn(d)}
+        </span>
+      </td>
+    );
   }
 
-  return (
-    <td className={tdClass}>
-      <div>{topEl}</div>
-      {bottomEl && <div style={{ fontSize: 9.5, color: "#9aa3b2", marginTop: 1 }}>{bottomEl}</div>}
-    </td>
-  );
+  if (metric === "sales" && base.s === 0 && base.p > 0) {
+    return (
+      <td>
+        <span className="cell-s" style={{ color: "#c8ccd4" }}>0</span>
+        <span className="cell-m" style={{ color: "#e08a1e" }}>仕{jpn(base.p)}</span>
+      </td>
+    );
+  }
+  if (v == null) return <td><span className="cell-s" style={{ color: "#c8ccd4" }}>―</span></td>;
+  if (metric === "sales" && v === 0) return <td><span className="cell-s" style={{ color: "#c8ccd4" }}>0</span></td>;
+  if (metric === "profit") {
+    return <td><span className={`cell-s ${v >= 0 ? "val-pos" : "val-neg"}`}>{v >= 0 ? "+" : ""}{jpn(v)}</span></td>;
+  }
+  if (isPct) {
+    const good = v >= 10;
+    return (
+      <td className={good ? "cell-good" : "cell-bad"}>
+        <span className={`cell-s ${good ? "m-good" : "m-bad"}`}>{v.toFixed(1)}%</span>
+      </td>
+    );
+  }
+  return <td><span className="cell-s">{jpn(v)}</span></td>;
 }
 
-function MatrixTotalCell({
-  metric,
-  row,
-  compareLabel,
-}: {
-  metric: Metric;
-  row: MatrixMergedRow;
-  compareLabel: string | null;
-}) {
+// 対比期間が選ばれていれば、トータル列も差額のみを1行で表示する(実額とは並べない)。
+function MatrixTotalCell({ metric, row }: { metric: Metric; row: MatrixMergedRow }) {
   const v = metricValue(metric, row);
   const isPct = metric === "margin";
-  const topEl =
-    v == null ? (
-      <span className="cell-s">―</span>
-    ) : metric === "profit" ? (
-      <span className={`cell-s ${v >= 0 ? "val-pos" : "val-neg"}`}>{v >= 0 ? "+" : ""}{jpn(v)}</span>
-    ) : isPct ? (
-      <span className={`cell-s ${v >= 10 ? "m-good" : "m-bad"}`}>{v.toFixed(1)}%</span>
-    ) : (
-      <span className="cell-s">{jpn(v)}</span>
-    );
 
-  if (!row.cmp) {
-    return <td className="totcol">{topEl}</td>;
-  }
-
-  const cmpV = metricValue(metric, row.cmp);
-  let bottom: React.ReactNode = "―";
-  if (v != null && cmpV != null) {
-    if (isPct) {
-      const d = Math.round((v - cmpV) * 10) / 10;
-      bottom = (
-        <span className={d >= 0 ? "val-pos" : "val-neg"}>
-          {compareLabel}比 {d >= 0 ? "+" : ""}{d}pt
-        </span>
-      );
-    } else {
-      const d = v - cmpV;
-      bottom = (
-        <span className={d >= 0 ? "val-pos" : "val-neg"}>
-          {compareLabel}比 {d >= 0 ? "+" : ""}{jpn(d)}
-        </span>
-      );
+  if (row.cmp) {
+    const cmpV = metricValue(metric, row.cmp);
+    if (v == null || cmpV == null) {
+      return <td className="totcol"><span className="cell-s">―</span></td>;
     }
+    const d = isPct ? Math.round((v - cmpV) * 10) / 10 : v - cmpV;
+    return (
+      <td className="totcol">
+        <span className={`cell-s ${d >= 0 ? "val-pos" : "val-neg"}`}>
+          {d >= 0 ? "+" : ""}{isPct ? `${d}pt` : jpn(d)}
+        </span>
+      </td>
+    );
   }
 
-  return (
-    <td className="totcol">
-      <div>{topEl}</div>
-      <div style={{ fontSize: 10, color: "#9aa3b2", marginTop: 2 }}>{bottom}</div>
-    </td>
-  );
+  if (v == null) return <td className="totcol"><span className="cell-s">―</span></td>;
+  if (metric === "profit") {
+    return <td className="totcol"><span className={`cell-s ${v >= 0 ? "val-pos" : "val-neg"}`}>{v >= 0 ? "+" : ""}{jpn(v)}</span></td>;
+  }
+  if (isPct) {
+    return <td className="totcol"><span className={`cell-s ${v >= 10 ? "m-good" : "m-bad"}`}>{v.toFixed(1)}%</span></td>;
+  }
+  return <td className="totcol"><span className="cell-s">{jpn(v)}</span></td>;
 }
 /* ============ 目標追跡 ============ */
 function GoalPage({ data }: { data: DashboardData }) {
