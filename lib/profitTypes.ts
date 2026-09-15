@@ -2,6 +2,29 @@
 // public.v_profit_by_order / public.profit_summary (いずれもマテリアライズドビュー/テーブル。
 // taiko-proに移行済み)の1行の形。
 
+// public.v_price_increase_alerts マテリアライズドビューの1行の型(値上げ検知ダッシュボード)
+export type PriceIncreaseAlert = {
+  category: "直送" | "在庫";
+  order_no: string | null;
+  item_code: string | null;
+  item_name: string | null;
+  customer_name: string | null;
+  supplier_name: string | null;
+  branch_code: string | null;
+  rep_code: string | null;
+  order_date: string | null;
+  purchase_date: string | null;
+  assumed_cost: number;
+  actual_price: number;
+  sell_price: number | null;
+  qty: number;
+  gap: number;
+  gap_pct: number | null;
+  actual_margin_pct: number | null;
+  planned_margin_pct: number | null;
+  impact: number;
+};
+
 // public.v_profit_lines マテリアライズドビューの1行の型のうち、経営マトリクス(月別集計)で
 // 使っていた列だけに絞ったもの。現在は経営マトリクスの読み込み元がprofit_summaryに
 // 切り替わっており呼び出し元が無いが、lib/profit-cache.ts側の型として残っている。

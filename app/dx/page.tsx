@@ -20,6 +20,11 @@ const TOOLS: ToolLink[] = [
     description: "在庫仕入(拠点90・91)の内訳と、出荷実績との突き合わせによる不動在庫候補を確認します。",
   },
   {
+    href: "/dx/price-alerts",
+    title: "値上げ検知ダッシュボード",
+    description: "仕入・売上データから値上げの兆候を検知して一覧表示します。",
+  },
+  {
     href: "/dx/upload",
     title: "データ更新",
     description: "各画面のもとになる売上・仕入・商品マスタ・仕入先マスタのCSVをアップロードして反映します。",
