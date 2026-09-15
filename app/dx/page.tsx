@@ -30,6 +30,11 @@ const TOOLS: ToolLink[] = [
     description: "拠点間の社内間取引額を、確定分・未納品を合わせて拠点×場所別に集計します。",
   },
   {
+    href: "/dx/receivables-report",
+    title: "売掛残高月報",
+    description: "拠点別の売掛残高CSVから、当月売上・入金額・当月残高の集計と簡易仕訳を作成します。",
+  },
+  {
     href: "/dx/benrinet-check",
     title: "べんりネット照合",
     description: "べんりネットのCSVと自社請求データをその場で突き合わせ、差異を確認します。",
