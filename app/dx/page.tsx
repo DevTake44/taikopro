@@ -64,6 +64,11 @@ const TOOLS: ToolLink[] = [
     title: "データ更新",
     description: "各画面のもとになる売上・仕入・商品マスタ・仕入先マスタのCSVをアップロードして反映します。",
   },
+  {
+    href: "/dx/room-reservation",
+    title: "会議室予約",
+    description: "東京の会議室の週間予約状況を確認し、予約・変更・削除ができます。",
+  },
 ];
 
 export default function DxMenuPage() {
