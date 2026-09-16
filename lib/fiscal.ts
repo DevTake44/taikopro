@@ -29,3 +29,12 @@ export function monthsOfFiscalYear(fiscalYear: number): string[] {
   for (const m of [1, 2, 3, 4, 5, 6, 7, 8, 9]) months.push(`${fiscalYear + 1}${String(m).padStart(2, "0")}`);
   return months;
 }
+
+/** 今日の日付から、現在の会計年度の期末日("YYYY-09-20")を求める。10月になると自動的に翌年の期末に切り替わる。 */
+export function currentFiscalPeriodEndDate(today: Date = new Date()): string {
+  const y = today.getFullYear();
+  const m = today.getMonth() + 1;
+  const ym = `${y}${String(m).padStart(2, "0")}`;
+  const fiscalYear = fiscalYearOf(ym);
+  return `${fiscalYear + 1}-09-20`;
+}

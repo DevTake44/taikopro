@@ -202,6 +202,7 @@ function buildGroups(rows: UnsoldOrderRow[]): RepGroup[] {
 
 export default function UnsoldOrdersDashboard() {
   const [rows, setRows] = useState<UnsoldOrderRow[]>([]);
+  const [periodEnd, setPeriodEnd] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [repFilter, setRepFilter] = useState<string>("");
@@ -215,6 +216,7 @@ export default function UnsoldOrdersDashboard() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "取得に失敗しました");
       setRows(json.rows as UnsoldOrderRow[]);
+      setPeriodEnd(typeof json.periodEnd === "string" ? json.periodEnd : null);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -255,6 +257,11 @@ export default function UnsoldOrdersDashboard() {
         <div className="title">
           <h1>未売上受注チェック</h1>
           <p>受注はあるが売上未計上の案件を、担当者→得意先→締め日の単位で一覧化します。</p>
+          {periodEnd && (
+            <p className="cell-sub" style={{ marginTop: 4 }}>
+              対象: 納期日が今期末({periodEnd})までの受注のみ表示しています(それ以降の納期はノイズになるため対象外)。
+            </p>
+          )}
         </div>
         <Link href="/dx" className="ghost-btn-inline">
           ← 社内DXメニュー
