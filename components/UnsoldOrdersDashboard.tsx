@@ -205,6 +205,7 @@ export default function UnsoldOrdersDashboard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [repFilter, setRepFilter] = useState<string>("");
+  const [closingFilter, setClosingFilter] = useState<string>("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -231,9 +232,18 @@ export default function UnsoldOrdersDashboard() {
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], "ja"));
   }, [rows]);
 
+  const closingOptions = useMemo(() => {
+    const set = new Set<number | null>();
+    for (const r of rows) set.add(r.closing_day);
+    return Array.from(set).sort((a, b) => closingDaySortKey(a) - closingDaySortKey(b));
+  }, [rows]);
+
   const filteredRows = useMemo(
-    () => (repFilter ? rows.filter((r) => r.rep_code === repFilter) : rows),
-    [rows, repFilter]
+    () =>
+      rows
+        .filter((r) => !repFilter || r.rep_code === repFilter)
+        .filter((r) => !closingFilter || String(r.closing_day) === closingFilter),
+    [rows, repFilter, closingFilter]
   );
 
   const groups = useMemo(() => buildGroups(filteredRows), [filteredRows]);
@@ -256,16 +266,29 @@ export default function UnsoldOrdersDashboard() {
       <div className="card">
         <div className="card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <h2>未売上一覧</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <label style={{ fontSize: 13, color: "var(--ink-faint)" }}>担当者:</label>
-            <select value={repFilter} onChange={(e) => setRepFilter(e.target.value)} style={{ padding: "5px 8px", fontSize: 13 }}>
-              <option value="">すべて</option>
-              {repOptions.map(([code, name]) => (
-                <option key={code} value={code}>
-                  {name}
-                </option>
-              ))}
-            </select>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label style={{ fontSize: 13, color: "var(--ink-faint)" }}>担当者:</label>
+              <select value={repFilter} onChange={(e) => setRepFilter(e.target.value)} style={{ padding: "5px 8px", fontSize: 13 }}>
+                <option value="">すべて({repOptions.length}名)</option>
+                {repOptions.map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label style={{ fontSize: 13, color: "var(--ink-faint)" }}>締め日:</label>
+              <select value={closingFilter} onChange={(e) => setClosingFilter(e.target.value)} style={{ padding: "5px 8px", fontSize: 13 }}>
+                <option value="">すべて</option>
+                {closingOptions.map((c) => (
+                  <option key={String(c)} value={String(c)}>
+                    {formatClosingDay(c)}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
         <div style={{ padding: "0 20px 20px" }}>

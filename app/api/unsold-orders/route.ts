@@ -3,18 +3,31 @@ import { getSupabaseServerClient } from "@/lib/supabaseServer";
 
 export const dynamic = "force-dynamic";
 
+const PAGE_SIZE = 1000;
+
 // v_unsold_orders は「受注金額合計 - sales_lines該当受注番号の売上済み合計 > 0」の受注のみを持つビュー。
+// PostgREST(Supabase)は1回のクエリで最大1000件しか返さないため、全件取得できるまでページングする。
 export async function GET() {
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("v_unsold_orders")
-    .select("*")
-    .order("rep_code", { ascending: true })
-    .order("customer_code", { ascending: true })
-    .order("due_date", { ascending: true });
+  const rows: unknown[] = [];
+  let from = 0;
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  while (true) {
+    const { data, error } = await supabase
+      .from("v_unsold_orders")
+      .select("*")
+      .order("rep_code", { ascending: true })
+      .order("customer_code", { ascending: true })
+      .order("due_date", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
   }
-  return NextResponse.json({ rows: data ?? [] });
+
+  return NextResponse.json({ rows });
 }
