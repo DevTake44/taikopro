@@ -1,5 +1,5 @@
 // 「在庫」タブ用のデータ集計。
-// 拠点90・91(在庫仕入)の仕入明細(purchases_detail)を、商品別・仕入先別・月別に集計する。
+// 拠点90・91(在庫仕入)の仕入明細(purchases)を、商品別・仕入先別・月別に集計する。
 // v_monthlyには商品・仕入先の情報が無いため、こちらは生の仕入明細から直接集計する。
 
 import { fiscalYearOf, periodIndexOf, ymFromDate, monthsOfFiscalYear } from "./fiscal";

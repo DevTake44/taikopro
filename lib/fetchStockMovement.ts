@@ -1,10 +1,6 @@
 // 「不動在庫チェック」用のデータ取得。
-// 仕入(purchases_detail・拠点90/91)と、在庫出荷実績(sales_lines・arrange_type='在庫')を
+// 仕入(purchases・拠点90/91)と、在庫出荷実績(sales_lines・arrange_type='在庫')を
 // それぞれ全件取得する。実際の突き合わせ(FIFOマッチング)はbuildStockMovement.tsで行う。
-//
-// 統合版ではsales_lines・purchases_detailとも同じtaiko-proプロジェクト内にあるため、
-// 統合前(sales-dashboard・rieki-checkが別Supabaseプロジェクトだった頃)のようなプロジェクト
-// をまたいだ接続は不要になった。
 //
 // 在庫出荷実績は数万件あり、1件ずつ順番にページを取りに行くと時間がかかりすぎてVercelの
 // 関数タイムアウト(504)を起こすため、複数ページを同時並行で取得している(fetchPaged.ts参照)。
@@ -31,14 +27,14 @@ export type ShipmentRow = {
   sell_price: number | null; // 単価。出荷金額(在庫回転月数の計算用)はqty×sell_priceで求める
 };
 
-// sales-dashboard自身のDBから、在庫仕入(拠点90・91)の明細を全件取得する。
+// purchasesテーブルから、在庫仕入(拠点90・91)の明細を全件取得する。
 export async function fetchPurchaseLots(): Promise<PurchaseLotRow[]> {
   const supabase = getSupabaseServerClient();
   try {
     return await fetchAllPagesConcurrent<PurchaseLotRow>(
       (from, to) =>
         supabase
-          .from("purchases_detail")
+          .from("purchases")
           .select("product_code, product_name, purchase_date, amount, unit_price")
           .in("location_code", STOCK_LOCATION_CODES)
           .order("id", { ascending: true })

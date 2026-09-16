@@ -232,9 +232,8 @@ const prev_tp_same = acc.prev.slice(0, latestPiForA).reduce((a, c) => a + c.p, 0
     return rows;
   }
 
-  // sales_monthlyの取り込み開始時期がpurchases_detailより遅いため、古い会計年度は
-  // 仕入だけあって売上が1件も無いことがある(2026-09時点でFY2023がこれに該当)。
-  // 月別マトリクスの「表示期間・対比期間」の選択肢としては、売上のある年度だけを出す。
+  // 月別マトリクスの「表示期間・対比期間」の選択肢としては、売上のある年度だけを出す
+  // (仕入・売上どちらのデータの取り込み開始時期よりも前の会計年度が紛れ込むのを防ぐ)。
   const allFiscalYears = Array.from(new Set(withYm.map((r) => r.fiscal_year))).sort((a, b) => a - b);
   const salesByFiscalYear = new Map<number, number>();
   for (const r of withYm) {
