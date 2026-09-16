@@ -69,6 +69,11 @@ const TOOLS: ToolLink[] = [
     title: "会議室予約",
     description: "東京の会議室の週間予約状況を確認し、予約・変更・削除ができます。",
   },
+  {
+    href: "/dx/unsold-orders",
+    title: "未売上受注チェック",
+    description: "受注はあるが売上未計上の案件を、担当者・得意先・締め日ごとに一覧化します。",
+  },
 ];
 
 export default function DxMenuPage() {

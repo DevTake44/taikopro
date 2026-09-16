@@ -9,3 +9,5 @@ export const SALES_CONFLICT_COLUMNS = "target_month_raw,staff_code,customer_code
 export const PURCHASES_CONFLICT_COLUMNS = "purchase_number,purchase_line";
 export const PRODUCT_MASTER_CONFLICT_COLUMNS = "product_code";
 export const SUPPLIER_MASTER_CONFLICT_COLUMNS = "supplier_code";
+export const CUSTOMER_MASTER_CONFLICT_COLUMNS = "customer_code";
+export const ORDER_CHECKLIST_CONFLICT_COLUMNS = "order_no";

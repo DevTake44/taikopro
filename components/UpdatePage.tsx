@@ -10,6 +10,7 @@ import { transformSalesCsv } from "@/lib/salesTransform";
 import { transformPurchasesCsv } from "@/lib/purchasesTransform";
 import { transformProductMasterCsv } from "@/lib/productMasterTransform";
 import { transformSupplierMasterCsv } from "@/lib/supplierMasterTransform";
+import { transformCustomerMasterCsv } from "@/lib/customerMasterTransform";
 
 const CHUNK_SIZE = 1000;
 
@@ -286,6 +287,60 @@ function SupplierMasterUploadBox() {
   );
 }
 
+function CustomerMasterUploadBox() {
+  const [file, setFile] = useState<File | null>(null);
+  const [progress, setProgress] = useState<Progress>({ stage: "idle" });
+  const [result, setResult] = useState<FinalResult | null>(null);
+
+  async function handleUpload() {
+    if (!file) return;
+    setResult(null);
+    try {
+      setProgress({ stage: "reading" });
+      const buf = await file.arrayBuffer();
+      const text = decodeCsvBuffer(buf);
+      const parsed = Papa.parse<Record<string, string>>(text, {
+        header: true,
+        skipEmptyLines: true,
+      });
+      const fatalErrors = parsed.errors.filter((e) => e.type !== "FieldMismatch");
+      if (fatalErrors.length > 0) {
+        throw new Error("CSVの読み込み中にエラーが発生しました: " + fatalErrors[0].message);
+      }
+      const { rows, skipped } = transformCustomerMasterCsv(parsed.data);
+      if (rows.length === 0) {
+        throw new Error("有効なデータ行がありませんでした。");
+      }
+      setProgress({ stage: "uploading", sentCount: 0, totalCount: rows.length });
+      await uploadRowsInChunks(rows, "/api/commit-customer-master", (sent, total) =>
+        setProgress({ stage: "uploading", sentCount: sent, totalCount: total })
+      );
+      setProgress({ stage: "done" });
+      setResult({
+        rowCount: rows.length,
+        skippedCount: skipped.length,
+        skippedSample: skipped.slice(0, 5),
+      });
+    } catch (e) {
+      setProgress({ stage: "error" });
+      setResult({ error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return (
+    <UploadBoxShell
+      title="⑤ 得意先マスタの更新(締め日・未売上受注チェック用)"
+      description="得意先マスタCSVを、そのままアップロードしてください。得意先コード・得意先名上段/下段・締日・削除フラグの列を使用します。"
+      file={file}
+      setFile={setFile}
+      progress={progress}
+      result={result}
+      onUpload={handleUpload}
+      accept=".csv"
+    />
+  );
+}
+
 function UploadBoxShell({
   title,
   description,
@@ -518,6 +573,7 @@ export default function UpdatePage({
         <PurchasesUploadBox />
         <ProductMasterUploadBox />
         <SupplierMasterUploadBox />
+        <CustomerMasterUploadBox />
         <RiekiUploadBoxes />
       </div>
     </div>
