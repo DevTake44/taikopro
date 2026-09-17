@@ -145,6 +145,11 @@ const MAT_METRICS: { key: MatMetric; label: string }[] = [
   { key: "yoy", label: "前年比" },
 ];
 
+// "total"は「表示する数値」ボタンで選んだ指標、"sales"/"profitAmt"は表示中の指標に
+// 関係なく常に売上・利益で並べる(例: 粗利率を表示したまま「売上高順」に並べ替えて、
+// 「売上は高いが薄利」「利益額が大きく粗利率も高い」等を確認できるようにするため)。
+type MatSortKey = "name" | "total" | "sales" | "profitAmt";
+
 // 「今期計」列を並び替えるときの基準値。表示中の数値(表示する数値ボタンで選んだもの)と
 // 一致させることで、クリックしたときに画面に見えている数字どおりの順番になるようにする。
 function matSortValue(metric: MatMetric, row: MatRow): number {
@@ -423,7 +428,7 @@ export default function ProfitDashboard({
   // 反映されないため拠点別・担当別の「利益」は見られない。ここではそれが見られる。
   const [matDim, setMatDim] = useState<MatDim>("branch");
   const [matMetric, setMatMetric] = useState<MatMetric>("profit");
-  const [matSortKey, setMatSortKey] = useState<"name" | "total">("total");
+  const [matSortKey, setMatSortKey] = useState<MatSortKey>("total");
   const [matSortDir, setMatSortDir] = useState<1 | -1>(-1);
   const [matFilter, setMatFilter] = useState("");
 
@@ -566,8 +571,9 @@ export default function ProfitDashboard({
       return rows;
     }
     rows = [...rows].sort((a, b) => {
-      const v = matSortKey === "name" ? a.name.localeCompare(b.name, "ja") : matSortValue(matMetric, a) - matSortValue(matMetric, b);
-      return v * matSortDir;
+      if (matSortKey === "name") return a.name.localeCompare(b.name, "ja") * matSortDir;
+      const sortMetric: MatMetric = matSortKey === "sales" ? "sales" : matSortKey === "profitAmt" ? "profit" : matMetric;
+      return (matSortValue(sortMetric, a) - matSortValue(sortMetric, b)) * matSortDir;
     });
     return rows;
   }, [matRowsAll, matFilter, matSortKey, matSortDir, matDim, matMetric]);
@@ -814,6 +820,26 @@ export default function ProfitDashboard({
               ))}
             </div>
           </div>
+          {matDim !== "branch" && (
+            <div className="filter-field" style={{ gridColumn: "span 2" }}>
+              <label>並び順</label>
+              <select
+                value={`${matSortKey}_${matSortDir}`}
+                onChange={(e) => {
+                  const [k, d] = e.target.value.split("_");
+                  setMatSortKey(k as MatSortKey);
+                  setMatSortDir(Number(d) as 1 | -1);
+                }}
+                style={{ padding: "6px 8px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12.5 }}
+              >
+                <option value="total_-1">今期計(表示中の指標・多い順)</option>
+                <option value="total_1">今期計(表示中の指標・少ない順)</option>
+                <option value="sales_-1">売上高(多い順)</option>
+                <option value="profitAmt_-1">利益額(多い順)</option>
+                <option value="name_1">名前順</option>
+              </select>
+            </div>
+          )}
         </div>
         {matDim === "customer" && (
           <div className="filter-row" style={{ marginTop: 10 }}>

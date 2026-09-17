@@ -426,6 +426,11 @@ function totalSortValue(metric: Metric, row: MatrixMergedRow): number {
   return v ?? -Infinity;
 }
 
+// "total"は今表示中の指標(タブ)で並べる。"sales"/"profitAmt"は表示中のタブに
+// 関係なく常に売上高・粗利額で並べる(例: 粗利率タブのまま「売上高順」に並べ替えて、
+// 「売上は高いが薄利」「粗利額は大きく利益率も高い」等を確認できるようにするため)。
+type SortKey = "code" | "name" | "total" | "sales" | "profitAmt";
+
 function monthMetricValue(metric: Metric, c: MonthCell): number | null {
   if (metric === "sales") return c.s;
   if (metric === "purchase") return c.p;
@@ -440,7 +445,7 @@ function toMonthCell(c: { s: number; p: number }): MonthCell {
 function MatrixPage({ data }: { data: DashboardData }) {
   const [dim, setDim] = useState<Dim>("loc");
   const [metric, setMetric] = useState<Metric>("sales");
-  const [sortKey, setSortKey] = useState<"code" | "name" | "total">("total");
+  const [sortKey, setSortKey] = useState<SortKey>("total");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filter, setFilter] = useState("");
 
@@ -515,11 +520,13 @@ function MatrixPage({ data }: { data: DashboardData }) {
     r = [...r].sort((a, b) => {
       if (sortKey === "code") return sortDir === "asc" ? Number(a.code) - Number(b.code) : Number(b.code) - Number(a.code);
       if (sortKey === "name") return sortDir === "asc" ? a.name.localeCompare(b.name, "ja") : b.name.localeCompare(a.name, "ja");
-      // トータル列に実際に表示されている数字(選択中の指標。対比期間を選んでいれば差額)で並べる。
-      // 以前は常に売上金額の実額で並べていたため、仕入額/粗利額タブや対比表示の時に
-      // 画面の数字と順番がズレて見えていた。
-      const va = totalSortValue(metric, a);
-      const vb = totalSortValue(metric, b);
+      // "sales"/"profitAmt"は表示中のタブに関わらず常に売上高・粗利額で並べる。
+      // "total"はトータル列に実際に表示されている数字(選択中の指標。対比期間を
+      // 選んでいれば差額)で並べる。以前は常に売上金額の実額で並べていたため、
+      // 仕入額/粗利額タブや対比表示の時に画面の数字と順番がズレて見えていた。
+      const sortMetric: Metric = sortKey === "sales" ? "sales" : sortKey === "profitAmt" ? "profit" : metric;
+      const va = totalSortValue(sortMetric, a);
+      const vb = totalSortValue(sortMetric, b);
       return sortDir === "asc" ? va - vb : vb - va;
     });
     return r;
@@ -653,8 +660,10 @@ function MatrixPage({ data }: { data: DashboardData }) {
               }}
               style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
             >
-              <option value="total_desc">トータル(多い順)</option>
-              <option value="total_asc">トータル(少ない順)</option>
+              <option value="total_desc">トータル(表示中の指標・多い順)</option>
+              <option value="total_asc">トータル(表示中の指標・少ない順)</option>
+              <option value="sales_desc">売上高(多い順)</option>
+              <option value="profitAmt_desc">粗利額(多い順)</option>
               <option value="code_asc">コード順</option>
               <option value="name_asc">{dimName[dim]}名(あいうえお順)</option>
             </select>
