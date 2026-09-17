@@ -414,6 +414,18 @@ function metricValue(metric: Metric, v: { total_s: number; total_p: number; tota
   return v.total_m;
 }
 
+// トータル列で実際に表示されている値(対比期間を選んでいれば差額、無ければ実額)を
+// 並び替え用の数値にする。データが無い(null)行は最下位扱いにする。
+function totalSortValue(metric: Metric, row: MatrixMergedRow): number {
+  const v = metricValue(metric, row);
+  if (row.cmp) {
+    const cmpV = metricValue(metric, row.cmp);
+    if (v == null || cmpV == null) return -Infinity;
+    return v - cmpV;
+  }
+  return v ?? -Infinity;
+}
+
 function monthMetricValue(metric: Metric, c: MonthCell): number | null {
   if (metric === "sales") return c.s;
   if (metric === "purchase") return c.p;
@@ -503,10 +515,15 @@ function MatrixPage({ data }: { data: DashboardData }) {
     r = [...r].sort((a, b) => {
       if (sortKey === "code") return sortDir === "asc" ? Number(a.code) - Number(b.code) : Number(b.code) - Number(a.code);
       if (sortKey === "name") return sortDir === "asc" ? a.name.localeCompare(b.name, "ja") : b.name.localeCompare(a.name, "ja");
-      return sortDir === "asc" ? a.total_s - b.total_s : b.total_s - a.total_s;
+      // トータル列に実際に表示されている数字(選択中の指標。対比期間を選んでいれば差額)で並べる。
+      // 以前は常に売上金額の実額で並べていたため、仕入額/粗利額タブや対比表示の時に
+      // 画面の数字と順番がズレて見えていた。
+      const va = totalSortValue(metric, a);
+      const vb = totalSortValue(metric, b);
+      return sortDir === "asc" ? va - vb : vb - va;
     });
     return r;
-  }, [mergedAll, filter, sortKey, sortDir]);
+  }, [mergedAll, filter, sortKey, sortDir, metric]);
 
   function onSort(k: "code" | "name" | "total") {
     if (k === sortKey) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -625,17 +642,40 @@ function MatrixPage({ data }: { data: DashboardData }) {
               ))}
             </select>
           </label>
+          <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            並び順:
+            <select
+              value={`${sortKey}_${sortDir}`}
+              onChange={(e) => {
+                const [k, d] = e.target.value.split("_") as [typeof sortKey, typeof sortDir];
+                setSortKey(k);
+                setSortDir(d);
+              }}
+              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+            >
+              <option value="total_desc">トータル(多い順)</option>
+              <option value="total_asc">トータル(少ない順)</option>
+              <option value="code_asc">コード順</option>
+              <option value="name_asc">{dimName[dim]}名(あいうえお順)</option>
+            </select>
+          </label>
         </div>
         <div className="matwrap">
           <table className="mat">
             <thead>
               <tr>
-                <th className="codecol" onClick={() => onSort("code")}>コード</th>
-                <th className="namecol" onClick={() => onSort("name")}>{dimName[dim]}</th>
+                <th className="codecol" onClick={() => onSort("code")}>
+                  コード{sortKey === "code" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                </th>
+                <th className="namecol" onClick={() => onSort("name")}>
+                  {dimName[dim]}{sortKey === "name" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                </th>
                 {baseMonths.map((m) => (
                   <th key={m}>{monL(m)}</th>
                 ))}
-                <th className="totcol" onClick={() => onSort("total")}>トータル</th>
+                <th className="totcol" onClick={() => onSort("total")}>
+                  トータル{sortKey === "total" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -665,7 +705,7 @@ function MatrixPage({ data }: { data: DashboardData }) {
         <p style={{ fontSize: 11, color: "var(--ink-faint)", padding: "8px 20px 16px" }}>
           {dim === "cust"
             ? `得意先は売上上位100件(全${baseSet.cust_total_count.toLocaleString()}件)。検索で絞込。`
-            : "4つのボタンで表示を切替。粗利率は10%以上=緑/未満=赤。対比期間を選ぶと、トータル列に対比先との差も表示されます。"}
+            : "4つのボタンで表示を切替。粗利率は10%以上=緑/未満=赤。対比期間を選ぶと、トータル列に対比先との差も表示されます。並び順は上の「並び順」欄か、見出し(コード/トータルなど)クリックで切り替えられます(▲▼が現在の並び順)。"}
         </p>
       </div>
     </div>
