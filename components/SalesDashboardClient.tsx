@@ -25,6 +25,7 @@ export default function SalesDashboardClient({
   stockMovementError,
   availableMonths,
   selectedUntil,
+  variant = "monthly",
 }: {
   data: DashboardData;
   stockDetail: StockDetailData;
@@ -32,11 +33,17 @@ export default function SalesDashboardClient({
   stockMovementError: string | null;
   availableMonths: string[];
   selectedUntil: string | null;
+  // "monthly"=元の売上ダッシュボード(sales_monthly、月次集計)。
+  // "detail"=売上ダッシュボード明細(profit_summary、明細=sales_lines由来。
+  // 原価は仕入・在庫出荷・運送会社の実費まで含む)。表示する画面(タブ構成・見た目)は
+  // 完全に同じで、データの集計元と見出し・説明文だけが違う。
+  variant?: "monthly" | "detail";
 }) {
   const S = data.summary;
   const [mainTab, setMainTab] = useState<MainTab>("report");
   const router = useRouter();
   const pathname = usePathname();
+  const isDetail = variant === "detail";
 
   function handleUntilChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value;
@@ -48,10 +55,11 @@ export default function SalesDashboardClient({
       <header className="top">
         <div className="title">
           <h1>
-            売上ダッシュボード <span className="badge-demo">実データ</span>
+            売上ダッシュボード{isDetail ? "明細" : ""} <span className="badge-demo">実データ</span>
           </h1>
           <p>
             今期 {S.CUR}年10月度〜(最新 {monL(data.latest_ym)}度まで)
+            {isDetail && "・売上は明細(sales_lines)、原価は仕入・在庫出荷・運送会社の実費まで含めて集計"}
           </p>
           <div style={{ marginTop: 8, fontSize: 12, color: "var(--ink-faint)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -71,6 +79,15 @@ export default function SalesDashboardClient({
             </label>
             {selectedUntil && (
               <span>※ {monL(selectedUntil)}度までのデータで表示中です(それより後の月は含まれていません)</span>
+            )}
+            {isDetail ? (
+              <Link href="/sales" className="ghost-btn-inline">
+                → 売上ダッシュボード(集計版)
+              </Link>
+            ) : (
+              <Link href="/sales-detail" className="ghost-btn-inline">
+                → 売上ダッシュボード明細
+              </Link>
             )}
             <Link href="/sales/profit" className="ghost-btn-inline">
               売上利益 →
