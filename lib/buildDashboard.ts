@@ -22,7 +22,9 @@ export function buildDashboard(rows: MonthlyRow[]): DashboardData {
 
   const withYm = rows.map((r) => ({ ...r, ym: ymFromDate(r.month) }));
 
-  const CUR = Math.max(...withYm.map((r) => r.fiscal_year));
+  // withYmは9万件超になるため、Math.max(...array)はV8のスタック上限を超えて
+  // "Maximum call stack size exceeded" になる。reduceで最大値を求める。
+  const CUR = withYm.reduce((max, r) => (r.fiscal_year > max ? r.fiscal_year : max), withYm[0].fiscal_year);
   const PREV = CUR - 1;
 
   const cur_months = monthsOfFiscalYear(CUR);
