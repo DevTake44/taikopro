@@ -6,6 +6,7 @@ import type { ProfitSummaryRow } from "@/lib/profitTypes";
 import { branchLabel } from "@/lib/branch-names";
 import { repLabel } from "@/lib/rep-names";
 import { periodKeyFor, periodRangeFor, fiscalYearStartOf, fiscalYearPeriods, fiscalYearLabel } from "@/lib/period";
+import { CrossPageNav } from "./ProfitDashboard";
 
 /**
  * 拠点・営業担当・得意先別 利益ダッシュボード(rieki-check-appから移植)
@@ -379,6 +380,7 @@ export default function ProfitSummary() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
             <h1>拠点・営業・得意先 利益</h1>
             <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+              <CrossPageNav current="profit-summary" />
               <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
                 ← メインメニュー
               </Link>
@@ -400,6 +402,7 @@ export default function ProfitSummary() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
           <h1>拠点・営業・得意先 利益</h1>
           <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+            <CrossPageNav current="profit-summary" />
             <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
               ← メインメニュー
             </Link>
@@ -421,6 +424,7 @@ export default function ProfitSummary() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
         <h1>拠点・営業・得意先 利益</h1>
         <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+          <CrossPageNav current="profit-summary" />
           <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
             ← メインメニュー
           </Link>

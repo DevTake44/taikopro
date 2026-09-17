@@ -15,6 +15,35 @@ import {
   fiscalYearLabel,
 } from "@/lib/period";
 
+// 経営レポート(/sales)・このページ(/sales/profit)・拠点・営業・得意先 利益
+// (/sales/profit-summary)を相互に行き来できるようにするための共通ナビ。
+// 経営レポートを常に先頭に置く。
+export function CrossPageNav({ current }: { current: "report" | "profit" | "profit-summary" }) {
+  const items: { key: typeof current; href: string; label: string }[] = [
+    { key: "report", href: "/sales", label: "経営レポート" },
+    { key: "profit", href: "/sales/profit", label: "売上利益" },
+    { key: "profit-summary", href: "/sales/profit-summary", label: "拠点・営業・得意先 利益" },
+  ];
+  return (
+    <>
+      {items.map((it) => (
+        <Link
+          key={it.key}
+          href={it.href}
+          className="ghost-btn"
+          style={
+            it.key === current
+              ? { textDecoration: "none", border: "1px solid var(--rk-direct)", background: "var(--rk-direct)", color: "#fff" }
+              : { textDecoration: "none" }
+          }
+        >
+          {it.label}
+        </Link>
+      ))}
+    </>
+  );
+}
+
 function fmtYen(v: number | null | undefined) {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   return `¥${Math.round(v).toLocaleString("ja-JP")}`;
@@ -726,7 +755,8 @@ export default function ProfitDashboard({
     <div className="rk">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <h1>売上利益</h1>
-        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+        <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+          <CrossPageNav current="profit" />
           <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
             データ更新
           </Link>

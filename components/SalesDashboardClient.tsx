@@ -75,6 +75,9 @@ export default function SalesDashboardClient({
             <Link href="/sales/profit" className="ghost-btn-inline">
               売上利益 →
             </Link>
+            <Link href="/sales/profit-summary" className="ghost-btn-inline">
+              拠点・営業・得意先 利益 →
+            </Link>
             <Link href="/menu" className="ghost-btn-inline">
               ← メインメニュー
             </Link>
