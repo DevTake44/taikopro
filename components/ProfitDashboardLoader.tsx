@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import ProfitDashboard from "./ProfitDashboard";
+import ProfitDashboard, { CrossPageNav } from "./ProfitDashboard";
 import type { ProfitOrder, ProfitSummaryRow } from "@/lib/profitTypes";
 import {
   getProfitCache,
@@ -379,7 +379,8 @@ export default function ProfitDashboardLoader() {
         <div className="rk">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <h1>売上利益</h1>
-            <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+              <CrossPageNav current="profit" />
               <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
                 データ更新
               </Link>
@@ -407,7 +408,8 @@ export default function ProfitDashboardLoader() {
       <div className="rk">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <h1>売上利益</h1>
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+            <CrossPageNav current="profit" />
             <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
               データ更新
             </Link>

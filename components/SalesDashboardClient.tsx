@@ -25,6 +25,7 @@ export default function SalesDashboardClient({
   stockMovementError,
   availableMonths,
   selectedUntil,
+  variant = "monthly",
 }: {
   data: DashboardData;
   stockDetail: StockDetailData;
@@ -32,11 +33,17 @@ export default function SalesDashboardClient({
   stockMovementError: string | null;
   availableMonths: string[];
   selectedUntil: string | null;
+  // "monthly"=元の売上ダッシュボード(sales_monthly、月次集計)。
+  // "detail"=売上ダッシュボード明細(profit_summary、明細=sales_lines由来。
+  // 原価は仕入・在庫出荷・運送会社の実費まで含む)。表示する画面(タブ構成・見た目)は
+  // 完全に同じで、データの集計元と見出し・説明文だけが違う。
+  variant?: "monthly" | "detail";
 }) {
   const S = data.summary;
   const [mainTab, setMainTab] = useState<MainTab>("report");
   const router = useRouter();
   const pathname = usePathname();
+  const isDetail = variant === "detail";
 
   function handleUntilChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value;
@@ -48,10 +55,11 @@ export default function SalesDashboardClient({
       <header className="top">
         <div className="title">
           <h1>
-            売上ダッシュボード <span className="badge-demo">実データ</span>
+            売上ダッシュボード{isDetail ? "明細" : ""} <span className="badge-demo">実データ</span>
           </h1>
           <p>
             今期 {S.CUR}年10月度〜(最新 {monL(data.latest_ym)}度まで)
+            {isDetail && "・売上は明細(sales_lines)、原価は仕入・在庫出荷・運送会社の実費まで含めて集計"}
           </p>
           <div style={{ marginTop: 8, fontSize: 12, color: "var(--ink-faint)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -72,8 +80,20 @@ export default function SalesDashboardClient({
             {selectedUntil && (
               <span>※ {monL(selectedUntil)}度までのデータで表示中です(それより後の月は含まれていません)</span>
             )}
+            {isDetail ? (
+              <Link href="/sales" className="ghost-btn-inline">
+                → 売上ダッシュボード(集計版)
+              </Link>
+            ) : (
+              <Link href="/sales-detail" className="ghost-btn-inline">
+                → 売上ダッシュボード明細
+              </Link>
+            )}
             <Link href="/sales/profit" className="ghost-btn-inline">
               売上利益 →
+            </Link>
+            <Link href="/sales/profit-summary" className="ghost-btn-inline">
+              拠点・営業・得意先 利益 →
             </Link>
             <Link href="/menu" className="ghost-btn-inline">
               ← メインメニュー
@@ -115,8 +135,36 @@ export default function SalesDashboardClient({
 
 /* ============ 経営レポート(役員向け1画面) ============ */
 function ReportPage({ data }: { data: DashboardData }) {
-  const S = data.summary;
-  const st = data.stock;
+  const trueCUR = data.summary.CUR;
+  const years = useMemo(
+    () => Array.from(new Set([trueCUR, ...data.fiscalYears])).sort((a, b) => a - b),
+    [trueCUR, data.fiscalYears]
+  );
+  const [selectedYear, setSelectedYear] = useState<number>(trueCUR);
+  const view = data.reportByYear[selectedYear] ?? {
+    summary: data.summary,
+    cur_months: data.cur_months,
+    prev_months: data.prev_months,
+    trend_cur: data.trend_cur,
+    trend_prev: data.trend_prev,
+    latest_ym: data.latest_ym,
+    stock: data.stock,
+  };
+  // buildTrendConfig/buildStockConfigは DashboardData を受け取るので、
+  // 選択中の期の値で該当フィールドだけ差し替えたものを渡す。
+  const viewData: DashboardData = {
+    ...data,
+    summary: view.summary,
+    cur_months: view.cur_months,
+    prev_months: view.prev_months,
+    trend_cur: view.trend_cur,
+    trend_prev: view.trend_prev,
+    latest_ym: view.latest_ym,
+    stock: view.stock,
+  };
+
+  const S = view.summary;
+  const st = view.stock;
 
   const profitDiff = S.cur_profit_full - S.prev_profit_same;
   const marginDiff = round1(S.cur_margin - S.prev_margin_same);
@@ -128,14 +176,35 @@ function ReportPage({ data }: { data: DashboardData }) {
   const marginUp = marginDiff >= 0;
   const stockUp = stockDiff >= 0;
 
-  const trendConfig = useMemo(() => buildTrendConfig(data, "yoy"), [data]);
-  const stockConfig = useMemo(() => buildStockConfig(data), [data]);
+  const trendConfig = useMemo(() => buildTrendConfig(viewData, "yoy"), [viewData]);
+  const stockConfig = useMemo(() => buildStockConfig(viewData), [viewData]);
 
   return (
     <div className="page active">
+      <div style={{ marginBottom: 14, fontSize: 12.5 }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          期選択:
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+          >
+            {[...years].reverse().map((y) => (
+              <option key={y} value={y}>
+                {fiscalYearLabel(y, trueCUR)}({y}年度)
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedYear !== trueCUR && (
+          <span style={{ marginLeft: 10, color: "var(--ink-faint)" }}>
+            ※ {fiscalYearLabel(selectedYear, trueCUR)}({selectedYear}年度)を「今期」として表示しています
+          </span>
+        )}
+      </div>
       <div className="card">
         <div className="card-head">
-          <h2>総評(最新 {monL(data.latest_ym)}度まで)</h2>
+          <h2>総評(最新 {monL(view.latest_ym)}度まで)</h2>
         </div>
         <p style={{ fontSize: 15, lineHeight: 1.9, padding: "0 20px 20px" }}>
           売上は前期より{" "}
@@ -414,6 +483,23 @@ function metricValue(metric: Metric, v: { total_s: number; total_p: number; tota
   return v.total_m;
 }
 
+// トータル列で実際に表示されている値(対比期間を選んでいれば差額、無ければ実額)を
+// 並び替え用の数値にする。データが無い(null)行は最下位扱いにする。
+function totalSortValue(metric: Metric, row: MatrixMergedRow): number {
+  const v = metricValue(metric, row);
+  if (row.cmp) {
+    const cmpV = metricValue(metric, row.cmp);
+    if (v == null || cmpV == null) return -Infinity;
+    return v - cmpV;
+  }
+  return v ?? -Infinity;
+}
+
+// "total"は今表示中の指標(タブ)で並べる。"sales"/"profitAmt"は表示中のタブに
+// 関係なく常に売上高・粗利額で並べる(例: 粗利率タブのまま「売上高順」に並べ替えて、
+// 「売上は高いが薄利」「粗利額は大きく利益率も高い」等を確認できるようにするため)。
+type SortKey = "code" | "name" | "total" | "sales" | "profitAmt";
+
 function monthMetricValue(metric: Metric, c: MonthCell): number | null {
   if (metric === "sales") return c.s;
   if (metric === "purchase") return c.p;
@@ -428,7 +514,7 @@ function toMonthCell(c: { s: number; p: number }): MonthCell {
 function MatrixPage({ data }: { data: DashboardData }) {
   const [dim, setDim] = useState<Dim>("loc");
   const [metric, setMetric] = useState<Metric>("sales");
-  const [sortKey, setSortKey] = useState<"code" | "name" | "total">("total");
+  const [sortKey, setSortKey] = useState<SortKey>("total");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filter, setFilter] = useState("");
 
@@ -503,10 +589,17 @@ function MatrixPage({ data }: { data: DashboardData }) {
     r = [...r].sort((a, b) => {
       if (sortKey === "code") return sortDir === "asc" ? Number(a.code) - Number(b.code) : Number(b.code) - Number(a.code);
       if (sortKey === "name") return sortDir === "asc" ? a.name.localeCompare(b.name, "ja") : b.name.localeCompare(a.name, "ja");
-      return sortDir === "asc" ? a.total_s - b.total_s : b.total_s - a.total_s;
+      // "sales"/"profitAmt"は表示中のタブに関わらず常に売上高・粗利額で並べる。
+      // "total"はトータル列に実際に表示されている数字(選択中の指標。対比期間を
+      // 選んでいれば差額)で並べる。以前は常に売上金額の実額で並べていたため、
+      // 仕入額/粗利額タブや対比表示の時に画面の数字と順番がズレて見えていた。
+      const sortMetric: Metric = sortKey === "sales" ? "sales" : sortKey === "profitAmt" ? "profit" : metric;
+      const va = totalSortValue(sortMetric, a);
+      const vb = totalSortValue(sortMetric, b);
+      return sortDir === "asc" ? va - vb : vb - va;
     });
     return r;
-  }, [mergedAll, filter, sortKey, sortDir]);
+  }, [mergedAll, filter, sortKey, sortDir, metric]);
 
   function onSort(k: "code" | "name" | "total") {
     if (k === sortKey) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -625,17 +718,42 @@ function MatrixPage({ data }: { data: DashboardData }) {
               ))}
             </select>
           </label>
+          <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            並び順:
+            <select
+              value={`${sortKey}_${sortDir}`}
+              onChange={(e) => {
+                const [k, d] = e.target.value.split("_") as [typeof sortKey, typeof sortDir];
+                setSortKey(k);
+                setSortDir(d);
+              }}
+              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+            >
+              <option value="total_desc">トータル(表示中の指標・多い順)</option>
+              <option value="total_asc">トータル(表示中の指標・少ない順)</option>
+              <option value="sales_desc">売上高(多い順)</option>
+              <option value="profitAmt_desc">粗利額(多い順)</option>
+              <option value="code_asc">コード順</option>
+              <option value="name_asc">{dimName[dim]}名(あいうえお順)</option>
+            </select>
+          </label>
         </div>
         <div className="matwrap">
           <table className="mat">
             <thead>
               <tr>
-                <th className="codecol" onClick={() => onSort("code")}>コード</th>
-                <th className="namecol" onClick={() => onSort("name")}>{dimName[dim]}</th>
+                <th className="codecol" onClick={() => onSort("code")}>
+                  コード{sortKey === "code" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                </th>
+                <th className="namecol" onClick={() => onSort("name")}>
+                  {dimName[dim]}{sortKey === "name" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                </th>
                 {baseMonths.map((m) => (
                   <th key={m}>{monL(m)}</th>
                 ))}
-                <th className="totcol" onClick={() => onSort("total")}>トータル</th>
+                <th className="totcol" onClick={() => onSort("total")}>
+                  トータル{sortKey === "total" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -665,7 +783,7 @@ function MatrixPage({ data }: { data: DashboardData }) {
         <p style={{ fontSize: 11, color: "var(--ink-faint)", padding: "8px 20px 16px" }}>
           {dim === "cust"
             ? `得意先は売上上位100件(全${baseSet.cust_total_count.toLocaleString()}件)。検索で絞込。`
-            : "4つのボタンで表示を切替。粗利率は10%以上=緑/未満=赤。対比期間を選ぶと、トータル列に対比先との差も表示されます。"}
+            : "4つのボタンで表示を切替。粗利率は10%以上=緑/未満=赤。対比期間を選ぶと、トータル列に対比先との差も表示されます。並び順は上の「並び順」欄か、見出し(コード/トータルなど)クリックで切り替えられます(▲▼が現在の並び順)。"}
         </p>
       </div>
     </div>

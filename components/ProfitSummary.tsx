@@ -6,6 +6,7 @@ import type { ProfitSummaryRow } from "@/lib/profitTypes";
 import { branchLabel } from "@/lib/branch-names";
 import { repLabel } from "@/lib/rep-names";
 import { periodKeyFor, periodRangeFor, fiscalYearStartOf, fiscalYearPeriods, fiscalYearLabel } from "@/lib/period";
+import { CrossPageNav } from "./ProfitDashboard";
 
 /**
  * 拠点・営業担当・得意先別 利益ダッシュボード(rieki-check-appから移植)
@@ -103,6 +104,48 @@ function customerLabel(code: string | null, name: string | null): string {
   if (!name && !code) return "不明";
   if (!name) return code ?? "不明";
   return name;
+}
+
+type Group = {
+  key: string;
+  label: string;
+  revenue: number;
+  cost: number;
+  gross_profit: number;
+  freight_actual: number;
+  final_profit: number;
+  line_count: number;
+};
+
+function keyOf(r: ProfitSummaryRow, dimension: Dimension): string {
+  if (dimension === "branch") return r.branch_code || "";
+  if (dimension === "rep") return r.rep_code || "";
+  return `${r.customer_code ?? ""}__${r.customer_name ?? ""}`;
+}
+
+function labelOf(r: ProfitSummaryRow, dimension: Dimension): string {
+  if (dimension === "branch") return r.branch_code ? branchLabel(r.branch_code) : "不明";
+  if (dimension === "rep") return r.rep_code ? repLabel(r.rep_code) : "不明";
+  return customerLabel(r.customer_code, r.customer_name);
+}
+
+function aggregateByDim(rowsIn: ProfitSummaryRow[], dimension: Dimension): Map<string, Group> {
+  const m = new Map<string, Group>();
+  for (const r of rowsIn) {
+    const key = keyOf(r, dimension);
+    let g = m.get(key);
+    if (!g) {
+      g = { key, label: labelOf(r, dimension), revenue: 0, cost: 0, gross_profit: 0, freight_actual: 0, final_profit: 0, line_count: 0 };
+      m.set(key, g);
+    }
+    g.revenue += r.revenue;
+    g.cost += r.cost;
+    g.gross_profit += r.gross_profit;
+    g.freight_actual += r.freight_actual;
+    g.final_profit += r.final_profit;
+    g.line_count += r.line_count;
+  }
+  return m;
 }
 
 export default function ProfitSummary() {
@@ -261,42 +304,7 @@ export default function ProfitSummary() {
   }, [rows, periodMode, selectedPeriod, currentFYStart, previousFYStart]);
 
   const grouped = useMemo(() => {
-    type Group = {
-      key: string;
-      label: string;
-      revenue: number;
-      cost: number;
-      gross_profit: number;
-      freight_actual: number;
-      final_profit: number;
-      line_count: number;
-    };
-    const m = new Map<string, Group>();
-    for (const r of filteredRows) {
-      let key: string;
-      let label: string;
-      if (dimension === "branch") {
-        key = r.branch_code || "";
-        label = r.branch_code ? branchLabel(r.branch_code) : "不明";
-      } else if (dimension === "rep") {
-        key = r.rep_code || "";
-        label = r.rep_code ? repLabel(r.rep_code) : "不明";
-      } else {
-        key = `${r.customer_code ?? ""}__${r.customer_name ?? ""}`;
-        label = customerLabel(r.customer_code, r.customer_name);
-      }
-      let g = m.get(key);
-      if (!g) {
-        g = { key, label, revenue: 0, cost: 0, gross_profit: 0, freight_actual: 0, final_profit: 0, line_count: 0 };
-        m.set(key, g);
-      }
-      g.revenue += r.revenue;
-      g.cost += r.cost;
-      g.gross_profit += r.gross_profit;
-      g.freight_actual += r.freight_actual;
-      g.final_profit += r.final_profit;
-      g.line_count += r.line_count;
-    }
+    const m = aggregateByDim(filteredRows, dimension);
     // 売上総利益(gross_profit)の大きい順。運賃だけの不明行(revenue=0)は自然と下に来る。
     return Array.from(m.values())
       .map((g) => ({
@@ -306,6 +314,38 @@ export default function ProfitSummary() {
       }))
       .sort((a, b) => b.gross_profit - a.gross_profit);
   }, [filteredRows, dimension]);
+
+  // 経営レポートタブと同じ「今期(累計)・前期(同期間)・昨対」比較を、拠点/営業担当/得意先
+  // それぞれの内訳にも出すためのもの。periodMode==="fy-current"(今期を見ているとき)
+  // だけ、前期側の「今期と同じ月数分」を集計する。全期間・前期・特定月を見ているときは
+  // 比べる対象が定義できない(前期そのものを見ているときに前期と比べても意味が無い等)ため
+  // 比較列は出さず、従来通りの単一期間表示のままにする。
+  const prevSame = useMemo(() => {
+    if (periodMode !== "fy-current" || !rows || previousFYStart === undefined) return null;
+    const curFYPeriods = fiscalYearPeriods(currentFYStart);
+    const curEnds = curFYPeriods.map((k) => periodRangeFor(k).to);
+    const hasData = curEnds.map((end) => rows.some((r) => r.period_end === end && (r.revenue !== 0 || r.cost !== 0 || r.line_count !== 0)));
+    let lastIdx = -1;
+    hasData.forEach((v, i) => {
+      if (v) lastIdx = i;
+    });
+    if (lastIdx < 0) return null;
+    const prevFYPeriods = fiscalYearPeriods(previousFYStart);
+    const sameEnds = new Set(prevFYPeriods.slice(0, lastIdx + 1).map((k) => periodRangeFor(k).to));
+    const prevRows = rows.filter((r) => sameEnds.has(r.period_end));
+    return { map: aggregateByDim(prevRows, dimension), monthCount: lastIdx + 1 };
+  }, [rows, dimension, periodMode, currentFYStart, previousFYStart]);
+
+  const prevSameTotals = useMemo(() => {
+    if (!prevSame) return null;
+    let revenue = 0;
+    let final_profit = 0;
+    for (const g of prevSame.map.values()) {
+      revenue += g.revenue;
+      final_profit += g.final_profit;
+    }
+    return { revenue, final_profit, final_margin_pct: marginPct(final_profit, revenue) };
+  }, [prevSame]);
 
   const totals = useMemo(() => {
     let revenue = 0;
@@ -341,6 +381,7 @@ export default function ProfitSummary() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
             <h1>拠点・営業・得意先 利益</h1>
             <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+              <CrossPageNav current="profit-summary" />
               <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
                 ← メインメニュー
               </Link>
@@ -362,6 +403,7 @@ export default function ProfitSummary() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
           <h1>拠点・営業・得意先 利益</h1>
           <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+            <CrossPageNav current="profit-summary" />
             <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
               ← メインメニュー
             </Link>
@@ -383,6 +425,7 @@ export default function ProfitSummary() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
         <h1>拠点・営業・得意先 利益</h1>
         <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+          <CrossPageNav current="profit-summary" />
           <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
             ← メインメニュー
           </Link>
@@ -503,6 +546,14 @@ export default function ProfitSummary() {
             <div className="kpi-tile">
               <div className="label">売上</div>
               <div className="value">{fmtYen(totals.revenue)}</div>
+              {prevSameTotals && (
+                <div className="cell-sub" style={{ marginTop: 4 }}>
+                  前期同期間 {fmtYen(prevSameTotals.revenue)} ・ 昨対{" "}
+                  <span style={{ color: totals.revenue >= prevSameTotals.revenue ? "var(--rk-good)" : "var(--rk-critical)" }}>
+                    {prevSameTotals.revenue ? `${totals.revenue >= prevSameTotals.revenue ? "+" : ""}${((totals.revenue / prevSameTotals.revenue - 1) * 100).toFixed(1)}%` : "―"}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="kpi-tile">
               <div className="label">売上総利益</div>
@@ -517,45 +568,97 @@ export default function ProfitSummary() {
               <div className="value" style={{ color: totals.final_profit < 0 ? "var(--rk-critical)" : undefined }}>
                 {fmtYen(totals.final_profit)}
               </div>
+              {prevSameTotals && (
+                <div className="cell-sub" style={{ marginTop: 4 }}>
+                  前期同期間 {fmtYen(prevSameTotals.final_profit)} ・ 昨対{" "}
+                  <span
+                    style={{
+                      color: totals.final_profit - prevSameTotals.final_profit >= 0 ? "var(--rk-good)" : "var(--rk-critical)",
+                    }}
+                  >
+                    {totals.final_profit - prevSameTotals.final_profit >= 0 ? "+" : ""}
+                    {fmtYen(totals.final_profit - prevSameTotals.final_profit)}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="kpi-tile">
               <div className="label">最終粗利率</div>
               <div className="value">{fmtPct(totals.final_margin_pct)}</div>
+              {prevSameTotals && <div className="cell-sub" style={{ marginTop: 4 }}>前期同期間 {fmtPct(prevSameTotals.final_margin_pct)}</div>}
             </div>
           </div>
 
           <div className="card" style={{ marginBottom: 20 }}>
+            {prevSame && (
+              <p className="cell-sub" style={{ marginBottom: 10 }}>
+                前期との比較は、今期データが確定している{prevSame.monthCount}ヶ月分(前期の同じ期間)で揃えています。
+              </p>
+            )}
             <div className="table-scroll">
               <table>
                 <thead>
                   <tr>
                     <th>{dimension === "branch" ? "拠点" : dimension === "rep" ? "営業担当" : "得意先"}</th>
-                    <th className="num">売上</th>
+                    <th className="num">売上(今期)</th>
+                    {prevSame && (
+                      <>
+                        <th className="num">売上(前期同期間)</th>
+                        <th className="num">昨対</th>
+                      </>
+                    )}
                     <th className="num">原価</th>
                     <th className="num">売上総利益</th>
                     <th className="num">粗利率</th>
                     <th className="num">運賃実費</th>
-                    <th className="num">最終利益</th>
+                    <th className="num">最終利益(今期)</th>
+                    {prevSame && (
+                      <>
+                        <th className="num">最終利益(前期同期間)</th>
+                        <th className="num">昨対</th>
+                      </>
+                    )}
                     <th className="num">最終粗利率</th>
                     <th className="num">明細行数</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {grouped.map((g) => (
-                    <tr key={g.key}>
-                      <td>{g.label}</td>
-                      <td className="num">{fmtYen(g.revenue)}</td>
-                      <td className="num">{fmtYen(g.cost)}</td>
-                      <td className="num">{fmtYen(g.gross_profit)}</td>
-                      <td className="num cell-sub">{fmtPct(g.gross_margin_pct)}</td>
-                      <td className="num">{fmtYen(g.freight_actual)}</td>
-                      <td className="num" style={{ color: g.final_profit < 0 ? "var(--rk-critical)" : undefined }}>
-                        {fmtYen(g.final_profit)}
-                      </td>
-                      <td className="num cell-sub">{fmtPct(g.final_margin_pct)}</td>
-                      <td className="num cell-sub">{g.line_count.toLocaleString("ja-JP")}</td>
-                    </tr>
-                  ))}
+                  {grouped.map((g) => {
+                    const prev = prevSame?.map.get(g.key);
+                    const salesYoy = prev && prev.revenue ? (g.revenue / prev.revenue - 1) * 100 : null;
+                    const profitDiff = prev ? g.final_profit - prev.final_profit : null;
+                    return (
+                      <tr key={g.key}>
+                        <td>{g.label}</td>
+                        <td className="num">{fmtYen(g.revenue)}</td>
+                        {prevSame && (
+                          <>
+                            <td className="num cell-sub">{fmtYen(prev?.revenue ?? 0)}</td>
+                            <td className="num" style={{ color: salesYoy === null ? undefined : salesYoy >= 0 ? "var(--rk-good)" : "var(--rk-critical)" }}>
+                              {salesYoy === null ? "―" : `${salesYoy >= 0 ? "+" : ""}${salesYoy.toFixed(1)}%`}
+                            </td>
+                          </>
+                        )}
+                        <td className="num">{fmtYen(g.cost)}</td>
+                        <td className="num">{fmtYen(g.gross_profit)}</td>
+                        <td className="num cell-sub">{fmtPct(g.gross_margin_pct)}</td>
+                        <td className="num">{fmtYen(g.freight_actual)}</td>
+                        <td className="num" style={{ color: g.final_profit < 0 ? "var(--rk-critical)" : undefined }}>
+                          {fmtYen(g.final_profit)}
+                        </td>
+                        {prevSame && (
+                          <>
+                            <td className="num cell-sub">{fmtYen(prev?.final_profit ?? 0)}</td>
+                            <td className="num" style={{ color: profitDiff === null ? undefined : profitDiff >= 0 ? "var(--rk-good)" : "var(--rk-critical)" }}>
+                              {profitDiff === null ? "―" : `${profitDiff >= 0 ? "+" : ""}${fmtYen(profitDiff)}`}
+                            </td>
+                          </>
+                        )}
+                        <td className="num cell-sub">{fmtPct(g.final_margin_pct)}</td>
+                        <td className="num cell-sub">{g.line_count.toLocaleString("ja-JP")}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

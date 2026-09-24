@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { ProfitOrder, ProfitSummaryRow } from "@/lib/profitTypes";
 import { branchLabel } from "@/lib/branch-names";
@@ -14,6 +14,35 @@ import {
   fiscalYearRangeFor,
   fiscalYearLabel,
 } from "@/lib/period";
+
+// 経営レポート(/sales)・このページ(/sales/profit)・拠点・営業・得意先 利益
+// (/sales/profit-summary)を相互に行き来できるようにするための共通ナビ。
+// 経営レポートを常に先頭に置く。
+export function CrossPageNav({ current }: { current: "report" | "profit" | "profit-summary" }) {
+  const items: { key: typeof current; href: string; label: string }[] = [
+    { key: "report", href: "/sales", label: "経営レポート" },
+    { key: "profit", href: "/sales/profit", label: "売上利益" },
+    { key: "profit-summary", href: "/sales/profit-summary", label: "拠点・営業・得意先 利益" },
+  ];
+  return (
+    <>
+      {items.map((it) => (
+        <Link
+          key={it.key}
+          href={it.href}
+          className="ghost-btn"
+          style={
+            it.key === current
+              ? { textDecoration: "none", border: "1px solid var(--rk-direct)", background: "var(--rk-direct)", color: "#fff" }
+              : { textDecoration: "none" }
+          }
+        >
+          {it.label}
+        </Link>
+      ))}
+    </>
+  );
+}
 
 function fmtYen(v: number | null | undefined) {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
@@ -145,6 +174,8 @@ const MAT_METRICS: { key: MatMetric; label: string }[] = [
   { key: "yoy", label: "前年比" },
 ];
 
+type MatSortKey = "name" | "sales" | "profitAmt" | "margin";
+
 // 「今期計」列を並び替えるときの基準値。表示中の数値(表示する数値ボタンで選んだもの)と
 // 一致させることで、クリックしたときに画面に見えている数字どおりの順番になるようにする。
 function matSortValue(metric: MatMetric, row: MatRow): number {
@@ -186,41 +217,6 @@ function matMonthCell(metric: MatMetric, cur: MonthCell, prev: MonthCell) {
   if (!prev.s) return <span className="cell-sub">―</span>;
   const pct = (s / prev.s) * 100;
   return <span style={{ color: pct >= 100 ? "var(--rk-good)" : "var(--rk-critical)" }}>{pct.toFixed(0)}%</span>;
-}
-
-function matTotalCell(metric: MatMetric, row: MatRow) {
-  if (metric === "sales") {
-    return <span style={{ fontWeight: 600 }}>{fmtYen(row.cur_ts)}</span>;
-  }
-  if (metric === "cost") {
-    return <span style={{ fontWeight: 600 }}>{fmtYen(row.cur_tc)}</span>;
-  }
-  if (metric === "profit") {
-    const p = row.cur_ts - row.cur_tc;
-    return (
-      <span style={{ color: p < 0 ? "var(--rk-critical)" : "var(--rk-good)", fontWeight: 700 }}>{fmtYen(p)}</span>
-    );
-  }
-  if (metric === "margin") {
-    if (row.cur_tm === null) return <span className="cell-sub">―</span>;
-    return (
-      <span style={{ color: row.cur_tm >= 10 ? "var(--rk-good)" : "var(--rk-critical)", fontWeight: 700 }}>
-        {row.cur_tm.toFixed(1)}%
-      </span>
-    );
-  }
-  // yoy: 総合計欄は「前期の同期間」との比較(上段)と「前期通期」の参考値(下段)の2段
-  const pctSame = row.prev_ts_same ? (row.cur_ts / row.prev_ts_same) * 100 : null;
-  return (
-    <div>
-      <div style={{ fontWeight: 700, color: pctSame === null ? undefined : pctSame >= 100 ? "var(--rk-good)" : "var(--rk-critical)" }}>
-        {pctSame === null ? "―" : `${pctSame.toFixed(0)}%`}
-      </div>
-      <div className="cell-sub" style={{ marginTop: 2 }}>
-        前期通期 {fmtYen(row.prev_ts)}
-      </div>
-    </div>
-  );
 }
 
 export default function ProfitDashboard({
@@ -422,10 +418,13 @@ export default function ProfitDashboard({
   // sales-dashboardは月締めの売上・仕入データとしては正確だが、在庫出荷の原価が
   // 反映されないため拠点別・担当別の「利益」は見られない。ここではそれが見られる。
   const [matDim, setMatDim] = useState<MatDim>("branch");
+  // 展開した行(名前クリックで開く月別内訳)でどの指標を見るか。一覧本体は常に
+  // 売上・粗利額・粗利率をまとめて表示するため、指標選択が要るのは展開時だけ。
   const [matMetric, setMatMetric] = useState<MatMetric>("profit");
-  const [matSortKey, setMatSortKey] = useState<"name" | "total">("total");
+  const [matSortKey, setMatSortKey] = useState<MatSortKey>("profitAmt");
   const [matSortDir, setMatSortDir] = useState<1 | -1>(-1);
   const [matFilter, setMatFilter] = useState("");
+  const [matExpanded, setMatExpanded] = useState<string | null>(null);
 
   const matCurPeriods = useMemo(
     () => (currentFYStart !== undefined ? fiscalYearPeriods(currentFYStart) : []),
@@ -566,13 +565,14 @@ export default function ProfitDashboard({
       return rows;
     }
     rows = [...rows].sort((a, b) => {
-      const v = matSortKey === "name" ? a.name.localeCompare(b.name, "ja") : matSortValue(matMetric, a) - matSortValue(matMetric, b);
-      return v * matSortDir;
+      if (matSortKey === "name") return a.name.localeCompare(b.name, "ja") * matSortDir;
+      const sortMetric: MatMetric = matSortKey === "sales" ? "sales" : matSortKey === "profitAmt" ? "profit" : "margin";
+      return (matSortValue(sortMetric, a) - matSortValue(sortMetric, b)) * matSortDir;
     });
     return rows;
-  }, [matRowsAll, matFilter, matSortKey, matSortDir, matDim, matMetric]);
+  }, [matRowsAll, matFilter, matSortKey, matSortDir, matDim]);
 
-  function toggleMatSort(key: "name" | "total") {
+  function toggleMatSort(key: MatSortKey) {
     // 拠点別は常に拠点番号順で固定なので、見出しクリックでの並び替えは行わない。
     if (matDim === "branch") return;
     if (matSortKey === key) {
@@ -755,7 +755,8 @@ export default function ProfitDashboard({
     <div className="rk">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <h1>売上利益</h1>
-        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+        <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+          <CrossPageNav current="profit" />
           <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
             データ更新
           </Link>
@@ -778,7 +779,7 @@ export default function ProfitDashboard({
         <h2 style={{ marginTop: 0 }}>経営マトリクス(拠点別・担当別・得意先別、今期 vs 前期)</h2>
         <p className="cell-sub" style={{ marginBottom: 12 }}>
           sales-dashboardの月次売上集計は会社全体の売上・仕入としては正確ですが、在庫出荷の原価が反映されないため拠点別・担当別の利益は見られません。
-          こちらは在庫出荷分の原価も含めた実際の利益なので、個人・得意先ごとの実績を見るのに使えます。名前をクリックすると、その条件で下の明細まで絞り込めます。
+          こちらは在庫出荷分の原価も含めた実際の利益なので、個人・得意先ごとの実績を見るのに使えます。名前をクリックすると月別内訳を展開、「明細へ→」で下の明細まで絞り込めます。
         </p>
         <div className="filter-row">
           <div className="filter-field" style={{ gridColumn: "span 2" }}>
@@ -792,6 +793,7 @@ export default function ProfitDashboard({
                   onClick={() => {
                     setMatDim(d.key);
                     setMatFilter("");
+                    setMatExpanded(null);
                   }}
                 >
                   {d.label}別
@@ -799,21 +801,25 @@ export default function ProfitDashboard({
               ))}
             </div>
           </div>
-          <div className="filter-field" style={{ gridColumn: "span 2" }}>
-            <label>表示する数値</label>
-            <div className="segmented">
-              {MAT_METRICS.map((m) => (
-                <button
-                  key={m.key}
-                  type="button"
-                  className={matMetric === m.key ? "active" : ""}
-                  onClick={() => setMatMetric(m.key)}
-                >
-                  {m.label}
-                </button>
-              ))}
+          {matDim !== "branch" && (
+            <div className="filter-field" style={{ gridColumn: "span 2" }}>
+              <label>並び順</label>
+              <select
+                value={`${matSortKey}_${matSortDir}`}
+                onChange={(e) => {
+                  const [k, d] = e.target.value.split("_");
+                  setMatSortKey(k as MatSortKey);
+                  setMatSortDir(Number(d) as 1 | -1);
+                }}
+                style={{ padding: "6px 8px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12.5 }}
+              >
+                <option value="profitAmt_-1">粗利額(多い順)</option>
+                <option value="sales_-1">売上高(多い順)</option>
+                <option value="margin_-1">粗利率(高い順)</option>
+                <option value="name_1">名前順</option>
+              </select>
             </div>
-          </div>
+          )}
         </div>
         {matDim === "customer" && (
           <div className="filter-row" style={{ marginTop: 10 }}>
@@ -860,60 +866,127 @@ export default function ProfitDashboard({
         ) : (
           <>
             {/*
-              2026-08-28追記: 月数(最大12列)ぶん横に長くなるため、横スクロールすると
-              並び替えの基準になる先頭列(拠点/担当/得意先名)と末尾列(今期計)が画面外に
-              出て「全体が見えない」状態になっていた。この2列だけ position:sticky で
-              左端・右端に固定し、横スクロール中も常に見えるようにする
-              (CSSは app/globals.css の .mat-sticky-name / .mat-sticky-total)。
+              2026-09-17変更: 以前は拠点/担当/得意先ごとに10〜9月の12ヶ月を横に並べた
+              マトリクス表だったが、経営レポートタブと同じ「今期(累計)・前期(同期間)・
+              昨対」の3列比較テーブル形式に作り替えた。月別の内訳を見たいときだけ、
+              名前をクリックしてその行の下に展開する(matExpanded)。
             */}
             <div className="table-scroll table-scroll-v" style={{ marginTop: 10 }}>
-              <table style={{ minWidth: 220 + matCurPeriods.length * 78 + 170 }}>
+              <table style={{ minWidth: 760 }}>
                 <thead>
                   <tr>
                     <th
-                      className={matDim === "branch" ? "mat-sticky-name" : "sortable-th mat-sticky-name"}
+                      className={matDim === "branch" ? "" : "sortable-th"}
                       onClick={() => toggleMatSort("name")}
                     >
                       {MAT_DIMENSIONS.find((d) => d.key === matDim)?.label}
                       {matSortKey === "name" && matDim !== "branch" ? (matSortDir === 1 ? " ▴" : " ▾") : ""}
                     </th>
-                    {matCurPeriods.map((p) => (
-                      <th key={p} className="num">
-                        {parseInt(p.slice(4, 6), 10)}月
-                      </th>
-                    ))}
-                    <th
-                      className={matDim === "branch" ? "num mat-sticky-total" : "num sortable-th mat-sticky-total"}
-                      onClick={() => toggleMatSort("total")}
-                    >
-                      今期計({MAT_METRICS.find((m) => m.key === matMetric)?.label})
-                      {matSortKey === "total" && matDim !== "branch" ? (matSortDir === 1 ? " ▴" : " ▾") : ""}
+                    <th className={matDim === "branch" ? "num" : "num sortable-th"} onClick={() => toggleMatSort("sales")}>
+                      売上(今期)
+                      {matSortKey === "sales" && matDim !== "branch" ? (matSortDir === 1 ? " ▴" : " ▾") : ""}
+                    </th>
+                    <th className="num">売上(前期同期間)</th>
+                    <th className="num">昨対</th>
+                    <th className={matDim === "branch" ? "num" : "num sortable-th"} onClick={() => toggleMatSort("profitAmt")}>
+                      粗利額(今期)
+                      {matSortKey === "profitAmt" && matDim !== "branch" ? (matSortDir === 1 ? " ▴" : " ▾") : ""}
+                    </th>
+                    <th className="num">粗利額(前期同期間)</th>
+                    <th className="num">昨対</th>
+                    <th className={matDim === "branch" ? "num" : "num sortable-th"} onClick={() => toggleMatSort("margin")}>
+                      粗利率(今期)
+                      {matSortKey === "margin" && matDim !== "branch" ? (matSortDir === 1 ? " ▴" : " ▾") : ""}
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {matRows.length === 0 && (
                     <tr>
-                      <td colSpan={matCurPeriods.length + 2} className="empty-state">
+                      <td colSpan={8} className="empty-state">
                         この条件に一致するデータはありません
                       </td>
                     </tr>
                   )}
-                  {matRows.map((r) => (
-                    <tr key={r.code}>
-                      <td className="mat-sticky-name">
-                        <span className="clickable-cell" onClick={() => drillInto(r)}>
-                          {r.name}
-                        </span>
-                      </td>
-                      {r.cur.map((c, i) => (
-                        <td key={i} className="num">
-                          {matMonthCell(matMetric, c, r.prev[i])}
-                        </td>
-                      ))}
-                      <td className="num mat-sticky-total">{matTotalCell(matMetric, r)}</td>
-                    </tr>
-                  ))}
+                  {matRows.map((r) => {
+                    const profitCur = r.cur_ts - r.cur_tc;
+                    const profitPrevSame = r.prev_ts_same - r.prev_tc_same;
+                    const profitDiff = profitCur - profitPrevSame;
+                    const marginCur = marginPct(r.cur_ts, profitCur);
+                    const salesYoy = r.prev_ts_same ? (r.cur_ts / r.prev_ts_same - 1) * 100 : null;
+                    const isOpen = matExpanded === r.code;
+                    return (
+                      <Fragment key={r.code}>
+                        <tr>
+                          <td>
+                            <span className="clickable-cell" onClick={() => setMatExpanded(isOpen ? null : r.code)}>
+                              {isOpen ? "▾ " : "▸ "}
+                              {r.name}
+                            </span>{" "}
+                            <span className="clickable-cell cell-sub" onClick={() => drillInto(r)}>
+                              明細へ→
+                            </span>
+                          </td>
+                          <td className="num">{fmtYen(r.cur_ts)}</td>
+                          <td className="num cell-sub">{fmtYen(r.prev_ts_same)}</td>
+                          <td className="num" style={{ color: salesYoy === null ? undefined : salesYoy >= 0 ? "var(--rk-good)" : "var(--rk-critical)" }}>
+                            {salesYoy === null ? "―" : `${salesYoy >= 0 ? "+" : ""}${salesYoy.toFixed(1)}%`}
+                          </td>
+                          <td className="num" style={{ color: profitCur < 0 ? "var(--rk-critical)" : "var(--rk-good)", fontWeight: 600 }}>
+                            {fmtYen(profitCur)}
+                          </td>
+                          <td className="num cell-sub">{fmtYen(profitPrevSame)}</td>
+                          <td className="num" style={{ color: profitDiff >= 0 ? "var(--rk-good)" : "var(--rk-critical)" }}>
+                            {profitDiff >= 0 ? "+" : ""}
+                            {fmtYen(profitDiff)}
+                          </td>
+                          <td className="num" style={{ color: marginCur !== null && marginCur >= 10 ? "var(--rk-good)" : "var(--rk-critical)", fontWeight: 600 }}>
+                            {fmtPct(marginCur)}
+                          </td>
+                        </tr>
+                        {isOpen && (
+                          <tr>
+                            <td colSpan={8} style={{ padding: "10px 12px", background: "var(--rk-bg)" }}>
+                              <div className="segmented" style={{ marginBottom: 8 }}>
+                                {MAT_METRICS.map((m) => (
+                                  <button
+                                    key={m.key}
+                                    type="button"
+                                    className={matMetric === m.key ? "active" : ""}
+                                    onClick={() => setMatMetric(m.key)}
+                                  >
+                                    {m.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="table-scroll">
+                                <table style={{ minWidth: matCurPeriods.length * 78 }}>
+                                  <thead>
+                                    <tr>
+                                      {matCurPeriods.map((p) => (
+                                        <th key={p} className="num">
+                                          {parseInt(p.slice(4, 6), 10)}月
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr>
+                                      {r.cur.map((c, i) => (
+                                        <td key={i} className="num">
+                                          {matMonthCell(matMetric, c, r.prev[i])}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

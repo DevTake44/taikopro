@@ -74,6 +74,11 @@ const TOOLS: ToolLink[] = [
     title: "未売上受注チェック",
     description: "受注はあるが売上未計上の案件を、担当者・得意先・締め日ごとに一覧化します。",
   },
+  {
+    href: "/dx/detail-check",
+    title: "集計・明細 対比",
+    description: "売上ダッシュボード(集計)と売上ダッシュボード明細を、拠点別・月別に突き合わせて差を確認します。",
+  },
 ];
 
 export default function DxMenuPage() {
