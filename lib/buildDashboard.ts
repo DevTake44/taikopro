@@ -10,6 +10,7 @@ import type {
   YearDimRow,
   YearMatrixSet,
   YearMonthCell,
+  PeriodReport,
 } from "./types";
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -27,8 +28,7 @@ export function buildDashboard(rows: MonthlyRow[]): DashboardData {
   const CUR = withYm.reduce((max, r) => (r.fiscal_year > max ? r.fiscal_year : max), withYm[0].fiscal_year);
   const PREV = CUR - 1;
 
-  const cur_months = monthsOfFiscalYear(CUR);
-  const prev_months = monthsOfFiscalYear(PREV);
+  const STOCK_CODES = new Set(["90", "91"]);
 
   function trendSeries(fiscalYear: number, months: string[]): TrendPoint[] {
     const byYm = new Map<string, { sales: number; pur: number }>();
@@ -44,71 +44,122 @@ export function buildDashboard(rows: MonthlyRow[]): DashboardData {
       return { ym, sales: roundYen(v.sales), pur: roundYen(v.pur), profit: roundYen(v.sales - v.pur) };
     });
   }
-  const trend_cur = trendSeries(CUR, cur_months);
-  const trend_prev = trendSeries(PREV, prev_months);
 
-  const latest_ym =
-    [...trend_cur].reverse().find((t) => t.sales > 0)?.ym ?? cur_months[cur_months.length - 1];
-  const latest_pi = periodIndexOf(latest_ym) + 1;
+  // 経営レポート一式を、任意の会計年度yAを「今期」・yB=yA-1を「前期」として計算する。
+  // 「期選択」プルダウンで今期以外の年度(=完結済みの過去の期)を選んだ時にも
+  // 同じロジックで総評・比較表・KPI・グラフが作れるようにするための共通化。
+  function buildPeriodReport(yA: number): PeriodReport {
+    const yB = yA - 1;
+    const months_a = monthsOfFiscalYear(yA);
+    const months_b = monthsOfFiscalYear(yB);
+    const trend_a = trendSeries(yA, months_a);
+    const trend_b = trendSeries(yB, months_b);
 
-  const cur_sales = withYm.filter((r) => r.fiscal_year === CUR).reduce((a, r) => a + r.sales_amount, 0);
+    const latest_ym = [...trend_a].reverse().find((t) => t.sales > 0)?.ym ?? months_a[months_a.length - 1];
+    const latest_pi = periodIndexOf(latest_ym) + 1;
 
+    const a_sales = withYm.filter((r) => r.fiscal_year === yA).reduce((s, r) => s + r.sales_amount, 0);
+
+    const salesMonthsWithData_a = new Set(
+      withYm.filter((r) => r.fiscal_year === yA && r.sales_amount > 0).map((r) => r.ym)
+    );
+    const n_sales = salesMonthsWithData_a.size;
+
+    const monthPurchaseTotal_a = new Map<string, number>();
+    for (const r of withYm) {
+      if (r.fiscal_year !== yA) continue;
+      monthPurchaseTotal_a.set(r.ym, (monthPurchaseTotal_a.get(r.ym) ?? 0) + r.purchase_amount);
+    }
+    const fullMonths = new Set([...salesMonthsWithData_a].filter((m) => (monthPurchaseTotal_a.get(m) ?? 0) > 0));
+    const n_full = fullMonths.size;
+
+    const aFullRows = withYm.filter((r) => r.fiscal_year === yA && fullMonths.has(r.ym));
+    const a_sales_full = aFullRows.reduce((s, r) => s + r.sales_amount, 0);
+    const a_profit_full = a_sales_full - aFullRows.reduce((s, r) => s + r.purchase_amount, 0);
+    const a_margin = a_sales_full ? round1((a_profit_full / a_sales_full) * 100) : 0;
+
+    const bRows = withYm.filter((r) => r.fiscal_year === yB);
+    const b_sales_total = bRows.reduce((s, r) => s + r.sales_amount, 0);
+    const b_profit_total = b_sales_total - bRows.reduce((s, r) => s + r.purchase_amount, 0);
+    const b_margin = b_sales_total ? round1((b_profit_total / b_sales_total) * 100) : 0;
+
+    const bSameRows = bRows.filter((r) => periodIndexOf(r.ym) + 1 <= latest_pi);
+    const b_sales_same = bSameRows.reduce((s, r) => s + r.sales_amount, 0);
+    const b_profit_same = b_sales_same - bSameRows.reduce((s, r) => s + r.purchase_amount, 0);
+    const b_margin_same = b_sales_same ? round1((b_profit_same / b_sales_same) * 100) : 0;
+    const sales_yoy = b_sales_same ? round1((a_sales / b_sales_same - 1) * 100) : 0;
+
+    const target_margin = round1(b_margin + 3);
+
+    const fc_simple = n_sales ? roundYen((a_sales / n_sales) * 12) : 0;
+    const bRestRows = bRows.filter((r) => periodIndexOf(r.ym) + 1 > latest_pi);
+    const b_rest = bRestRows.reduce((s, r) => s + r.sales_amount, 0);
+    const fc_seasonal = b_sales_same ? roundYen(a_sales + a_sales * (b_rest / b_sales_same)) : fc_simple;
+
+    const summary: Summary = {
+      CUR: yA,
+      PREV: yB,
+      n_sales,
+      n_full,
+      latest_pi,
+      cur_sales: roundYen(a_sales),
+      cur_profit_full: roundYen(a_profit_full),
+      cur_margin: a_margin,
+      prev_sales_total: roundYen(b_sales_total),
+      prev_profit_total: roundYen(b_profit_total),
+      prev_margin: b_margin,
+      prev_sales_same: roundYen(b_sales_same),
+      prev_profit_same: roundYen(b_profit_same),
+      sales_yoy,
+      prev_margin_same: b_margin_same,
+      target_margin,
+      fc_simple,
+      fc_seasonal,
+    };
+
+    // 在庫仕入(拠点90・91)。yAが会社全体でまだ売上が1件も無い月は、
+    // 仕入だけ先に入っていても計上しない(過去の完結した期では全月に売上があるはずなので、
+    // この抑制は実質働かない)。
+    const aStock = new Array(12).fill(0);
+    const bStock = new Array(12).fill(0);
+    for (const r of withYm) {
+      if (!STOCK_CODES.has(r.location_code)) continue;
+      const i = periodIndexOf(r.ym);
+      if (r.fiscal_year === yA) {
+        if (salesMonthsWithData_a.has(r.ym)) aStock[i] += r.purchase_amount;
+      } else if (r.fiscal_year === yB) {
+        bStock[i] += r.purchase_amount;
+      }
+    }
+    const a_total = aStock.reduce((s, v) => s + v, 0);
+    const b_total = bStock.reduce((s, v) => s + v, 0);
+    const n_cur = aStock.filter((v) => v > 0).length;
+    let latest_i = -1;
+    aStock.forEach((v, i) => {
+      if (v > 0) latest_i = i;
+    });
+    const b_same = bStock.slice(0, latest_i + 1).reduce((s, v) => s + v, 0);
+    const yoy_pct = b_same ? round1((a_total / b_same - 1) * 100) : null;
+
+    const stock: StockData = {
+      cur: aStock.map(roundYen),
+      prev: bStock.map(roundYen),
+      cur_total: roundYen(a_total),
+      prev_total: roundYen(b_total),
+      prev_same: roundYen(b_same),
+      n_cur,
+      yoy_pct,
+    };
+
+    return { summary, cur_months: months_a, prev_months: months_b, trend_cur: trend_a, trend_prev: trend_b, latest_ym, stock };
+  }
+
+  const mainReport = buildPeriodReport(CUR);
+  const { summary, cur_months, prev_months, trend_cur, trend_prev, latest_ym, stock } = mainReport;
+  const latest_pi = summary.latest_pi;
   const salesMonthsWithData = new Set(
     withYm.filter((r) => r.fiscal_year === CUR && r.sales_amount > 0).map((r) => r.ym)
   );
-  const n_sales = salesMonthsWithData.size;
-
-  const monthPurchaseTotal = new Map<string, number>();
-  for (const r of withYm) {
-    if (r.fiscal_year !== CUR) continue;
-    monthPurchaseTotal.set(r.ym, (monthPurchaseTotal.get(r.ym) ?? 0) + r.purchase_amount);
-  }
-  const fullMonths = new Set([...salesMonthsWithData].filter((m) => (monthPurchaseTotal.get(m) ?? 0) > 0));
-  const n_full = fullMonths.size;
-
-  const curFullRows = withYm.filter((r) => r.fiscal_year === CUR && fullMonths.has(r.ym));
-  const cur_sales_full = curFullRows.reduce((a, r) => a + r.sales_amount, 0);
-  const cur_profit_full = cur_sales_full - curFullRows.reduce((a, r) => a + r.purchase_amount, 0);
-  const cur_margin = cur_sales_full ? round1((cur_profit_full / cur_sales_full) * 100) : 0;
-
-  const prevRows = withYm.filter((r) => r.fiscal_year === PREV);
-  const prev_sales_total = prevRows.reduce((a, r) => a + r.sales_amount, 0);
-  const prev_profit_total = prev_sales_total - prevRows.reduce((a, r) => a + r.purchase_amount, 0);
-  const prev_margin = prev_sales_total ? round1((prev_profit_total / prev_sales_total) * 100) : 0;
-
-  const prevSameRows = prevRows.filter((r) => periodIndexOf(r.ym) + 1 <= latest_pi);
-  const prev_sales_same = prevSameRows.reduce((a, r) => a + r.sales_amount, 0);
-  const prev_profit_same = prev_sales_same - prevSameRows.reduce((a, r) => a + r.purchase_amount, 0);
-  const prev_margin_same = prev_sales_same ? round1((prev_profit_same / prev_sales_same) * 100) : 0;
-  const sales_yoy = prev_sales_same ? round1((cur_sales / prev_sales_same - 1) * 100) : 0;
-
-  const target_margin = round1(prev_margin + 3);
-
-  const fc_simple = n_sales ? roundYen((cur_sales / n_sales) * 12) : 0;
-  const prevRestRows = prevRows.filter((r) => periodIndexOf(r.ym) + 1 > latest_pi);
-  const prev_rest = prevRestRows.reduce((a, r) => a + r.sales_amount, 0);
-  const fc_seasonal = prev_sales_same ? roundYen(cur_sales + cur_sales * (prev_rest / prev_sales_same)) : fc_simple;
-
-  const summary: Summary = {
-    CUR,
-    PREV,
-    n_sales,
-    n_full,
-    latest_pi,
-    cur_sales: roundYen(cur_sales),
-    cur_profit_full: roundYen(cur_profit_full),
-    cur_margin,
-    prev_sales_total: roundYen(prev_sales_total),
-    prev_profit_total: roundYen(prev_profit_total),
-    prev_margin,
-   prev_sales_same: roundYen(prev_sales_same),
-    prev_profit_same: roundYen(prev_profit_same),
-    sales_yoy,
-    prev_margin_same,
-    target_margin,
-    fc_simple,
-    fc_seasonal,
-  };
 
   type DimKey = "location_code" | "staff_code" | "customer_code";
   type NameKey = "location_name" | "staff_name" | "customer_name";
@@ -254,36 +305,14 @@ const prev_tp_same = acc.prev.slice(0, latestPiForA).reduce((a, c) => a + c.p, 0
     };
   }
 
-  const STOCK_CODES = new Set(["90", "91"]);
-  const curStock = new Array(12).fill(0);
-  const prevStock = new Array(12).fill(0);
-  for (const r of withYm) {
-    if (!STOCK_CODES.has(r.location_code)) continue;
-    const i = periodIndexOf(r.ym);
-    if (r.fiscal_year === CUR) {
-      // その月、会社全体でまだ売上が1件も無いなら、在庫仕入も計上しない
-      if (salesMonthsWithData.has(r.ym)) curStock[i] += r.purchase_amount;
-    } else if (r.fiscal_year === PREV) prevStock[i] += r.purchase_amount;
+  // 経営レポートの「期選択」用。各会計年度を今期扱いにした場合の一式を作っておく。
+  // CURは(売上がまだ無い期でも)「自動(最新)」の初期値として必ず選べるよう、
+  // fiscalYears(売上のある年度のみ)に含まれていなくても常に入れておく。
+  const reportByYear: Record<number, PeriodReport> = { [CUR]: mainReport };
+  for (const y of fiscalYears) {
+    if (y === CUR) continue;
+    reportByYear[y] = buildPeriodReport(y);
   }
-  const cur_total = curStock.reduce((a, v) => a + v, 0);
-  const prev_total = prevStock.reduce((a, v) => a + v, 0);
-  const n_cur = curStock.filter((v) => v > 0).length;
-  let latest_i = -1;
-  curStock.forEach((v, i) => {
-    if (v > 0) latest_i = i;
-  });
-  const prev_same = prevStock.slice(0, latest_i + 1).reduce((a, v) => a + v, 0);
-  const yoy_pct = prev_same ? round1((cur_total / prev_same - 1) * 100) : null;
-
-  const stock: StockData = {
-    cur: curStock.map(roundYen),
-    prev: prevStock.map(roundYen),
-    cur_total: roundYen(cur_total),
-    prev_total: roundYen(prev_total),
-    prev_same: roundYen(prev_same),
-    n_cur,
-    yoy_pct,
-  };
 
   return {
     summary,
@@ -299,5 +328,6 @@ const prev_tp_same = acc.prev.slice(0, latestPiForA).reduce((a, c) => a + c.p, 0
     fiscalYears,
     matrixByYear,
     stock,
+    reportByYear,
   };
 }

@@ -135,8 +135,36 @@ export default function SalesDashboardClient({
 
 /* ============ 経営レポート(役員向け1画面) ============ */
 function ReportPage({ data }: { data: DashboardData }) {
-  const S = data.summary;
-  const st = data.stock;
+  const trueCUR = data.summary.CUR;
+  const years = useMemo(
+    () => Array.from(new Set([trueCUR, ...data.fiscalYears])).sort((a, b) => a - b),
+    [trueCUR, data.fiscalYears]
+  );
+  const [selectedYear, setSelectedYear] = useState<number>(trueCUR);
+  const view = data.reportByYear[selectedYear] ?? {
+    summary: data.summary,
+    cur_months: data.cur_months,
+    prev_months: data.prev_months,
+    trend_cur: data.trend_cur,
+    trend_prev: data.trend_prev,
+    latest_ym: data.latest_ym,
+    stock: data.stock,
+  };
+  // buildTrendConfig/buildStockConfigは DashboardData を受け取るので、
+  // 選択中の期の値で該当フィールドだけ差し替えたものを渡す。
+  const viewData: DashboardData = {
+    ...data,
+    summary: view.summary,
+    cur_months: view.cur_months,
+    prev_months: view.prev_months,
+    trend_cur: view.trend_cur,
+    trend_prev: view.trend_prev,
+    latest_ym: view.latest_ym,
+    stock: view.stock,
+  };
+
+  const S = view.summary;
+  const st = view.stock;
 
   const profitDiff = S.cur_profit_full - S.prev_profit_same;
   const marginDiff = round1(S.cur_margin - S.prev_margin_same);
@@ -148,14 +176,35 @@ function ReportPage({ data }: { data: DashboardData }) {
   const marginUp = marginDiff >= 0;
   const stockUp = stockDiff >= 0;
 
-  const trendConfig = useMemo(() => buildTrendConfig(data, "yoy"), [data]);
-  const stockConfig = useMemo(() => buildStockConfig(data), [data]);
+  const trendConfig = useMemo(() => buildTrendConfig(viewData, "yoy"), [viewData]);
+  const stockConfig = useMemo(() => buildStockConfig(viewData), [viewData]);
 
   return (
     <div className="page active">
+      <div style={{ marginBottom: 14, fontSize: 12.5 }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          期選択:
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+          >
+            {[...years].reverse().map((y) => (
+              <option key={y} value={y}>
+                {fiscalYearLabel(y, trueCUR)}({y}年度)
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedYear !== trueCUR && (
+          <span style={{ marginLeft: 10, color: "var(--ink-faint)" }}>
+            ※ {fiscalYearLabel(selectedYear, trueCUR)}({selectedYear}年度)を「今期」として表示しています
+          </span>
+        )}
+      </div>
       <div className="card">
         <div className="card-head">
-          <h2>総評(最新 {monL(data.latest_ym)}度まで)</h2>
+          <h2>総評(最新 {monL(view.latest_ym)}度まで)</h2>
         </div>
         <p style={{ fontSize: 15, lineHeight: 1.9, padding: "0 20px 20px" }}>
           売上は前期より{" "}

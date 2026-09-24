@@ -61,6 +61,18 @@ export type StockData = {
   n_cur: number;
   yoy_pct: number | null;
 };
+// 経営レポート専用: 会計年度(yA)を「今期」、その前年度(yB=yA-1)を「前期」として
+// 見た場合の総評・比較表・KPI・グラフ一式。fiscalYearsの各年度ぶんを持っておくことで、
+// 画面側で「期選択」プルダウンから任意の年度を今期扱いにして切り替えられるようにする。
+export type PeriodReport = {
+  summary: Summary;
+  cur_months: string[];
+  prev_months: string[];
+  trend_cur: TrendPoint[];
+  trend_prev: TrendPoint[];
+  latest_ym: string;
+  stock: StockData;
+};
 // 月別マトリクス専用: 会計年度ごとの、拠点/担当者/得意先別の月次データ。
 // 「今期 vs 前期」のように2期をあらかじめ固定でペアにするのではなく、画面側で
 // 表示期間・対比期間を自由に選べるようにするため、年度ごとに独立した形で持つ。
@@ -159,4 +171,6 @@ export type DashboardData = {
   fiscalYears: number[]; // データが存在する会計年度の一覧(昇順)
   matrixByYear: Record<number, YearMatrixSet>;
   stock: StockData;
+  // 経営レポートの「期選択」用。キーは会計年度(例: 2025)。
+  reportByYear: Record<number, PeriodReport>;
 };
