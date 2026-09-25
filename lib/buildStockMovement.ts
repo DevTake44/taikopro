@@ -9,6 +9,12 @@
 // 古い仕入が大量に「今も在庫として残っている」と誤って計算されてしまう(実際は既に出荷済みのはず)。
 // そのため、出荷データが存在する一番古い日付より前の仕入は、集計から除外し、参考値として別に表示する。
 //
+// 商品コード「77700」は雑多な商品で使い回されている共通コードで、品名だけでは仕入側(purchases)と
+// 出荷側(sales_lines)の表記が一致するとは限らない。品名でキーを分けて対応づけようとすると、
+// 表記ゆれで「出荷されているのに対応する出荷実績が見つからない」誤判定(不動在庫の過大計上)が
+// 起きるため、77700に該当する行はFIFOの対象から丸ごと除外し、参考値として別に表示する
+// (商品コード単体で仕入・出荷を正しく突き合わせられる商品だけを集計する)。
+//
 // 在庫回転月数(何ヶ月分の在庫か)の計算について:
 // 「月平均の出荷金額」は、出荷実績の売価(sell_price、利益を乗せた値段)ではなく、
 // FIFOで実際に消化された仕入ロットの原価(unit_price)を積み上げて計算する。
@@ -17,10 +23,10 @@
 
 import type { PurchaseLotRow, ShipmentRow } from "./fetchStockMovement";
 
-// 雑多な商品で使い回されているダミーの品番。品名込みで別商品として扱う(lib/buildStockDetail.tsと同じ考え方)。
+// 雑多な商品で使い回されているダミーの品番(商品コードだけでは商品を特定できない)。
 const DUMMY_PRODUCT_CODE = "77700";
 // 商品ではない行(運賃など)。実データ確認済み: product_code="99"は「運賃」。
-const EXCLUDED_PRODUCT_CODES = new Set(["99"]);
+const EXCLUDED_PRODUCT_CODES = new Set(["99", DUMMY_PRODUCT_CODE]);
 
 export const DEAD_STOCK_DAYS = 365; // 不動在庫と判定する経過日数(1年)
 const DAYS_PER_MONTH = 30.44; // 月平均出荷金額を計算する際に使う、1ヶ月あたりの日数(365/12)
@@ -28,8 +34,7 @@ const DAYS_PER_MONTH = 30.44; // 月平均出荷金額を計算する際に使�
 function itemKey(code: string | null, name: string | null): { key: string; name: string } {
   const c = (code ?? "").trim() || "(不明)";
   const n = (name ?? "").trim() || c;
-  const key = c === DUMMY_PRODUCT_CODE ? `${c}__${n}` : c;
-  return { key, name: n };
+  return { key: c, name: n };
 }
 
 type Lot = { date: string; qtyRemaining: number; unitPrice: number };
@@ -51,6 +56,7 @@ export type StockMovementData = {
   deadThresholdDays: number;
   dataStartDate: string | null; // 出荷データが存在する一番古い日付(この日以降の仕入だけを集計対象にしている)
   excludedPreRangeAmount: number; // dataStartDateより前の仕入額(出荷記録と対応づけできないため集計対象外・参考値)
+  excludedDummyCodeAmount: number; // 商品コード「77700」ぶんの仕入額(商品コードで特定できないため集計対象外・参考値)
   items: StockMovementItem[]; // 在庫が残っている商品のみ。在庫金額が多い順
   totalItemsWithStock: number;
   totalAmountOnHand: number; // 出荷分を引いた、全商品ぶんの推定在庫金額の合計
@@ -86,10 +92,12 @@ export function buildStockMovement(
   // dataStartDateより前の仕入は、対応する出荷記録を確認しようが無いため対象外とする。
   const lotsByKey = new Map<string, { name: string; lots: Lot[] }>();
   let excludedPreRangeAmount = 0;
+  let excludedDummyCodeAmount = 0; // 商品コード「77700」ぶんの仕入額(参考値・FIFO対象外)
 
   for (const r of purchaseRows) {
     if (!r.purchase_date || !r.unit_price) continue;
     const codeRaw = (r.product_code ?? "").trim();
+    if (codeRaw === DUMMY_PRODUCT_CODE) excludedDummyCodeAmount += r.amount;
     if (EXCLUDED_PRODUCT_CODES.has(codeRaw)) continue;
     const qty = r.amount / r.unit_price;
     if (!isFinite(qty) || qty === 0) continue;
@@ -115,6 +123,8 @@ export function buildStockMovement(
   const shipmentsByKey = new Map<string, { name: string; shipments: { date: string; qty: number }[] }>();
   for (const r of shipmentRows) {
     if (!r.delivery_date || !r.qty) continue;
+    const codeRaw = (r.item_code ?? "").trim();
+    if (EXCLUDED_PRODUCT_CODES.has(codeRaw)) continue;
     const { key, name } = itemKey(r.item_code, r.item_name);
     let acc = shipmentsByKey.get(key);
     if (!acc) {
@@ -216,6 +226,7 @@ export function buildStockMovement(
     deadThresholdDays: DEAD_STOCK_DAYS,
     dataStartDate,
     excludedPreRangeAmount: Math.round(excludedPreRangeAmount),
+    excludedDummyCodeAmount: Math.round(excludedDummyCodeAmount),
     items,
     totalItemsWithStock: items.length,
     totalAmountOnHand,
