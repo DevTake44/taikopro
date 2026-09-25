@@ -68,9 +68,15 @@ export async function fetchStockShipments(): Promise<ShipmentRow[]> {
 }
 
 // 商品マスタのITFコードから、「同じ商品なのに品番が複数登録されている」グループを作る。
-// 品番→グループキー(例: "ITF:TB00360002000")のMapを返す。1つの品番にしか付いていない
-// ITFコードは紐付け不要なので対象外(このMapに含まれない品番は、buildStockMovement側で
-// 品番そのものをキーとして扱う)。
+// 品番→グループキーのMapを返す。1つの品番にしか付いていないITFコードは紐付け不要なので
+// 対象外(このMapに含まれない品番は、buildStockMovement側で品番そのものをキーとして扱う)。
+//
+// 実データを見ると、ITFコードの値そのものが「本体」となる商品の品番と一致するケースが
+// ほとんど(194件中192件)。例えば「アルミ標準バット６号」は、品番TB00360006000(本体・
+// ITFコードは付いていない)に対し、別品番のAS62309743・AS62475138がITFコード=
+// TB00360006000として登録されている。グループキーに合成キー(例:"ITF:xxx")ではなく
+// ITFコードの値そのものを使うことで、本体(TB00360006000)は元々自分の品番=グループキーに
+// なるため、追加のマッピング無しで自動的に同じグループに入る。
 export async function fetchProductAliasGroups(): Promise<Map<string, string>> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
@@ -93,8 +99,7 @@ export async function fetchProductAliasGroups(): Promise<Map<string, string>> {
   for (const [itf, codes] of codesByItf.entries()) {
     const uniqueCodes = Array.from(new Set(codes));
     if (uniqueCodes.length < 2) continue;
-    const groupKey = `ITF:${itf}`;
-    for (const code of uniqueCodes) codeToGroupKey.set(code, groupKey);
+    for (const code of uniqueCodes) codeToGroupKey.set(code, itf);
   }
   return codeToGroupKey;
 }
