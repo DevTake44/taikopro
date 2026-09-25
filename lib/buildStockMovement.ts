@@ -15,6 +15,12 @@
 // 起きるため、77700に該当する行はFIFOの対象から丸ごと除外し、参考値として別に表示する
 // (商品コード単体で仕入・出荷を正しく突き合わせられる商品だけを集計する)。
 //
+// 逆に、同じ商品なのに品番が複数登録されているケースもある(商品マスタのITFコードが同じなのに
+// 品番が違う組み合わせ)。この場合は品番だけで見ると「片方の品番で仕入れて、もう片方の品番で
+// 出荷された」分がFIFOで消化されず、在庫が減らないまま残ってしまう。そのため商品マスタから
+// 渡されるproductAliasMap(品番→グループキー)で、同じITFコードを持つ品番同士を同じキーに
+// まとめてからFIFO計算する(呼び出し側でfetchProductAliasGroups()を使って作る)。
+//
 // 在庫回転月数(何ヶ月分の在庫か)の計算について:
 // 「月平均の出荷金額」は、出荷実績の売価(sell_price、利益を乗せた値段)ではなく、
 // FIFOで実際に消化された仕入ロットの原価(unit_price)を積み上げて計算する。
@@ -31,10 +37,15 @@ const EXCLUDED_PRODUCT_CODES = new Set(["99", DUMMY_PRODUCT_CODE]);
 export const DEAD_STOCK_DAYS = 365; // 不動在庫と判定する経過日数(1年)
 const DAYS_PER_MONTH = 30.44; // 月平均出荷金額を計算する際に使う、1ヶ月あたりの日数(365/12)
 
-function itemKey(code: string | null, name: string | null): { key: string; name: string } {
+function itemKey(
+  code: string | null,
+  name: string | null,
+  aliasMap: Map<string, string>
+): { key: string; name: string } {
   const c = (code ?? "").trim() || "(不明)";
   const n = (name ?? "").trim() || c;
-  return { key: c, name: n };
+  const key = aliasMap.get(c) ?? c;
+  return { key, name: n };
 }
 
 type Lot = { date: string; qtyRemaining: number; unitPrice: number };
@@ -78,7 +89,8 @@ function daysBetween(from: string, to: string): number {
 export function buildStockMovement(
   purchaseRows: PurchaseLotRow[],
   shipmentRows: ShipmentRow[],
-  today: string // YYYY-MM-DD。呼び出し側(app/page.tsx)で固定して渡す
+  today: string, // YYYY-MM-DD。呼び出し側(app/page.tsx)で固定して渡す
+  productAliasMap: Map<string, string> = new Map() // 品番→グループキー(同じ商品の別品番をまとめる。fetchProductAliasGroups()で作る)
 ): StockMovementData {
   // 出荷データが存在する期間(一番古い日〜一番新しい日)を先に調べる
   const shipmentDates = shipmentRows
@@ -107,7 +119,7 @@ export function buildStockMovement(
       continue;
     }
 
-    const { key, name } = itemKey(r.product_code, r.product_name);
+    const { key, name } = itemKey(r.product_code, r.product_name, productAliasMap);
     let acc = lotsByKey.get(key);
     if (!acc) {
       acc = { name, lots: [] };
@@ -125,7 +137,7 @@ export function buildStockMovement(
     if (!r.delivery_date || !r.qty) continue;
     const codeRaw = (r.item_code ?? "").trim();
     if (EXCLUDED_PRODUCT_CODES.has(codeRaw)) continue;
-    const { key, name } = itemKey(r.item_code, r.item_name);
+    const { key, name } = itemKey(r.item_code, r.item_name, productAliasMap);
     let acc = shipmentsByKey.get(key);
     if (!acc) {
       acc = { name, shipments: [] };

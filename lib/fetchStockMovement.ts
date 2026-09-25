@@ -66,3 +66,35 @@ export async function fetchStockShipments(): Promise<ShipmentRow[]> {
     throw new Error(`出荷データ取得に失敗しました: ${message}`);
   }
 }
+
+// 商品マスタのITFコードから、「同じ商品なのに品番が複数登録されている」グループを作る。
+// 品番→グループキー(例: "ITF:TB00360002000")のMapを返す。1つの品番にしか付いていない
+// ITFコードは紐付け不要なので対象外(このMapに含まれない品番は、buildStockMovement側で
+// 品番そのものをキーとして扱う)。
+export async function fetchProductAliasGroups(): Promise<Map<string, string>> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("product_master")
+    .select("product_code, itf_code")
+    .not("itf_code", "is", null);
+  if (error) throw new Error(`商品マスタ(ITFコード)の取得に失敗しました: ${error.message}`);
+
+  const codesByItf = new Map<string, string[]>();
+  for (const r of data ?? []) {
+    const itf = (r.itf_code ?? "").trim();
+    const code = (r.product_code ?? "").trim();
+    if (!itf || !code) continue;
+    const arr = codesByItf.get(itf) ?? [];
+    arr.push(code);
+    codesByItf.set(itf, arr);
+  }
+
+  const codeToGroupKey = new Map<string, string>();
+  for (const [itf, codes] of codesByItf.entries()) {
+    const uniqueCodes = Array.from(new Set(codes));
+    if (uniqueCodes.length < 2) continue;
+    const groupKey = `ITF:${itf}`;
+    for (const code of uniqueCodes) codeToGroupKey.set(code, groupKey);
+  }
+  return codeToGroupKey;
+}
