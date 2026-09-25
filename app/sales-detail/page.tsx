@@ -48,7 +48,13 @@ export default async function SalesDetailPage({
       : rows;
 
     const data = selectedUntil ? buildDashboard(rowsForDashboard) : fullDataset;
-    const stockDetail = buildStockDetail(stockRows, data.summary.CUR, data.summary.PREV);
+
+    // 「在庫」タブの期選択用。経営レポートと同じく、各会計年度を今期扱いにした
+    // 場合の一式を作っておく(CURはfiscalYearsに無くても必ず入れる)。
+    const stockYears = Array.from(new Set([data.summary.CUR, ...data.fiscalYears]));
+    const stockDetailByYear = Object.fromEntries(
+      stockYears.map((y) => [y, buildStockDetail(stockRows, y, y - 1)])
+    );
 
     // 不動在庫チェックは、まだ環境変数が未設定の場合もあるため、ここで失敗しても
     // 他のタブは表示できるように、別途catchする。
@@ -65,7 +71,7 @@ export default async function SalesDetailPage({
     return (
       <SalesDashboardClient
         data={data}
-        stockDetail={stockDetail}
+        stockDetailByYear={stockDetailByYear}
         stockMovement={stockMovement}
         stockMovementError={stockMovementError}
         availableMonths={availableMonths}
