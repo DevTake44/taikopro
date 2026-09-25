@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { StockDetailData, StockSupplierRow, StockProductRow } from "@/lib/buildStockDetail";
 import type { StockMovementData, StockMovementItem } from "@/lib/buildStockMovement";
 import { yen, jpn, monL } from "@/lib/format";
 import TrendChart from "./TrendChart";
+import RefreshButton from "./RefreshButton";
 
 // 「不動在庫チェック」の中身(タブ・ページ両方から使えるよう分離)。
 // sales-dashboardの旧ダッシュボードの「在庫」タブをそのまま移設したもの
@@ -168,6 +170,13 @@ export default function StockCheckClient(props: {
   stockMovement: StockMovementData | null;
   stockMovementError: string | null;
 }) {
+  const router = useRouter();
+  async function handleRefresh() {
+    const res = await fetch("/api/revalidate-sales-data", { method: "POST" });
+    if (!res.ok) throw new Error("更新に失敗しました");
+    router.refresh();
+  }
+
   return (
     <div className="wrap">
       <header className="top">
@@ -175,7 +184,8 @@ export default function StockCheckClient(props: {
           <h1>不動在庫チェック</h1>
           <p>在庫仕入(拠点90・91)の内訳と、出荷実績との突き合わせによる不動在庫候補の一覧です。</p>
         </div>
-        <div className="maintabs">
+        <div className="maintabs" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <RefreshButton onRefresh={handleRefresh} />
           <Link href="/dx" className="ghost-btn-inline" style={{ padding: "8px 18px" }}>
             ← 社内DXメニュー
           </Link>

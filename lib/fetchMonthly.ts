@@ -1,5 +1,7 @@
+import { unstable_cache } from "next/cache";
 import { getSupabaseServerClient } from "./supabaseServer";
 import { fetchAllPagesConcurrent } from "./fetchPaged";
+import { SALES_DATA_CACHE_TAG } from "./salesDataCache";
 import type { MonthlyRow } from "./types";
 
 const PAGE_SIZE = 1000; // Supabaseの1回のリクエストで安全に取れる件数
@@ -9,8 +11,12 @@ const PAGE_SIZE = 1000; // Supabaseの1回のリクエストで安全に取れ�
  * 件数が多い(9万件超)ため、複数ページを同時並行で取得する(fetchPaged.ts参照)。
  * 以前は1ページずつ順番に取得しており、約100回の往復が積み重なって画面表示が
  * 遅くなっていた。
+ *
+ * 毎回アクセスのたびにSupabaseへ問い合わせるのを避けるため、結果をNext.jsの
+ * データキャッシュに載せている(初回だけ実際に取得し、以降は「更新」ボタン
+ * (/api/revalidate-sales-data)が呼ばれるまで同じ結果を返す)。
  */
-export async function fetchAllMonthlyRows(): Promise<MonthlyRow[]> {
+async function fetchAllMonthlyRowsUncached(): Promise<MonthlyRow[]> {
   const supabase = getSupabaseServerClient();
   try {
     return await fetchAllPagesConcurrent<MonthlyRow>(
@@ -29,6 +35,10 @@ export async function fetchAllMonthlyRows(): Promise<MonthlyRow[]> {
     throw new Error(`Supabaseからのデータ取得に失敗しました: ${message}`);
   }
 }
+export const fetchAllMonthlyRows = unstable_cache(fetchAllMonthlyRowsUncached, ["fetchAllMonthlyRows"], {
+  tags: [SALES_DATA_CACHE_TAG],
+  revalidate: false,
+});
 
 /**
  * v_monthlyのうち、拠点コード90・91(在庫仕入)の行だけを取得する。
@@ -36,7 +46,7 @@ export async function fetchAllMonthlyRows(): Promise<MonthlyRow[]> {
  * 社内倉庫向けの仕入のため、明細集計(profit_summary、sales_lines由来)には
  * 存在しない。そのため元の売上ダッシュボードと同じデータ(v_monthly)をそのまま使う。
  */
-export async function fetchStockOnlyMonthlyRows(): Promise<MonthlyRow[]> {
+async function fetchStockOnlyMonthlyRowsUncached(): Promise<MonthlyRow[]> {
   const supabase = getSupabaseServerClient();
   try {
     return await fetchAllPagesConcurrent<MonthlyRow>(
@@ -56,3 +66,8 @@ export async function fetchStockOnlyMonthlyRows(): Promise<MonthlyRow[]> {
     throw new Error(`Supabaseからのデータ取得に失敗しました: ${message}`);
   }
 }
+export const fetchStockOnlyMonthlyRows = unstable_cache(
+  fetchStockOnlyMonthlyRowsUncached,
+  ["fetchStockOnlyMonthlyRows"],
+  { tags: [SALES_DATA_CACHE_TAG], revalidate: false }
+);

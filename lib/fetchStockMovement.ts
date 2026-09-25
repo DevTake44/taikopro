@@ -5,8 +5,10 @@
 // 在庫出荷実績は数万件あり、1件ずつ順番にページを取りに行くと時間がかかりすぎてVercelの
 // 関数タイムアウト(504)を起こすため、複数ページを同時並行で取得している(fetchPaged.ts参照)。
 
+import { unstable_cache } from "next/cache";
 import { getSupabaseServerClient } from "./supabaseServer";
 import { fetchAllPagesConcurrent } from "./fetchPaged";
+import { SALES_DATA_CACHE_TAG } from "./salesDataCache";
 
 const PAGE_SIZE = 1000;
 const STOCK_LOCATION_CODES = ["90", "91"];
@@ -28,7 +30,7 @@ export type ShipmentRow = {
 };
 
 // purchasesテーブルから、在庫仕入(拠点90・91)の明細を全件取得する。
-export async function fetchPurchaseLots(): Promise<PurchaseLotRow[]> {
+async function fetchPurchaseLotsUncached(): Promise<PurchaseLotRow[]> {
   const supabase = getSupabaseServerClient();
   try {
     return await fetchAllPagesConcurrent<PurchaseLotRow>(
@@ -46,9 +48,14 @@ export async function fetchPurchaseLots(): Promise<PurchaseLotRow[]> {
     throw new Error(`仕入データの取得に失敗しました: ${message}`);
   }
 }
+// 「更新」ボタンが押されるまで同じ結果を返す(lib/salesDataCache.ts参照)。
+export const fetchPurchaseLots = unstable_cache(fetchPurchaseLotsUncached, ["fetchPurchaseLots"], {
+  tags: [SALES_DATA_CACHE_TAG],
+  revalidate: false,
+});
 
 // 在庫出荷実績(arrange_type='在庫')を全件取得する。
-export async function fetchStockShipments(): Promise<ShipmentRow[]> {
+async function fetchStockShipmentsUncached(): Promise<ShipmentRow[]> {
   const supabase = getSupabaseServerClient();
   try {
     return await fetchAllPagesConcurrent<ShipmentRow>(
@@ -66,6 +73,10 @@ export async function fetchStockShipments(): Promise<ShipmentRow[]> {
     throw new Error(`出荷データ取得に失敗しました: ${message}`);
   }
 }
+export const fetchStockShipments = unstable_cache(fetchStockShipmentsUncached, ["fetchStockShipments"], {
+  tags: [SALES_DATA_CACHE_TAG],
+  revalidate: false,
+});
 
 // 商品マスタのITFコードから、「同じ商品なのに品番が複数登録されている」グループを作る。
 // 品番→グループキーのMapを返す。1つの品番にしか付いていないITFコードは紐付け不要なので
@@ -77,7 +88,9 @@ export async function fetchStockShipments(): Promise<ShipmentRow[]> {
 // TB00360006000として登録されている。グループキーに合成キー(例:"ITF:xxx")ではなく
 // ITFコードの値そのものを使うことで、本体(TB00360006000)は元々自分の品番=グループキーに
 // なるため、追加のマッピング無しで自動的に同じグループに入る。
-export async function fetchProductAliasGroups(): Promise<Map<string, string>> {
+// unstable_cacheはMapをそのままキャッシュできないため、戻り値はプレーンな
+// オブジェクト(Record)にしている。呼び出し側でnew Map(Object.entries(...))に変換する。
+async function fetchProductAliasGroupsUncached(): Promise<Record<string, string>> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from("product_master")
@@ -95,11 +108,16 @@ export async function fetchProductAliasGroups(): Promise<Map<string, string>> {
     codesByItf.set(itf, arr);
   }
 
-  const codeToGroupKey = new Map<string, string>();
+  const codeToGroupKey: Record<string, string> = {};
   for (const [itf, codes] of codesByItf.entries()) {
     const uniqueCodes = Array.from(new Set(codes));
     if (uniqueCodes.length < 2) continue;
-    for (const code of uniqueCodes) codeToGroupKey.set(code, itf);
+    for (const code of uniqueCodes) codeToGroupKey[code] = itf;
   }
   return codeToGroupKey;
 }
+export const fetchProductAliasGroups = unstable_cache(
+  fetchProductAliasGroupsUncached,
+  ["fetchProductAliasGroups"],
+  { tags: [SALES_DATA_CACHE_TAG], revalidate: false }
+);

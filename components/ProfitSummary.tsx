@@ -7,6 +7,7 @@ import { branchLabel } from "@/lib/branch-names";
 import { repLabel } from "@/lib/rep-names";
 import { periodKeyFor, periodRangeFor, fiscalYearStartOf, fiscalYearPeriods, fiscalYearLabel } from "@/lib/period";
 import { CrossPageNav } from "./ProfitDashboard";
+import { getProfitSummaryCache, setProfitSummaryCache } from "@/lib/profit-cache";
 
 /**
  * 拠点・営業担当・得意先別 利益ダッシュボード(rieki-check-appから移植)
@@ -246,6 +247,7 @@ export default function ProfitSummary() {
       return;
     }
 
+    setProfitSummaryCache(collected);
     setRows(collected);
     setLoadedAt(Date.now());
     if (isRefresh) setRefreshing(false);
@@ -254,7 +256,17 @@ export default function ProfitSummary() {
   useEffect(() => {
     if (!startedRef.current) {
       startedRef.current = true;
-      runLoad(false);
+      // 「拠点・営業・得意先 利益」ページと「売上利益」ページの経営マトリクスは
+      // どちらもprofit_summaryの全件(/api/profit-summary)を使っており、キャッシュを
+      // 共有できる。既に読み込み済み(このページか、売上利益ページ側で)なら、
+      // 再取得せず即座に表示する。更新したい時は画面上の「更新」ボタンで明示的に行う。
+      const cached = getProfitSummaryCache();
+      if (cached) {
+        setRows(cached.rows);
+        setLoadedAt(cached.loadedAt);
+      } else {
+        runLoad(false);
+      }
     }
     return () => {
       cancelledRef.current = true;

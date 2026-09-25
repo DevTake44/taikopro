@@ -9,6 +9,7 @@ import type { StockMovementData } from "@/lib/buildStockMovement";
 import { yen, jpn, oku, monL } from "@/lib/format";
 import { monthsOfFiscalYear } from "@/lib/fiscal";
 import { StockCheckContent } from "./StockCheckClient";
+import RefreshButton from "./RefreshButton";
 import TrendChart from "./TrendChart";
 
 type MainTab = "report" | "matrix" | "stock";
@@ -47,6 +48,14 @@ export default function SalesDashboardClient({
   function handleUntilChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value;
     router.push(value === "latest" ? pathname : `${pathname}?until=${value}`);
+  }
+
+  // データはサーバー側でキャッシュしており(初回アクセス時だけSupabaseから取得)、
+  // このボタンを押すとキャッシュを無効化してから画面を再取得する。
+  async function handleRefreshSalesData() {
+    const res = await fetch("/api/revalidate-sales-data", { method: "POST" });
+    if (!res.ok) throw new Error("更新に失敗しました");
+    router.refresh();
   }
 
   return (
@@ -97,6 +106,7 @@ export default function SalesDashboardClient({
             <Link href="/menu" className="ghost-btn-inline">
               ← メインメニュー
             </Link>
+            <RefreshButton onRefresh={handleRefreshSalesData} />
           </div>
         </div>
         <div className="maintabs">
