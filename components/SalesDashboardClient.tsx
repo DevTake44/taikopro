@@ -20,7 +20,7 @@ const dimName: Record<Dim, string> = { loc: "拠点", staff: "担当者", cust: 
 export default function SalesDashboardClient({
   data,
   stockDetailByYear,
-  stockMovement,
+  stockMovementByYear,
   stockMovementError,
   availableMonths,
   selectedUntil,
@@ -28,7 +28,7 @@ export default function SalesDashboardClient({
 }: {
   data: DashboardData;
   stockDetailByYear: Record<number, StockDetailData>;
-  stockMovement: StockMovementData | null;
+  stockMovementByYear: Record<number, StockMovementData | null>;
   stockMovementError: string | null;
   availableMonths: string[];
   selectedUntil: string | null;
@@ -118,7 +118,7 @@ export default function SalesDashboardClient({
         <StockTab
           data={data}
           stockDetailByYear={stockDetailByYear}
-          stockMovement={stockMovement}
+          stockMovementByYear={stockMovementByYear}
           stockMovementError={stockMovementError}
         />
       )}
@@ -343,12 +343,12 @@ function PeriodSelect({
 function StockTab({
   data,
   stockDetailByYear,
-  stockMovement,
+  stockMovementByYear,
   stockMovementError,
 }: {
   data: DashboardData;
   stockDetailByYear: Record<number, StockDetailData>;
-  stockMovement: StockMovementData | null;
+  stockMovementByYear: Record<number, StockMovementData | null>;
   stockMovementError: string | null;
 }) {
   const trueCUR = data.summary.CUR;
@@ -358,6 +358,7 @@ function StockTab({
   );
   const [selectedYear, setSelectedYear] = useState<number>(trueCUR);
   const stockDetail = stockDetailByYear[selectedYear] ?? stockDetailByYear[trueCUR];
+  const stockMovement = stockMovementByYear[selectedYear] ?? stockMovementByYear[trueCUR] ?? null;
 
   return (
     <>

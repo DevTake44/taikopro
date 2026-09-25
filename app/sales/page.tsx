@@ -8,7 +8,7 @@ import { buildDashboard } from "@/lib/buildDashboard";
 import { buildStockDetail } from "@/lib/buildStockDetail";
 import { buildStockMovement } from "@/lib/buildStockMovement";
 import type { StockMovementData } from "@/lib/buildStockMovement";
-import { ymFromDate } from "@/lib/fiscal";
+import { ymFromDate, fiscalYearEndDate } from "@/lib/fiscal";
 import SalesDashboardClient from "@/components/SalesDashboardClient";
 
 // 常に最新データを取得する(キャッシュしない)
@@ -45,7 +45,10 @@ export default async function SalesPage({
 
     // 不動在庫チェックは、まだ環境変数が未設定の場合もあるため、ここで失敗しても
     // 他のタブは表示できるように、別途catchする。
-    let stockMovement: StockMovementData | null = null;
+    // 「在庫」タブの期選択と連動させるため、選んだ年度を「今期」として、その年度の期末日
+    // までの仕入・出荷だけでFIFO計算をやり直す(過去の完結した年度のスナップショット)。
+    // 今期(CUR)だけは実際の「今日」・全データのまま(従来通り)。
+    let stockMovementByYear: Record<number, StockMovementData | null> = {};
     let stockMovementError: string | null = null;
     try {
       const [purchaseLots, shipments, productAliasMap] = await Promise.all([
@@ -54,7 +57,17 @@ export default async function SalesPage({
         fetchProductAliasGroups(),
       ]);
       const today = new Date().toISOString().slice(0, 10);
-      stockMovement = buildStockMovement(purchaseLots, shipments, today, productAliasMap);
+      stockMovementByYear = Object.fromEntries(
+        stockYears.map((y) => {
+          if (y === data.summary.CUR) {
+            return [y, buildStockMovement(purchaseLots, shipments, today, productAliasMap)];
+          }
+          const cutoff = fiscalYearEndDate(y);
+          const purchasesUntilCutoff = purchaseLots.filter((r) => r.purchase_date && r.purchase_date <= cutoff);
+          const shipmentsUntilCutoff = shipments.filter((r) => r.delivery_date && r.delivery_date <= cutoff);
+          return [y, buildStockMovement(purchasesUntilCutoff, shipmentsUntilCutoff, cutoff, productAliasMap)];
+        })
+      );
     } catch (e) {
       stockMovementError = e instanceof Error ? e.message : "不明なエラーが発生しました。";
     }
@@ -63,7 +76,7 @@ export default async function SalesPage({
       <SalesDashboardClient
         data={data}
         stockDetailByYear={stockDetailByYear}
-        stockMovement={stockMovement}
+        stockMovementByYear={stockMovementByYear}
         stockMovementError={stockMovementError}
         availableMonths={availableMonths}
         selectedUntil={selectedUntil}
