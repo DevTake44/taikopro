@@ -13,6 +13,7 @@ export type ProductMasterRow = {
   is_deleted: boolean;
   spec: string | null;
   source_updated_at: string | null; // 基幹システム側の更新年月日(YYYY-MM-DD)。アプリ内部のupdated_atとは別物
+  itf_code: string | null; // ITFコード。同じITFコードが複数の品番に付いていれば「同じ商品の別品番」とみなせる
 };
 
 function s(v: unknown): string {
@@ -82,6 +83,7 @@ export function transformProductMasterCsv(raw: Record<string, string>[]): {
       is_deleted: s(r["削除フラグ"]) === "1",
       spec: spec || null,
       source_updated_at: dateOrNull(r["更新年月日"]),
+      itf_code: codeOrNull(r["ＩＴＦコード"]),
     });
   }
 

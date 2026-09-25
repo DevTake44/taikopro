@@ -222,7 +222,7 @@ function ProductMasterUploadBox() {
   return (
     <UploadBoxShell
       title="③ 商品マスタの更新"
-      description="商品マスタから、品番・品名・カナ品名・実仕入先・仕入基準単価・副仕入先・副仕入単価・削除フラグ・更新年月日の列を含むCSVをアップロードしてください。"
+      description="商品マスタから、品番・品名・カナ品名・仕様・実仕入先・仕入基準単価・副仕入先・副仕入単価・削除フラグ・更新年月日・ＩＴＦコードの列を含むCSVをアップロードしてください。"
       file={file}
       setFile={setFile}
       progress={progress}

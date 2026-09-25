@@ -5,7 +5,7 @@ import { fetchAllProfitSummaryRows } from "@/lib/fetchProfitSummaryAll";
 import { profitSummaryToMonthlyRows } from "@/lib/profitSummaryToMonthlyRows";
 import { fetchStockOnlyMonthlyRows } from "@/lib/fetchMonthly";
 import { fetchStockDetailRows } from "@/lib/fetchStockDetail";
-import { fetchPurchaseLots, fetchStockShipments } from "@/lib/fetchStockMovement";
+import { fetchPurchaseLots, fetchStockShipments, fetchProductAliasGroups } from "@/lib/fetchStockMovement";
 import { buildDashboard } from "@/lib/buildDashboard";
 import { buildStockDetail } from "@/lib/buildStockDetail";
 import { buildStockMovement } from "@/lib/buildStockMovement";
@@ -61,9 +61,13 @@ export default async function SalesDetailPage({
     let stockMovement: StockMovementData | null = null;
     let stockMovementError: string | null = null;
     try {
-      const [purchaseLots, shipments] = await Promise.all([fetchPurchaseLots(), fetchStockShipments()]);
+      const [purchaseLots, shipments, productAliasMap] = await Promise.all([
+        fetchPurchaseLots(),
+        fetchStockShipments(),
+        fetchProductAliasGroups(),
+      ]);
       const today = new Date().toISOString().slice(0, 10);
-      stockMovement = buildStockMovement(purchaseLots, shipments, today);
+      stockMovement = buildStockMovement(purchaseLots, shipments, today, productAliasMap);
     } catch (e) {
       stockMovementError = e instanceof Error ? e.message : "不明なエラーが発生しました。";
     }
