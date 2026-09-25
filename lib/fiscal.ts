@@ -38,3 +38,8 @@ export function currentFiscalPeriodEndDate(today: Date = new Date()): string {
   const fiscalYear = fiscalYearOf(ym);
   return `${fiscalYear + 1}-09-20`;
 }
+
+/** 指定した会計年度(fiscalYear)の期末日("YYYY-09-20")を返す。年度を問わず使える版。 */
+export function fiscalYearEndDate(fiscalYear: number): string {
+  return `${fiscalYear + 1}-09-20`;
+}
