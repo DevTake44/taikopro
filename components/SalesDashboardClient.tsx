@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import type { DashboardData, MonthCell } from "@/lib/types";
 import type { StockDetailData } from "@/lib/buildStockDetail";
@@ -26,6 +25,9 @@ export default function SalesDashboardClient({
   availableMonths,
   selectedUntil,
   variant = "monthly",
+  onUntilChange,
+  onRefresh,
+  switching = false,
 }: {
   data: DashboardData;
   stockDetailByYear: Record<number, StockDetailData>;
@@ -38,24 +40,21 @@ export default function SalesDashboardClient({
   // 原価は仕入・在庫出荷・運送会社の実費まで含む)。表示する画面(タブ構成・見た目)は
   // 完全に同じで、データの集計元と見出し・説明文だけが違う。
   variant?: "monthly" | "detail";
+  // 「表示基準月」を切り替えた時に呼ばれる(nullは「自動(最新月まで)」)。
+  // データの取得・再計算は呼び出し元(SalesDashboardLoader)が行う。
+  onUntilChange: (until: string | null) => void;
+  // 「更新」ボタンが押された時に呼ばれる。キャッシュの無効化・再取得は呼び出し元が行う。
+  onRefresh: () => Promise<void>;
+  // 表示基準月の切替・更新ボタンでの再取得中かどうか(呼び出し元管理)。
+  switching?: boolean;
 }) {
   const S = data.summary;
   const [mainTab, setMainTab] = useState<MainTab>("report");
-  const router = useRouter();
-  const pathname = usePathname();
   const isDetail = variant === "detail";
 
   function handleUntilChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value;
-    router.push(value === "latest" ? pathname : `${pathname}?until=${value}`);
-  }
-
-  // データはサーバー側でキャッシュしており(初回アクセス時だけSupabaseから取得)、
-  // このボタンを押すとキャッシュを無効化してから画面を再取得する。
-  async function handleRefreshSalesData() {
-    const res = await fetch("/api/revalidate-sales-data", { method: "POST" });
-    if (!res.ok) throw new Error("更新に失敗しました");
-    router.refresh();
+    onUntilChange(value === "latest" ? null : value);
   }
 
   return (
@@ -75,6 +74,7 @@ export default function SalesDashboardClient({
               <select
                 value={selectedUntil ?? "latest"}
                 onChange={handleUntilChange}
+                disabled={switching}
                 style={{ fontSize: 12, padding: "3px 6px", borderRadius: 6, border: "1px solid #d7dbe2", color: "#333", background: "#fff" }}
               >
                 <option value="latest">自動(最新月まで)</option>
@@ -85,6 +85,7 @@ export default function SalesDashboardClient({
                 ))}
               </select>
             </label>
+            {switching && <span>読み込み中…</span>}
             {selectedUntil && (
               <span>※ {monL(selectedUntil)}度までのデータで表示中です(それより後の月は含まれていません)</span>
             )}
@@ -106,7 +107,7 @@ export default function SalesDashboardClient({
             <Link href="/menu" className="ghost-btn-inline">
               ← メインメニュー
             </Link>
-            <RefreshButton onRefresh={handleRefreshSalesData} />
+            <RefreshButton onRefresh={onRefresh} />
           </div>
         </div>
         <div className="maintabs">
