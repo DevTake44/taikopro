@@ -21,11 +21,12 @@ export default async function StockCheckPage() {
     let stockMovement: StockMovementData | null = null;
     let stockMovementError: string | null = null;
     try {
-      const [purchaseLots, shipments, productAliasMap] = await Promise.all([
+      const [purchaseLots, shipments, productAliasRecord] = await Promise.all([
         fetchPurchaseLots(),
         fetchStockShipments(),
         fetchProductAliasGroups(),
       ]);
+      const productAliasMap = new Map(Object.entries(productAliasRecord));
       const today = new Date().toISOString().slice(0, 10);
       stockMovement = buildStockMovement(purchaseLots, shipments, today, productAliasMap);
     } catch (e) {

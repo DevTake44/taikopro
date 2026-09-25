@@ -1,5 +1,7 @@
+import { unstable_cache } from "next/cache";
 import { getSupabaseServerClient } from "./supabaseServer";
 import { fetchAllPagesConcurrent } from "./fetchPaged";
+import { SALES_DATA_CACHE_TAG } from "./salesDataCache";
 import type { ProfitSummaryRow } from "./profitTypes";
 
 const PAGE_SIZE = 1000;
@@ -9,7 +11,7 @@ const PAGE_SIZE = 1000;
  * 全件を取得する。件数が2万件超あるため、fetchMonthly.tsのv_monthly取得と同じく
  * 複数ページを同時並行で取得する。
  */
-export async function fetchAllProfitSummaryRows(): Promise<ProfitSummaryRow[]> {
+async function fetchAllProfitSummaryRowsUncached(): Promise<ProfitSummaryRow[]> {
   const supabase = getSupabaseServerClient();
   try {
     return await fetchAllPagesConcurrent<ProfitSummaryRow>(
@@ -28,3 +30,9 @@ export async function fetchAllProfitSummaryRows(): Promise<ProfitSummaryRow[]> {
     throw new Error(`Supabaseからのデータ取得に失敗しました: ${message}`);
   }
 }
+// 「更新」ボタンが押されるまで同じ結果を返す(lib/salesDataCache.ts参照)。
+export const fetchAllProfitSummaryRows = unstable_cache(
+  fetchAllProfitSummaryRowsUncached,
+  ["fetchAllProfitSummaryRows"],
+  { tags: [SALES_DATA_CACHE_TAG], revalidate: false }
+);
