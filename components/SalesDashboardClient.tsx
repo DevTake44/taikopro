@@ -11,8 +11,7 @@ import { monthsOfFiscalYear } from "@/lib/fiscal";
 import { StockCheckContent } from "./StockCheckClient";
 import TrendChart from "./TrendChart";
 
-type MainTab = "report" | "overview" | "matrix" | "goal" | "stock";
-type OvMode = "cur" | "prev" | "yoy";
+type MainTab = "report" | "matrix" | "stock";
 type Dim = "loc" | "staff" | "cust";
 type Metric = "sales" | "purchase" | "profit" | "margin";
 
@@ -20,7 +19,7 @@ const dimName: Record<Dim, string> = { loc: "拠点", staff: "担当者", cust: 
 
 export default function SalesDashboardClient({
   data,
-  stockDetail,
+  stockDetailByYear,
   stockMovement,
   stockMovementError,
   availableMonths,
@@ -28,7 +27,7 @@ export default function SalesDashboardClient({
   variant = "monthly",
 }: {
   data: DashboardData;
-  stockDetail: StockDetailData;
+  stockDetailByYear: Record<number, StockDetailData>;
   stockMovement: StockMovementData | null;
   stockMovementError: string | null;
   availableMonths: string[];
@@ -104,14 +103,8 @@ export default function SalesDashboardClient({
           <button className={mainTab === "report" ? "active" : ""} onClick={() => setMainTab("report")}>
             経営レポート
           </button>
-          <button className={mainTab === "overview" ? "active" : ""} onClick={() => setMainTab("overview")}>
-            全体サマリー
-          </button>
           <button className={mainTab === "matrix" ? "active" : ""} onClick={() => setMainTab("matrix")}>
             月別マトリクス
-          </button>
-          <button className={mainTab === "goal" ? "active" : ""} onClick={() => setMainTab("goal")}>
-            目標追跡
           </button>
           <button className={mainTab === "stock" ? "active" : ""} onClick={() => setMainTab("stock")}>
             在庫
@@ -120,11 +113,14 @@ export default function SalesDashboardClient({
       </header>
 
       {mainTab === "report" && <ReportPage data={data} />}
-      {mainTab === "overview" && <OverviewPage data={data} />}
       {mainTab === "matrix" && <MatrixPage data={data} />}
-      {mainTab === "goal" && <GoalPage data={data} />}
       {mainTab === "stock" && (
-        <StockCheckContent stockDetail={stockDetail} stockMovement={stockMovement} stockMovementError={stockMovementError} />
+        <StockTab
+          data={data}
+          stockDetailByYear={stockDetailByYear}
+          stockMovement={stockMovement}
+          stockMovementError={stockMovementError}
+        />
       )}
       <p className="foot-note">
         実データに基づくダッシュボードです。不動在庫チェックの詳細は「社内DX」メニューからも確認できます。
@@ -176,32 +172,12 @@ function ReportPage({ data }: { data: DashboardData }) {
   const marginUp = marginDiff >= 0;
   const stockUp = stockDiff >= 0;
 
-  const trendConfig = useMemo(() => buildTrendConfig(viewData, "yoy"), [viewData]);
+  const trendConfig = useMemo(() => buildTrendConfig(viewData), [viewData]);
   const stockConfig = useMemo(() => buildStockConfig(viewData), [viewData]);
 
   return (
     <div className="page active">
-      <div style={{ marginBottom: 14, fontSize: 12.5 }}>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          期選択:
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
-          >
-            {[...years].reverse().map((y) => (
-              <option key={y} value={y}>
-                {fiscalYearLabel(y, trueCUR)}({y}年度)
-              </option>
-            ))}
-          </select>
-        </label>
-        {selectedYear !== trueCUR && (
-          <span style={{ marginLeft: 10, color: "var(--ink-faint)" }}>
-            ※ {fiscalYearLabel(selectedYear, trueCUR)}({selectedYear}年度)を「今期」として表示しています
-          </span>
-        )}
-      </div>
+      <PeriodSelect years={years} trueCUR={trueCUR} selectedYear={selectedYear} onChange={setSelectedYear} />
       <div className="card">
         <div className="card-head">
           <h2>総評(最新 {monL(view.latest_ym)}度まで)</h2>
@@ -319,138 +295,74 @@ function ReportPage({ data }: { data: DashboardData }) {
       </div>
 
       <p style={{ fontSize: 11, color: "var(--ink-faint)", padding: "0 20px 16px" }}>
-        詳しい拠点別・担当者別の内訳は「月別マトリクス」タブ、個別の目標達成状況は「目標追跡」タブ、在庫仕入の商品別・仕入先別の内訳や不動在庫チェックは「在庫」タブでご覧いただけます。
+        詳しい拠点別・担当者別の内訳は「月別マトリクス」タブ、在庫仕入の商品別・仕入先別の内訳や不動在庫チェックは「在庫」タブでご覧いただけます。
       </p>
     </div>
   );
 }
 
-/* ============ 全体サマリー ============ */
-function OverviewPage({ data }: { data: DashboardData }) {
-  const S = data.summary;
-  const [ovMode, setOvMode] = useState<OvMode>("cur");
-
-  const kpis = useMemo(() => {
-    if (ovMode === "cur") {
-      const hit = S.cur_margin >= S.target_margin;
-      return [
-        { label: "今期 売上累計", value: yen(S.cur_sales), foot: `${S.n_sales}ヶ月・昨対${S.sales_yoy >= 0 ? "+" : ""}${S.sales_yoy}%`, primary: true },
-        { label: "今期 利益累計", value: yen(S.cur_profit_full), foot: `仕入確定${S.n_full}ヶ月ぶん` },
-        {
-          label: "粗利率",
-          value: `${S.cur_margin}%`,
-          foot: `目標${S.target_margin}%`,
-          status: hit ? ("hit" as const) : ("miss" as const),
-          badge: hit ? "✓ 目標達成" : `目標まで${(S.target_margin - S.cur_margin).toFixed(1)}pt`,
-        },
-        {
-          label: "売上 着地見込み",
-          value: `${oku((S.fc_simple + S.fc_seasonal) / 2)}円`,
-          foot: `慎重${oku(Math.min(S.fc_simple, S.fc_seasonal))}〜楽観${oku(Math.max(S.fc_simple, S.fc_seasonal))}`,
-        },
-      ];
-    }
-    if (ovMode === "prev") {
-      return [
-        { label: "前期 売上(通期)", value: yen(S.prev_sales_total), foot: "2024年10月〜2025年9月", primary: true },
-        { label: "前期 利益(通期)", value: yen(S.prev_profit_total), foot: "12ヶ月" },
-        { label: "前期 粗利率", value: `${S.prev_margin}%`, foot: "通期" },
-        { label: "前期 月平均売上", value: yen(S.prev_sales_total / 12), foot: "12ヶ月平均" },
-      ];
-    }
-    const mgd = round1(S.cur_margin - S.prev_margin_same);
-    const hit = mgd >= 3;
-    return [
-      { label: "売上 昨対", value: `${S.sales_yoy >= 0 ? "+" : ""}${S.sales_yoy}%`, foot: `今期${oku(S.cur_sales)}/前期${oku(S.prev_sales_same)}`, primary: true },
-      { label: "今期 粗利率", value: `${S.cur_margin}%`, foot: `前期同期 ${S.prev_margin_same}%` },
-      {
-        label: "粗利率 昨対",
-        value: `${mgd >= 0 ? "+" : ""}${mgd}pt`,
-        foot: "前期同期比",
-        status: hit ? ("hit" as const) : ("miss" as const),
-        badge: hit ? "✓ +3pt達成" : `+3ptまであと${(3 - mgd).toFixed(1)}pt`,
-      },
-      { label: "前期同期 売上", value: yen(S.prev_sales_same), foot: `今期と同じ${S.n_sales}ヶ月ぶん` },
-    ];
-  }, [ovMode, S]);
-
-  const chartConfig = useMemo(() => buildTrendConfig(data, ovMode), [data, ovMode]);
-
+// 経営レポート・在庫タブ共通の「期選択」プルダウン。選んだ年度を「今期」として、
+// 総評・比較表・KPI・グラフなどページ全体を計算し直して表示する。
+function PeriodSelect({
+  years,
+  trueCUR,
+  selectedYear,
+  onChange,
+}: {
+  years: number[];
+  trueCUR: number;
+  selectedYear: number;
+  onChange: (y: number) => void;
+}) {
   return (
-    <div className="page active">
-      <div className="card-head" style={{ padding: "0 0 12px" }}>
-        <div className="tabs">
-          <button className={ovMode === "cur" ? "active" : ""} onClick={() => setOvMode("cur")}>今期</button>
-          <button className={ovMode === "prev" ? "active" : ""} onClick={() => setOvMode("prev")}>前期</button>
-          <button className={ovMode === "yoy" ? "active" : ""} onClick={() => setOvMode("yoy")}>昨対</button>
-        </div>
-      </div>
-      <div className="kpi-grid">
-        {kpis.map((k, i) => (
-          <KpiCard key={i} {...k} />
-        ))}
-      </div>
-      <div className="card">
-        <div className="card-head">
-          <h2>売上・仕入・利益の月別推移</h2>
-        </div>
-        <div className="legend">
-          {ovMode === "yoy" ? (
-            <>
-              <span><i className="dot" style={{ background: "#2563d9" }} />今期 売上</span>
-              <span><i className="dot" style={{ background: "#9aa3b2" }} />前期 売上</span>
-            </>
-          ) : (
-            <>
-              <span><i className="dot" style={{ background: "#2563d9" }} />売上</span>
-              <span><i className="dot" style={{ background: "#c3d6f8" }} />仕入</span>
-              <span><i className="dot" style={{ background: "#0f9d58" }} />利益</span>
-            </>
-          )}
-        </div>
-        <div className="chart-box">
-          <TrendChart config={chartConfig} />
-        </div>
-      </div>
-
-      <h2 className="blk">在庫仕入(拠点90・91)</h2>
-      <StockSection data={data} />
+    <div style={{ marginBottom: 14, fontSize: 12.5 }}>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        期選択:
+        <select
+          value={selectedYear}
+          onChange={(e) => onChange(Number(e.target.value))}
+          style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+        >
+          {[...years].reverse().map((y) => (
+            <option key={y} value={y}>
+              {fiscalYearLabel(y, trueCUR)}({y}年度)
+            </option>
+          ))}
+        </select>
+      </label>
+      {selectedYear !== trueCUR && (
+        <span style={{ marginLeft: 10, color: "var(--ink-faint)" }}>
+          ※ {fiscalYearLabel(selectedYear, trueCUR)}({selectedYear}年度)を「今期」として表示しています
+        </span>
+      )}
     </div>
   );
 }
 
-function StockSection({ data }: { data: DashboardData }) {
-  const st = data.stock;
-  const up = st.yoy_pct != null && st.yoy_pct > 0;
-  const chartConfig = useMemo(() => buildStockConfig(data), [data]);
+/* ============ 在庫 ============ */
+function StockTab({
+  data,
+  stockDetailByYear,
+  stockMovement,
+  stockMovementError,
+}: {
+  data: DashboardData;
+  stockDetailByYear: Record<number, StockDetailData>;
+  stockMovement: StockMovementData | null;
+  stockMovementError: string | null;
+}) {
+  const trueCUR = data.summary.CUR;
+  const years = useMemo(
+    () => Array.from(new Set([trueCUR, ...data.fiscalYears])).sort((a, b) => a - b),
+    [trueCUR, data.fiscalYears]
+  );
+  const [selectedYear, setSelectedYear] = useState<number>(trueCUR);
+  const stockDetail = stockDetailByYear[selectedYear] ?? stockDetailByYear[trueCUR];
+
   return (
     <>
-      <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
-        <KpiCard label="今期 在庫仕入(累計)" value={yen(st.cur_total)} foot={`${st.n_cur}ヶ月ぶん`} primary />
-        <KpiCard label="前期 同期間" value={yen(st.prev_same)} foot={`前期の同じ${st.n_cur}ヶ月`} />
-        <KpiCard
-          label="昨対(在庫仕入)"
-          value={st.yoy_pct != null ? `${st.yoy_pct >= 0 ? "+" : ""}${st.yoy_pct}%` : "―"}
-          foot={up ? "前期より増加(要注意)" : "前期より圧縮"}
-          status={up ? "miss" : "hit"}
-          badge={up ? "△ 増えています" : "✓ 減っています"}
-        />
-      </div>
-      <div className="card">
-        <div className="card-head">
-          <h2>在庫仕入の月別推移(今期 vs 前期)</h2>
-        </div>
-        <div className="legend">
-          <span><i className="dot" style={{ background: "#e08a1e" }} />今期 在庫仕入</span>
-          <span><i className="dot" style={{ background: "#9aa3b2" }} />前期 在庫仕入</span>
-        </div>
-        <div className="chart-box">
-          <TrendChart config={chartConfig} />
-        </div>
-      </div>
-      <p style={{ fontSize: 11, color: "var(--ink-faint)", padding: "8px 20px 0" }}>
-        商品別・仕入先別の詳しい内訳、不動在庫チェックは「在庫」タブでご覧いただけます。
-      </p>
+      <PeriodSelect years={years} trueCUR={trueCUR} selectedYear={selectedYear} onChange={setSelectedYear} />
+      <StockCheckContent stockDetail={stockDetail} stockMovement={stockMovement} stockMovementError={stockMovementError} />
     </>
   );
 }
@@ -872,114 +784,6 @@ function MatrixTotalCell({ metric, row }: { metric: Metric; row: MatrixMergedRow
   }
   return <td className="totcol"><span className="cell-s">{jpn(v)}</span></td>;
 }
-/* ============ 目標追跡 ============ */
-function GoalPage({ data }: { data: DashboardData }) {
-  const S = data.summary;
-  const [dim, setDim] = useState<Dim>("loc");
-  const [sortKey, setSortKey] = useState<"code" | "name" | "cur_ts" | "diff">("diff");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
-  const rowsAll = dim === "loc" ? data.mat_loc : dim === "staff" ? data.mat_staff : data.mat_cust;
-
-  const rows = useMemo(() => {
-    const filtered = rowsAll
-      .filter((r) => r.cur_tm != null && r.target != null)
-      .map((r) => ({ ...r, diff: round1((r.cur_tm as number) - (r.target as number)) }));
-    filtered.sort((a, b) => {
-      if (sortKey === "code") return sortDir === "asc" ? Number(a.code) - Number(b.code) : Number(b.code) - Number(a.code);
-      if (sortKey === "name") return sortDir === "asc" ? a.name.localeCompare(b.name, "ja") : b.name.localeCompare(a.name, "ja");
-      if (sortKey === "cur_ts") return sortDir === "asc" ? a.cur_ts - b.cur_ts : b.cur_ts - a.cur_ts;
-      return sortDir === "asc" ? a.diff - b.diff : b.diff - a.diff;
-    });
-    return filtered;
-  }, [rowsAll, sortKey, sortDir]);
-
-  function onSort(k: "code" | "name" | "cur_ts" | "diff") {
-    if (k === sortKey) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else {
-      setSortKey(k);
-      setSortDir("asc");
-    }
-  }
-
-  const hit = S.cur_margin >= S.target_margin;
-  const gap = round1(S.target_margin - S.cur_margin);
-  const nHit = rows.filter((r) => r.diff >= 0).length;
-
-  return (
-    <div className="page active">
-      <div className="kpi-grid">
-        <KpiCard label="全社 今期粗利率" value={`${S.cur_margin}%`} foot={`${S.n_full}ヶ月累計`} />
-        <KpiCard label="全社 目標粗利率" value={`${S.target_margin}%`} foot={`前期${S.prev_margin}% +3pt`} primary />
-        <KpiCard
-          label="目標との差"
-          value={`${gap >= 0 ? "-" : "+"}${Math.abs(gap).toFixed(1)}pt`}
-          foot={hit ? "✓ 達成" : `あと${gap.toFixed(1)}pt`}
-          status={hit ? "hit" : "miss"}
-          badge={hit ? "✓ 達成" : "未達"}
-        />
-        <KpiCard
-          label="昨対(粗利率)"
-          value={`${S.cur_margin - S.prev_margin_same >= 0 ? "+" : ""}${round1(S.cur_margin - S.prev_margin_same)}pt`}
-          foot={`前期同期 ${S.prev_margin_same}%`}
-        />
-      </div>
-      <div className="card">
-        <div className="card-head">
-          <div className="tabs">
-            {(["loc", "staff", "cust"] as Dim[]).map((d) => (
-              <button key={d} className={dim === d ? "active" : ""} onClick={() => setDim(d)}>
-                {dimName[d]}別
-              </button>
-            ))}
-          </div>
-          <span className="sub">個別目標=各自の前期粗利率 ＋3pt</span>
-        </div>
-        <div className="matwrap">
-          <table className="goaltable">
-            <thead>
-              <tr>
-                <th onClick={() => onSort("code")}>コード</th>
-                <th onClick={() => onSort("name")}>{dimName[dim]}</th>
-                <th onClick={() => onSort("cur_ts")}>今期売上</th>
-                <th>前期粗利率</th>
-                <th>目標(+3pt)</th>
-                <th>今期粗利率</th>
-                <th onClick={() => onSort("diff")}>達成状況</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const hitRow = r.diff >= 0;
-                return (
-                  <tr key={r.code}>
-                    <td className="codecol" style={{ color: "#9aa3b2", fontSize: 11 }}>{r.code}</td>
-                    <td>{r.name}</td>
-                    <td>{yen(r.cur_ts)}</td>
-                    <td>{r.prev_tm}%</td>
-                    <td>{r.target}%</td>
-                    <td style={{ fontWeight: 700, color: hitRow ? "var(--pos)" : "var(--neg)" }}>{r.cur_tm}%</td>
-                    <td>
-                      {hitRow ? (
-                        <span className="status st-hit">✓ 達成 +{r.diff.toFixed(1)}pt</span>
-                      ) : (
-                        <span className="status st-miss">未達 {r.diff.toFixed(1)}pt</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <p style={{ fontSize: 11, color: "var(--ink-faint)", padding: "8px 20px 16px" }}>
-          {dimName[dim]} {rows.length}件中 {nHit}件が個別目標を達成。未達は赤で表示(達成状況の列で並び替え可)。
-        </p>
-      </div>
-    </div>
-  );
-}
-
 /* ============ 共通パーツ ============ */
 function KpiCard({
   label,
@@ -1011,32 +815,17 @@ function round1(n: number) {
 }
 
 /* ============ グラフ設定 ============ */
-function buildTrendConfig(data: DashboardData, mode: OvMode) {
-  if (mode === "yoy") {
-    const labels = data.prev_months.map(monL);
-    const curSales = data.prev_months.map((_, i) => (data.trend_cur[i] ? data.trend_cur[i].sales : null));
-    const prevSales = data.trend_prev.map((x) => x.sales);
-    return {
-      type: "bar" as const,
-      data: {
-        labels,
-        datasets: [
-          { type: "bar" as const, label: "今期 売上", data: curSales, backgroundColor: "#2563d9", borderRadius: 5, barPercentage: 0.7, categoryPercentage: 0.75, order: 2 },
-          { type: "line" as const, label: "前期 売上", data: prevSales, borderColor: "#9aa3b2", borderDash: [5, 4], borderWidth: 2, tension: 0.3, pointRadius: 0, order: 1 },
-        ],
-      },
-      options: baseChartOptions(),
-    };
-  }
-  const src = mode === "cur" ? data.trend_cur : data.trend_prev;
+function buildTrendConfig(data: DashboardData) {
+  const labels = data.prev_months.map(monL);
+  const curSales = data.prev_months.map((_, i) => (data.trend_cur[i] ? data.trend_cur[i].sales : null));
+  const prevSales = data.trend_prev.map((x) => x.sales);
   return {
     type: "bar" as const,
     data: {
-      labels: src.map((x) => monL(x.ym)),
+      labels,
       datasets: [
-        { type: "bar" as const, label: "売上", data: src.map((x) => x.sales), backgroundColor: "#2563d9", borderRadius: 5, barPercentage: 0.62, categoryPercentage: 0.7, order: 2 },
-        { type: "bar" as const, label: "仕入", data: src.map((x) => x.pur), backgroundColor: "#c3d6f8", borderRadius: 5, barPercentage: 0.62, categoryPercentage: 0.7, order: 3 },
-        { type: "line" as const, label: "利益", data: src.map((x) => x.profit), borderColor: "#0f9d58", borderWidth: 2.5, tension: 0.35, pointRadius: 0, pointHoverRadius: 5, order: 1 },
+        { type: "bar" as const, label: "今期 売上", data: curSales, backgroundColor: "#2563d9", borderRadius: 5, barPercentage: 0.7, categoryPercentage: 0.75, order: 2 },
+        { type: "line" as const, label: "前期 売上", data: prevSales, borderColor: "#9aa3b2", borderDash: [5, 4], borderWidth: 2, tension: 0.3, pointRadius: 0, order: 1 },
       ],
     },
     options: baseChartOptions(),
