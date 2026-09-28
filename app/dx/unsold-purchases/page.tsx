@@ -1,7 +1,7 @@
 export const maxDuration = 60;
 
 import Link from "next/link";
-import { fetchWarehousePurchases, fetchSalesMatchRows } from "@/lib/fetchUnsoldPurchases";
+import { fetchWarehousePurchases, fetchSalesMatches } from "@/lib/fetchUnsoldPurchases";
 import { buildUnsoldPurchases } from "@/lib/unsoldPurchases";
 import UnsoldPurchasesDashboard from "@/components/UnsoldPurchasesDashboard";
 
@@ -9,10 +9,14 @@ export const dynamic = "force-dynamic";
 
 export default async function UnsoldPurchasesPage() {
   try {
-    const [purchaseRows, salesRows] = await Promise.all([
-      fetchWarehousePurchases(),
-      fetchSalesMatchRows(),
-    ]);
+    const purchaseRows = await fetchWarehousePurchases();
+    const orderNos = Array.from(
+      new Set(purchaseRows.map((p) => p.order_no).filter((v): v is string => !!v))
+    );
+    const productCodes = Array.from(
+      new Set(purchaseRows.map((p) => p.product_code).filter((v): v is string => !!v))
+    );
+    const salesRows = await fetchSalesMatches(orderNos, productCodes);
     const today = new Date().toISOString().slice(0, 10);
     const rows = buildUnsoldPurchases(purchaseRows, salesRows, today);
 

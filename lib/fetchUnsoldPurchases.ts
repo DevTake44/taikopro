@@ -1,6 +1,8 @@
 // 「仕入未売上一覧」用のデータ取得。
 // 仕入(purchases)のうち、納品先が倉庫・拠点(=実在の外部得意先ではなく自社の在庫・拠点)の
-// 行だけを全件取得する。実際の突き合わせ(受注番号での売上明細とのマッチング)は
+// 行だけを全件取得する。売上明細(sales_lines)は全件取得すると件数が多すぎて
+// Vercelの関数タイムアウトを起こすため、対象仕入に登場する受注番号・品番だけに
+// 絞り込んで取得する(fetchSalesMatches)。実際の突き合わせロジックは
 // lib/unsoldPurchases.ts で行う。
 
 import { unstable_cache } from "next/cache";
@@ -68,26 +70,51 @@ export type SalesMatchRow = {
   sell_price: number | null;
 };
 
-// 受注番号での突き合わせ、および商品ごとの参考売価(過去に売れた実績)を求めるため、
-// sales_lines全件から必要な列だけを取得する。
-async function fetchSalesMatchRowsUncached(): Promise<SalesMatchRow[]> {
+const IN_CHUNK_SIZE = 200; // PostgRESTのURL長・DB負荷を抑えるため、IN検索は小分けにする
+const CHUNK_CONCURRENCY = 5;
+
+async function runChunked<T>(values: string[], run: (chunk: string[]) => Promise<T[]>): Promise<T[]> {
+  const chunks: string[][] = [];
+  for (let i = 0; i < values.length; i += IN_CHUNK_SIZE) chunks.push(values.slice(i, i + IN_CHUNK_SIZE));
+
+  const results: T[] = [];
+  for (let i = 0; i < chunks.length; i += CHUNK_CONCURRENCY) {
+    const batch = chunks.slice(i, i + CHUNK_CONCURRENCY);
+    const batchResults = await Promise.all(batch.map(run));
+    for (const r of batchResults) results.push(...r);
+  }
+  return results;
+}
+
+// sales_lines全件を取得すると件数が多すぎてVercelの関数タイムアウト(60秒)を起こすため、
+// 対象の仕入(fetchWarehousePurchases)に実際に登場する受注番号・品番だけに絞り込んで取得する。
+// ①受注番号突合用: 対象仕入に登場する受注番号を持つ売上明細(=売上済みかどうかの判定用)
+// ②参考売価用: 対象仕入に登場する品番を持つ、0円超の売上明細(=その商品が過去に売れた実績)
+export async function fetchSalesMatches(orderNos: string[], productCodes: string[]): Promise<SalesMatchRow[]> {
   const supabase = getSupabaseServerClient();
   try {
-    return await fetchAllPagesConcurrent<SalesMatchRow>(
-      (from, to) =>
-        supabase
-          .from("sales_lines")
-          .select("order_no, order_line, item_code, sell_price")
-          .order("id", { ascending: true })
-          .range(from, to),
-      { pageSize: PAGE_SIZE, concurrency: 10 }
-    );
+    const byOrderNo = await runChunked(orderNos, async (chunk) => {
+      const { data, error } = await supabase
+        .from("sales_lines")
+        .select("order_no, order_line, item_code, sell_price")
+        .in("order_no", chunk);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as SalesMatchRow[];
+    });
+
+    const byProductCode = await runChunked(productCodes, async (chunk) => {
+      const { data, error } = await supabase
+        .from("sales_lines")
+        .select("order_no, order_line, item_code, sell_price")
+        .in("item_code", chunk)
+        .gt("sell_price", 0);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as SalesMatchRow[];
+    });
+
+    return [...byOrderNo, ...byProductCode];
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     throw new Error(`売上データの取得に失敗しました: ${message}`);
   }
 }
-export const fetchSalesMatchRows = unstable_cache(fetchSalesMatchRowsUncached, ["fetchSalesMatchRows"], {
-  tags: [SALES_DATA_CACHE_TAG],
-  revalidate: false,
-});
