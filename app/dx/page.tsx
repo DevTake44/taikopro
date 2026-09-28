@@ -83,7 +83,7 @@ const TOOLS: ToolLink[] = [
 
 export default function DxMenuPage() {
   return (
-    <div className="wrap" style={{ maxWidth: 900 }}>
+    <div className="wrap" style={{ maxWidth: 1320 }}>
       <header className="top" style={{ marginBottom: 28 }}>
         <div className="title">
           <h1>社内DX</h1>
@@ -94,13 +94,7 @@ export default function DxMenuPage() {
         </Link>
       </header>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: 14,
-        }}
-      >
+      <div className="dx-grid">
         {TOOLS.map((t) => (
           <Link
             key={t.href}
