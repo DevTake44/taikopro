@@ -15,14 +15,12 @@ import {
   fiscalYearLabel,
 } from "@/lib/period";
 
-// 経営レポート(/sales)・このページ(/sales/profit)・拠点・営業・得意先 利益
-// (/sales/profit-summary)を相互に行き来できるようにするための共通ナビ。
-// 経営レポートを常に先頭に置く。
-export function CrossPageNav({ current }: { current: "report" | "profit" | "profit-summary" }) {
+// 経営レポート(/sales)・このページ(/sales/profit)を相互に行き来できるようにするための
+// 共通ナビ。経営レポートを常に先頭に置く。
+export function CrossPageNav({ current }: { current: "report" | "profit" }) {
   const items: { key: typeof current; href: string; label: string }[] = [
     { key: "report", href: "/sales", label: "経営レポート" },
     { key: "profit", href: "/sales/profit", label: "売上利益" },
-    { key: "profit-summary", href: "/sales/profit-summary", label: "拠点・営業・得意先 利益" },
   ];
   return (
     <>

@@ -12,7 +12,7 @@ import {
 } from "@/lib/sales-dashboard-cache";
 
 // 経営レポート(/sales)・売上ダッシュボード明細(/sales-detail)の読み込みを行う。
-// 売上利益・拠点別利益ページ(ProfitDashboardLoader.tsx/ProfitSummary.tsx)と同じ考え方:
+// 売上利益ページ(ProfitDashboardLoader.tsx)と同じ考え方:
 // ブラウザ内のモジュール変数にキャッシュしておき、メニューに戻ってから再度この画面を
 // 開いた時は再取得せず即座に表示する(next/linkでの画面遷移である限り)。
 // サーバー側のunstable_cacheと違い、ここでの読み込みは「ページを開く」動作そのものを
