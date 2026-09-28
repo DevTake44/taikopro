@@ -1,6 +1,6 @@
 // 「仕入未売上一覧」の本体ロジック。
-// 仕入(purchases)のうち、納品先が倉庫・拠点(実在の外部得意先ではなく自社の在庫・拠点)の
-// ものを対象に、受注番号+受注行番号で売上明細(sales_lines)と突き合わせる。
+// 仕入(purchases)のうち、納品先が倉庫(拠点コード90・91)のものを対象に、
+// 受注番号+受注行番号で売上明細(sales_lines)と突き合わせる。
 // 対応する売上明細が見つからない仕入を「未売上」とする。
 //
 // 本来は受注データ(品番単位の明細)から仕入と結びつけると精度が上がるが、受注データは
@@ -11,15 +11,17 @@
 // その商品が売上明細上、一度も0円超で売れたことが無い場合は一覧から除外する
 // (受注番号が一致しない=未売上、というだけでは、そもそも売る予定が無い商品まで
 // 一覧に混ざってしまうため)。
+//
+// 注意(2026-09時点): 得意先名に「太幸」を含む(=自社拠点向け)仕入も本来は対象に
+// 含めたいが、customer_nameに索引が無くILIKE検索がDBのstatement timeoutを起こすため
+// 現時点では対象外にしている(lib/fetchUnsoldPurchases.ts参照)。destinationOf()は
+// 将来そちらを対象に含めた際にそのまま使えるよう、得意先名ベースの表示ロジックも残してある。
 import { BRANCH_NAMES } from "./branch-names";
 import type { UnsoldPurchaseSourceRow, SalesMatchRow } from "./fetchUnsoldPurchases";
 
 // 中央在庫仕入の拠点コード(90=鳴尾在庫, 91=土浦物流)。lib/fetchStockMovement.tsの
 // STOCK_LOCATION_CODESと同じ範囲。
 export const WAREHOUSE_LOCATION_CODES = ["90", "91"];
-// 得意先名にこの文字列を含む場合、実在の外部得意先ではなく自社拠点向けとみなす
-// (lib/row-mapping.ts・components/InternalTransferDashboard.tsxと同じ判定)。
-export const BRANCH_DELIVERY_KEYWORD = "太幸";
 
 export type UnsoldPurchaseRow = {
   purchase_number: string;

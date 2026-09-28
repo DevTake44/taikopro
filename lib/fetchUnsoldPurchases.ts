@@ -7,7 +7,7 @@ import { unstable_cache } from "next/cache";
 import { getSupabaseServerClient } from "./supabaseServer";
 import { fetchAllPagesConcurrent } from "./fetchPaged";
 import { SALES_DATA_CACHE_TAG } from "./salesDataCache";
-import { WAREHOUSE_LOCATION_CODES, BRANCH_DELIVERY_KEYWORD } from "./unsoldPurchases";
+import { WAREHOUSE_LOCATION_CODES } from "./unsoldPurchases";
 
 const PAGE_SIZE = 1000;
 
@@ -27,8 +27,13 @@ export type UnsoldPurchaseSourceRow = {
   amount: number;
 };
 
-// purchasesのうち、納品先が倉庫(拠点コード90・91)、または得意先名に「太幸」を含む
-// (=自社拠点向け)の行だけを取得する。
+// purchasesのうち、納品先が倉庫(拠点コード90・91)の行だけを取得する。
+//
+// 注意(2026-09時点): 当初は得意先名に「太幸」を含む(=自社拠点向け)行もOR条件で
+// 対象に含めていたが、customer_nameに索引が無いため ILIKE '%太幸%' が全件スキャンになり、
+// purchasesの件数次第ではDBのstatement timeoutを起こすことが分かった。そのため一旦
+// location_code=90/91のみに絞っている。得意先名ベースの拠点向け仕入も対象に含めるには、
+// customer_nameにトライグラム索引(pg_trgm)を追加するなど、DB側の対応が別途必要。
 async function fetchWarehousePurchasesUncached(): Promise<UnsoldPurchaseSourceRow[]> {
   const supabase = getSupabaseServerClient();
   try {
@@ -39,9 +44,7 @@ async function fetchWarehousePurchasesUncached(): Promise<UnsoldPurchaseSourceRo
           .select(
             "purchase_number, purchase_line, purchase_date, order_no, order_line, location_code, customer_name, product_code, product_name, supplier_name, unit_price, qty, amount"
           )
-          .or(
-            `location_code.in.(${WAREHOUSE_LOCATION_CODES.join(",")}),customer_name.ilike.%${BRANCH_DELIVERY_KEYWORD}%`
-          )
+          .in("location_code", WAREHOUSE_LOCATION_CODES)
           .order("id", { ascending: true })
           .range(from, to),
       { pageSize: PAGE_SIZE, concurrency: 8 }
