@@ -75,6 +75,11 @@ const TOOLS: ToolLink[] = [
     description: "受注はあるが売上未計上の案件を、担当者・得意先・締め日ごとに一覧化します。",
   },
   {
+    href: "/dx/unsold-purchases",
+    title: "仕入未売上一覧",
+    description: "納品先が倉庫・拠点の仕入のうち、まだ売上が計上されていないものを一覧化します。",
+  },
+  {
     href: "/dx/detail-check",
     title: "集計・明細 対比",
     description: "売上ダッシュボード(集計)と売上ダッシュボード明細を、拠点別・月別に突き合わせて差を確認します。",
