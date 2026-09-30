@@ -60,6 +60,11 @@ const TOOLS: ToolLink[] = [
     description: "運送会社の請求データと得意先への運賃請求額を突き合わせ、運賃利益を確認します。",
   },
   {
+    href: "/dx/freight-summary",
+    title: "運賃 売上・仕入",
+    description: "品番コード99(運賃)の売上・仕入を、合計・拠点別・担当別・得意先別に確認します。",
+  },
+  {
     href: "/dx/upload",
     title: "データ更新",
     description: "各画面のもとになる売上・仕入・商品マスタ・仕入先マスタのCSVをアップロードして反映します。",
