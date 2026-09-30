@@ -16,7 +16,7 @@ import type {
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const roundYen = (n: number) => Math.round(n);
 
-export function buildDashboard(rows: MonthlyRow[]): DashboardData {
+export function buildDashboard(rows: MonthlyRow[], opts?: { includeStockInProfit?: boolean }): DashboardData {
   if (rows.length === 0) {
     throw new Error("v_monthlyから1件もデータが取得できませんでした。Supabaseにデータが入っているか確認してください。");
   }
@@ -30,9 +30,21 @@ export function buildDashboard(rows: MonthlyRow[]): DashboardData {
 
   const STOCK_CODES = new Set(["90", "91"]);
 
+  // 粗利額・粗利率・トレンド(売上-仕入)の計算に使う行。
+  // 売上ダッシュボード明細(includeStockInProfit=false)では在庫仕入(拠点90・91)の行を
+  // ここから除外する。明細側の原価(profit_summary.cost)には在庫出荷時点のassumed_cost
+  // (出荷原価)が既に含まれているため、仕入時点の在庫仕入額をさらに引くと同じ在庫の
+  // コストを二重に控除してしまう(2026-09-30、びっきぃに確認・承認済み)。
+  // 経営レポート(v_monthlyのみ、includeStockInProfit=true=デフォルト)は、この
+  // 仕入時点の原価計上が唯一の原価情報源のため、従来通り含める。
+  // 「在庫仕入(拠点90・91)」自体の表示(stockオブジェクト、下記)は、この除外とは無関係に
+  // 両画面とも引き続き表示する(実額を見せたいだけで、粗利からは引かない)。
+  const includeStockInProfit = opts?.includeStockInProfit ?? true;
+  const profitRows = includeStockInProfit ? withYm : withYm.filter((r) => !STOCK_CODES.has(r.location_code));
+
   function trendSeries(fiscalYear: number, months: string[]): TrendPoint[] {
     const byYm = new Map<string, { sales: number; pur: number }>();
-    for (const r of withYm) {
+    for (const r of profitRows) {
       if (r.fiscal_year !== fiscalYear) continue;
       const cur = byYm.get(r.ym) ?? { sales: 0, pur: 0 };
       cur.sales += r.sales_amount;
@@ -58,27 +70,27 @@ export function buildDashboard(rows: MonthlyRow[]): DashboardData {
     const latest_ym = [...trend_a].reverse().find((t) => t.sales > 0)?.ym ?? months_a[months_a.length - 1];
     const latest_pi = periodIndexOf(latest_ym) + 1;
 
-    const a_sales = withYm.filter((r) => r.fiscal_year === yA).reduce((s, r) => s + r.sales_amount, 0);
+    const a_sales = profitRows.filter((r) => r.fiscal_year === yA).reduce((s, r) => s + r.sales_amount, 0);
 
     const salesMonthsWithData_a = new Set(
-      withYm.filter((r) => r.fiscal_year === yA && r.sales_amount > 0).map((r) => r.ym)
+      profitRows.filter((r) => r.fiscal_year === yA && r.sales_amount > 0).map((r) => r.ym)
     );
     const n_sales = salesMonthsWithData_a.size;
 
     const monthPurchaseTotal_a = new Map<string, number>();
-    for (const r of withYm) {
+    for (const r of profitRows) {
       if (r.fiscal_year !== yA) continue;
       monthPurchaseTotal_a.set(r.ym, (monthPurchaseTotal_a.get(r.ym) ?? 0) + r.purchase_amount);
     }
     const fullMonths = new Set([...salesMonthsWithData_a].filter((m) => (monthPurchaseTotal_a.get(m) ?? 0) > 0));
     const n_full = fullMonths.size;
 
-    const aFullRows = withYm.filter((r) => r.fiscal_year === yA && fullMonths.has(r.ym));
+    const aFullRows = profitRows.filter((r) => r.fiscal_year === yA && fullMonths.has(r.ym));
     const a_sales_full = aFullRows.reduce((s, r) => s + r.sales_amount, 0);
     const a_profit_full = a_sales_full - aFullRows.reduce((s, r) => s + r.purchase_amount, 0);
     const a_margin = a_sales_full ? round1((a_profit_full / a_sales_full) * 100) : 0;
 
-    const bRows = withYm.filter((r) => r.fiscal_year === yB);
+    const bRows = profitRows.filter((r) => r.fiscal_year === yB);
     const b_sales_total = bRows.reduce((s, r) => s + r.sales_amount, 0);
     const b_profit_total = b_sales_total - bRows.reduce((s, r) => s + r.purchase_amount, 0);
     const b_margin = b_sales_total ? round1((b_profit_total / b_sales_total) * 100) : 0;
