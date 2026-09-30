@@ -28,9 +28,13 @@ export type SalesDashboardCore = {
   stockMovementError: string | null;
 };
 
-async function buildCoreFrom(rows: MonthlyRow[], stockRowsPromise: ReturnType<typeof fetchStockDetailRows>): Promise<SalesDashboardCore> {
+async function buildCoreFrom(
+  rows: MonthlyRow[],
+  stockRowsPromise: ReturnType<typeof fetchStockDetailRows>,
+  opts?: { includeStockInProfit?: boolean }
+): Promise<SalesDashboardCore> {
   const stockRows = await stockRowsPromise;
-  const fullDataset = buildDashboard(rows);
+  const fullDataset = buildDashboard(rows, opts);
   const availableMonths = fullDataset.trend_cur.filter((t) => t.sales > 0).map((t) => t.ym);
 
   // 「在庫」タブの期選択用。経営レポートと同じく、各会計年度を今期扱いにした
@@ -103,7 +107,7 @@ async function buildDetailRows(): Promise<MonthlyRow[]> {
 
 async function computeSalesDetailDashboardCore(): Promise<SalesDashboardCore> {
   const rows = await buildDetailRows();
-  return buildCoreFrom(rows, fetchStockDetailRows());
+  return buildCoreFrom(rows, fetchStockDetailRows(), { includeStockInProfit: false });
 }
 export const getSalesDetailDashboardCore = unstable_cache(
   computeSalesDetailDashboardCore,
@@ -111,7 +115,13 @@ export const getSalesDetailDashboardCore = unstable_cache(
   { tags: [SALES_DATA_CACHE_TAG], revalidate: false }
 );
 
+// 明細(profit_summary)側の原価には在庫出荷時点のassumed_costが既に含まれているため、
+// 在庫仕入(拠点90・91)を粗利からさらに引かない(includeStockInProfit: false。
+// buildDashboard.tsのprofitRowsコメント参照。2026-09-30に二重控除と判明し修正)。
 export async function buildSalesDetailDashboardFor(until: string): Promise<DashboardData> {
   const rows = await buildDetailRows();
-  return buildDashboard(rows.filter((r) => ymFromDate(r.month) <= until));
+  return buildDashboard(
+    rows.filter((r) => ymFromDate(r.month) <= until),
+    { includeStockInProfit: false }
+  );
 }
