@@ -60,11 +60,6 @@ const TOOLS: ToolLink[] = [
     description: "運送会社の請求データと得意先への運賃請求額を突き合わせ、運賃利益を確認します。",
   },
   {
-    href: "/dx/freight-summary",
-    title: "運賃 売上・仕入",
-    description: "品番コード99(運賃)の売上・仕入を、合計・拠点別・担当別・得意先別に確認します。",
-  },
-  {
     href: "/dx/upload",
     title: "データ更新",
     description: "各画面のもとになる売上・仕入・商品マスタ・仕入先マスタのCSVをアップロードして反映します。",
@@ -73,11 +68,6 @@ const TOOLS: ToolLink[] = [
     href: "/dx/room-reservation",
     title: "会議室予約",
     description: "東京の会議室の週間予約状況を確認し、予約・変更・削除ができます。",
-  },
-  {
-    href: "/dx/unsold-orders",
-    title: "未売上受注チェック",
-    description: "受注はあるが売上未計上の案件を、担当者・得意先・締め日ごとに一覧化します。",
   },
   {
     href: "/dx/detail-check",
