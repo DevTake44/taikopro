@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { logUpload } from "@/lib/logUpload";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,7 @@ export async function POST(req: NextRequest) {
       .eq("carrier", carrier)
       .eq("source_label", source_label);
     if (deleteError) {
+      await logUpload({ uploadType: "freight_actual_summary", action: "cleanup", success: false, errorMessage: deleteError.message });
       return NextResponse.json({ error: `既存データの削除に失敗しました: ${deleteError.message}` }, { status: 500 });
     }
   }
@@ -94,8 +96,10 @@ export async function POST(req: NextRequest) {
 
   const { error: insertError } = await supabase.from("freight_actual_summary").insert(payload);
   if (insertError) {
+    await logUpload({ uploadType: "freight_actual_summary", rowCount: rows.length, success: false, errorMessage: insertError.message });
     return NextResponse.json({ error: `保存に失敗しました: ${insertError.message}` }, { status: 500 });
   }
 
+  await logUpload({ uploadType: "freight_actual_summary", rowCount: rows.length, success: true });
   return NextResponse.json({ inserted: rows.length, periods: targetTriples.length });
 }

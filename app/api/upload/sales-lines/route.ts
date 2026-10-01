@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { logUpload } from "@/lib/logUpload";
 import type { SalesRowInsert } from "@/lib/row-mapping";
 export const dynamic = "force-dynamic";
 const MAX_ROWS_PER_REQUEST = 2000;
@@ -121,8 +122,10 @@ export async function POST(req: NextRequest) {
       count: "exact",
     });
   if (error) {
+    await logUpload({ uploadType: "sales_lines", rowCount: rows.length, success: false, errorMessage: error.message });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  await logUpload({ uploadType: "sales_lines", rowCount: count ?? rows.length, success: true });
   return NextResponse.json({
     upserted: count ?? rows.length,
     duplicateWarnings,

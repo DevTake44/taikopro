@@ -3,7 +3,9 @@ import { useState, type DragEvent } from "react";
 import Link from "next/link";
 import Papa from "papaparse";
 import type { TableStatus } from "@/lib/fetchDataStatus";
+import type { UploadLogRow } from "@/lib/fetchUploadLog";
 import DataStatusTable from "./DataStatusTable";
+import UploadLogTable from "./UploadLogTable";
 import RiekiUploadBoxes from "./RiekiUploadBoxes";
 import { decodeCsvBuffer } from "@/lib/csvDecode";
 import { transformSalesCsv } from "@/lib/salesTransform";
@@ -551,9 +553,13 @@ function RefreshButton() {
 export default function UpdatePage({
   statuses,
   statusError,
+  uploadLogs,
+  uploadLogError,
 }: {
   statuses: TableStatus[];
   statusError: string | null;
+  uploadLogs: UploadLogRow[];
+  uploadLogError: string | null;
 }) {
   return (
     <div className="wrap" style={{ maxWidth: 900 }}>
@@ -569,6 +575,7 @@ export default function UpdatePage({
       <div className="page active">
         <RefreshButton />
         <DataStatusTable statuses={statuses} error={statusError} />
+        <UploadLogTable logs={uploadLogs} error={uploadLogError} />
         <SalesUploadBox />
         <PurchasesUploadBox />
         <ProductMasterUploadBox />
