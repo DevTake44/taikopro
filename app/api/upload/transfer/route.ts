@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { logUpload } from "@/lib/logUpload";
 import type { TransferRowInsert } from "@/lib/row-mapping";
 export const dynamic = "force-dynamic";
 
@@ -56,10 +57,12 @@ export async function POST(req: NextRequest) {
     .delete()
     .gte("id", 0);
   if (deleteError) {
+    await logUpload({ uploadType: "stock_transfer_pending", action: "cleanup", success: false, errorMessage: deleteError.message });
     return NextResponse.json({ error: `既存データの削除に失敗しました: ${deleteError.message}` }, { status: 500 });
   }
 
   if (deduped.length === 0) {
+    await logUpload({ uploadType: "stock_transfer_pending", rowCount: 0, success: true });
     return NextResponse.json({ inserted: 0, duplicatesRemoved });
   }
 
@@ -67,8 +70,10 @@ export async function POST(req: NextRequest) {
     .from("stock_transfer_pending")
     .insert(deduped, { count: "exact" });
   if (insertError) {
+    await logUpload({ uploadType: "stock_transfer_pending", rowCount: deduped.length, success: false, errorMessage: insertError.message });
     return NextResponse.json({ error: `挿入に失敗しました: ${insertError.message}` }, { status: 500 });
   }
 
+  await logUpload({ uploadType: "stock_transfer_pending", rowCount: count ?? deduped.length, success: true });
   return NextResponse.json({ inserted: count ?? deduped.length, duplicatesRemoved });
 }

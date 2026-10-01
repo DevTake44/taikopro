@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { logUpload } from "@/lib/logUpload";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -34,6 +35,12 @@ export async function POST(req: NextRequest) {
       .in("target_month_raw", months);
 
     if (selectError) {
+      await logUpload({
+        uploadType: "sales_monthly",
+        action: "cleanup",
+        success: false,
+        errorMessage: selectError.message,
+      });
       return NextResponse.json(
         { error: `既存データの確認中にエラーが発生しました: ${selectError.message}` },
         { status: 500 }
@@ -51,6 +58,13 @@ export async function POST(req: NextRequest) {
         .in("id", idsToDelete);
 
       if (deleteError) {
+        await logUpload({
+          uploadType: "sales_monthly",
+          action: "cleanup",
+          deletedCount: idsToDelete.length,
+          success: false,
+          errorMessage: deleteError.message,
+        });
         return NextResponse.json(
           { error: `不要データの削除中にエラーが発生しました: ${deleteError.message}` },
           { status: 500 }
@@ -58,10 +72,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    await logUpload({
+      uploadType: "sales_monthly",
+      action: "cleanup",
+      deletedCount: idsToDelete.length,
+      success: true,
+    });
     return NextResponse.json({ success: true, deletedCount: idsToDelete.length });
   } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    await logUpload({ uploadType: "sales_monthly", action: "cleanup", success: false, errorMessage: message });
     return NextResponse.json(
-      { error: "予期しないエラーが発生しました: " + (e instanceof Error ? e.message : String(e)) },
+      { error: "予期しないエラーが発生しました: " + message },
       { status: 500 }
     );
   }

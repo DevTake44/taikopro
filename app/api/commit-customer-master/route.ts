@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { CUSTOMER_MASTER_CONFLICT_COLUMNS } from "@/lib/uploadRules";
+import { logUpload } from "@/lib/logUpload";
 import type { CustomerMasterRow } from "@/lib/customerMasterTransform";
 
 export const maxDuration = 60;
@@ -20,16 +21,17 @@ export async function POST(req: NextRequest) {
       .from("customer_master")
       .upsert(payload, { onConflict: CUSTOMER_MASTER_CONFLICT_COLUMNS });
     if (error) {
+      await logUpload({ uploadType: "customer_master", rowCount: rows.length, success: false, errorMessage: error.message });
       return NextResponse.json(
         { error: `本番データへの反映中にエラーが発生しました: ${error.message}` },
         { status: 500 }
       );
     }
+    await logUpload({ uploadType: "customer_master", rowCount: rows.length, success: true });
     return NextResponse.json({ success: true, count: rows.length });
   } catch (e) {
-    return NextResponse.json(
-      { error: "予期しないエラーが発生しました: " + (e instanceof Error ? e.message : String(e)) },
-      { status: 500 }
-    );
+    const message = e instanceof Error ? e.message : String(e);
+    await logUpload({ uploadType: "customer_master", success: false, errorMessage: message });
+    return NextResponse.json({ error: "予期しないエラーが発生しました: " + message }, { status: 500 });
   }
 }

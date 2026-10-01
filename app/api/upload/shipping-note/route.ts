@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { logUpload } from "@/lib/logUpload";
 import type { ShippingNoteRowInsert } from "@/lib/row-mapping";
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
       .from("shipping_note_mapping")
       .upsert(deduped, { onConflict: "waybill_no" });
     if (upsertError) {
+      await logUpload({ uploadType: "shipping_note_mapping", rowCount: deduped.length, success: false, errorMessage: upsertError.message });
       return NextResponse.json({ error: `取り込みに失敗しました: ${upsertError.message}` }, { status: 500 });
     }
   }
@@ -58,8 +60,24 @@ export async function POST(req: NextRequest) {
     .delete({ count: "exact" })
     .lt("issue_date", cutoffStr);
   if (deleteError) {
+    await logUpload({
+      uploadType: "shipping_note_mapping",
+      action: "cleanup",
+      rowCount: deduped.length,
+      success: false,
+      errorMessage: deleteError.message,
+    });
     return NextResponse.json({ inserted: deduped.length, pruned: 0, pruneError: deleteError.message });
   }
 
+  await logUpload({ uploadType: "shipping_note_mapping", rowCount: deduped.length, success: true });
+  if ((deletedCount ?? 0) > 0) {
+    await logUpload({
+      uploadType: "shipping_note_mapping",
+      action: "cleanup",
+      deletedCount: deletedCount ?? 0,
+      success: true,
+    });
+  }
   return NextResponse.json({ inserted: deduped.length, pruned: deletedCount ?? 0 });
 }
