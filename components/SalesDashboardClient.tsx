@@ -10,6 +10,7 @@ import { monthsOfFiscalYear } from "@/lib/fiscal";
 import { StockCheckContent } from "./StockCheckClient";
 import RefreshButton from "./RefreshButton";
 import TrendChart from "./TrendChart";
+import { PeriodSelect, fiscalYearLabel } from "./PeriodSelect";
 
 type MainTab = "report" | "matrix" | "stock";
 type Dim = "loc" | "staff" | "cust";
@@ -312,44 +313,6 @@ function ReportPage({ data }: { data: DashboardData }) {
   );
 }
 
-// 経営レポート・在庫タブ共通の「期選択」プルダウン。選んだ年度を「今期」として、
-// 総評・比較表・KPI・グラフなどページ全体を計算し直して表示する。
-function PeriodSelect({
-  years,
-  trueCUR,
-  selectedYear,
-  onChange,
-}: {
-  years: number[];
-  trueCUR: number;
-  selectedYear: number;
-  onChange: (y: number) => void;
-}) {
-  return (
-    <div style={{ marginBottom: 14, fontSize: 12.5 }}>
-      <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-        期選択:
-        <select
-          value={selectedYear}
-          onChange={(e) => onChange(Number(e.target.value))}
-          style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
-        >
-          {[...years].reverse().map((y) => (
-            <option key={y} value={y}>
-              {fiscalYearLabel(y, trueCUR)}({y}年度)
-            </option>
-          ))}
-        </select>
-      </label>
-      {selectedYear !== trueCUR && (
-        <span style={{ marginLeft: 10, color: "var(--ink-faint)" }}>
-          ※ {fiscalYearLabel(selectedYear, trueCUR)}({selectedYear}年度)を「今期」として表示しています
-        </span>
-      )}
-    </div>
-  );
-}
-
 /* ============ 在庫 ============ */
 function StockTab({
   data,
@@ -380,14 +343,6 @@ function StockTab({
 }
 
 /* ============ 月別マトリクス ============ */
-
-// 会計年度→表示ラベル(今期/前期/前々期/それ以前)を作る
-function fiscalYearLabel(year: number, CUR: number): string {
-  if (year === CUR) return "今期";
-  if (year === CUR - 1) return "前期";
-  if (year === CUR - 2) return "前々期";
-  return `${year}年度`;
-}
 
 type MonthCellPair = { base: MonthCell; cmp: MonthCell | null };
 type MatrixMergedRow = {

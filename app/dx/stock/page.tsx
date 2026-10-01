@@ -1,40 +1,24 @@
-export const maxDuration = 60;
-
 import Link from "next/link";
-import { fetchStockDetailRows } from "@/lib/fetchStockDetail";
-import { fetchPurchaseLots, fetchStockShipments, fetchProductAliasGroups } from "@/lib/fetchStockMovement";
-import { buildDashboard } from "@/lib/buildDashboard";
-import { buildStockDetail } from "@/lib/buildStockDetail";
-import { buildStockMovement } from "@/lib/buildStockMovement";
-import type { StockMovementData } from "@/lib/buildStockMovement";
-import { fetchAllMonthlyRows } from "@/lib/fetchMonthly";
+import { getSalesDashboardCore } from "@/lib/salesDashboardCore";
 import StockCheckClient from "@/components/StockCheckClient";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
+// 経営レポート(/sales)と全く同じキャッシュ済みデータ(getSalesDashboardCore)を使う。
+// これにより、不動在庫チェック単独ページでも、データとして存在する会計年度を
+// 全て選べるようになる(以前は「今日」基準の今期・前期だけに固定されていた)。
 export default async function StockCheckPage() {
   try {
-    const [rows, stockRows] = await Promise.all([fetchAllMonthlyRows(), fetchStockDetailRows()]);
-    const data = buildDashboard(rows);
-    const stockDetail = buildStockDetail(stockRows, data.summary.CUR, data.summary.PREV);
-
-    let stockMovement: StockMovementData | null = null;
-    let stockMovementError: string | null = null;
-    try {
-      const [purchaseLots, shipments, productAliasRecord] = await Promise.all([
-        fetchPurchaseLots(),
-        fetchStockShipments(),
-        fetchProductAliasGroups(),
-      ]);
-      const productAliasMap = new Map(Object.entries(productAliasRecord));
-      const today = new Date().toISOString().slice(0, 10);
-      stockMovement = buildStockMovement(purchaseLots, shipments, today, productAliasMap);
-    } catch (e) {
-      stockMovementError = e instanceof Error ? e.message : "不明なエラーが発生しました。";
-    }
-
+    const core = await getSalesDashboardCore();
     return (
-      <StockCheckClient stockDetail={stockDetail} stockMovement={stockMovement} stockMovementError={stockMovementError} />
+      <StockCheckClient
+        trueCUR={core.fullDataset.summary.CUR}
+        fiscalYears={core.fullDataset.fiscalYears}
+        stockDetailByYear={core.stockDetailByYear}
+        stockMovementByYear={core.stockMovementByYear}
+        stockMovementError={core.stockMovementError}
+      />
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "不明なエラーが発生しました。";
