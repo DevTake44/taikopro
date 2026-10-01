@@ -8,6 +8,7 @@ import type { StockMovementData, StockMovementItem } from "@/lib/buildStockMovem
 import { yen, jpn, monL } from "@/lib/format";
 import TrendChart from "./TrendChart";
 import RefreshButton from "./RefreshButton";
+import { PeriodSelect } from "./PeriodSelect";
 
 // 「不動在庫チェック」の中身(タブ・ページ両方から使えるよう分離)。
 // sales-dashboardの旧ダッシュボードの「在庫」タブをそのまま移設したもの
@@ -163,14 +164,36 @@ export function StockCheckContent({
   );
 }
 
-// /dx/stock 単独ページ用(ヘッダー・戻るリンク付き)。タブとして埋め込む場合は
+// /dx/stock 単独ページ用(ヘッダー・戻るリンク・期選択付き)。タブとして埋め込む場合は
 // StockCheckContentを直接使う(components/SalesDashboardClient.tsxの「在庫」タブ参照)。
-export default function StockCheckClient(props: {
-  stockDetail: StockDetailData;
-  stockMovement: StockMovementData | null;
+//
+// 今期・前期の2つだけでなく、データとして存在する会計年度を全て選べるようにする
+// (2026-10-01、びっきぃの指示)。経営レポート/sales・売上ダッシュボード明細の
+// 「在庫」タブ(StockTab)と全く同じ考え方: fiscalYears(データのある年度一覧)の
+// 中から選んだ年度を「今期」として、その年度・前年度分のstockDetail/stockMovementを
+// 表示する。
+export default function StockCheckClient({
+  trueCUR,
+  fiscalYears,
+  stockDetailByYear,
+  stockMovementByYear,
+  stockMovementError,
+}: {
+  trueCUR: number;
+  fiscalYears: number[];
+  stockDetailByYear: Record<number, StockDetailData>;
+  stockMovementByYear: Record<number, StockMovementData | null>;
   stockMovementError: string | null;
 }) {
   const router = useRouter();
+  const years = useMemo(
+    () => Array.from(new Set([trueCUR, ...fiscalYears])).sort((a, b) => a - b),
+    [trueCUR, fiscalYears]
+  );
+  const [selectedYear, setSelectedYear] = useState<number>(trueCUR);
+  const stockDetail = stockDetailByYear[selectedYear] ?? stockDetailByYear[trueCUR];
+  const stockMovement = stockMovementByYear[selectedYear] ?? stockMovementByYear[trueCUR] ?? null;
+
   async function handleRefresh() {
     const res = await fetch("/api/revalidate-sales-data", { method: "POST" });
     if (!res.ok) throw new Error("更新に失敗しました");
@@ -191,7 +214,8 @@ export default function StockCheckClient(props: {
           </Link>
         </div>
       </header>
-      <StockCheckContent {...props} />
+      <PeriodSelect years={years} trueCUR={trueCUR} selectedYear={selectedYear} onChange={setSelectedYear} />
+      <StockCheckContent stockDetail={stockDetail} stockMovement={stockMovement} stockMovementError={stockMovementError} />
     </div>
   );
 }

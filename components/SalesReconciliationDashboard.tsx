@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { branchLabel } from "@/lib/branch-names";
-import { ymFromDate, fiscalYearOf, monthsOfFiscalYear } from "@/lib/fiscal";
+import { ymFromDate, fiscalYearOf } from "@/lib/fiscal";
+import { fiscalYearLabel } from "./PeriodSelect";
 
 // v_sales_reconciliation(拠点×月度単位で「売上ダッシュボード(集計)」と
 // 「売上ダッシュボード明細」を突き合わせ済みのビュー)を表示するだけの画面。
@@ -21,7 +22,10 @@ type ReconRow = {
 };
 
 type Metric = "sales" | "cost";
-type PeriodMode = "all" | "cur" | "prev";
+// "all"=全期間、数値=その会計年度(期首の西暦年)だけ。
+// 以前は「今期」「前期」の2つの決め打ちボタンだったが、データとして存在する
+// 会計年度を全て選べるようにする(2026-10-01、びっきぃの指示)。
+type PeriodMode = "all" | number;
 type ValueMode = "diff" | "detail" | "summary";
 
 function fmtYen(n: number): string {
@@ -53,23 +57,25 @@ export default function SalesReconciliationDashboard() {
       .catch((e) => setError(String(e)));
   }, []);
 
-  const { curMonths, prevMonths } = useMemo(() => {
-    const today = new Date();
-    const todayYm = ymFromDate(today.toISOString().slice(0, 10));
-    const CUR = fiscalYearOf(todayYm);
-    return { curMonths: monthsOfFiscalYear(CUR), prevMonths: monthsOfFiscalYear(CUR - 1) };
-  }, []);
+  const trueCUR = useMemo(() => fiscalYearOf(ymFromDate(new Date().toISOString().slice(0, 10))), []);
 
   const allMonths = useMemo(() => {
     if (!rows) return [];
     return Array.from(new Set(rows.map((r) => r.ym))).sort();
   }, [rows]);
 
+  // データとして実際に存在する会計年度の一覧(新しい順)。今期(trueCUR)は、
+  // まだその年度の行が無くても選択肢として常に出しておく。
+  const availableFiscalYears = useMemo(() => {
+    const set = new Set(allMonths.map((ym) => fiscalYearOf(ym)));
+    set.add(trueCUR);
+    return Array.from(set).sort((a, b) => b - a);
+  }, [allMonths, trueCUR]);
+
   const months = useMemo(() => {
-    if (periodMode === "cur") return curMonths.filter((m) => allMonths.includes(m));
-    if (periodMode === "prev") return prevMonths.filter((m) => allMonths.includes(m));
-    return allMonths;
-  }, [periodMode, allMonths, curMonths, prevMonths]);
+    if (periodMode === "all") return allMonths;
+    return allMonths.filter((m) => fiscalYearOf(m) === periodMode);
+  }, [periodMode, allMonths]);
 
   const branches = useMemo(() => {
     if (!rows) return [];
@@ -211,8 +217,11 @@ export default function SalesReconciliationDashboard() {
         </div>
         <div className="tabs">
           <button className={periodMode === "all" ? "active" : ""} onClick={() => setPeriodMode("all")}>全期間</button>
-          <button className={periodMode === "cur" ? "active" : ""} onClick={() => setPeriodMode("cur")}>今期</button>
-          <button className={periodMode === "prev" ? "active" : ""} onClick={() => setPeriodMode("prev")}>前期</button>
+          {availableFiscalYears.map((y) => (
+            <button key={y} className={periodMode === y ? "active" : ""} onClick={() => setPeriodMode(y)}>
+              {fiscalYearLabel(y, trueCUR)}
+            </button>
+          ))}
         </div>
         <div className="tabs">
           <button className={valueMode === "diff" ? "active" : ""} onClick={() => setValueMode("diff")}>差額(明細-集計)</button>
@@ -286,7 +295,9 @@ export default function SalesReconciliationDashboard() {
         <div className="card" style={{ marginBottom: 20 }}>
           <div className="card-head">
             <h2>原価の内訳(仕入・在庫・運賃)</h2>
-            <span className="sub">選択中の期間: {periodMode === "all" ? "全期間" : periodMode === "cur" ? "今期" : "前期"}</span>
+            <span className="sub">
+              選択中の期間: {periodMode === "all" ? "全期間" : `${fiscalYearLabel(periodMode, trueCUR)}(${periodMode}年度)`}
+            </span>
           </div>
           <div className="matwrap">
             <table className="mat">
