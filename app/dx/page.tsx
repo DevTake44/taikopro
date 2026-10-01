@@ -30,6 +30,11 @@ const TOOLS: ToolLink[] = [
     description: "拠点間の社内間取引額を、確定分・未納品を合わせて拠点×場所別に集計します。",
   },
   {
+    href: "/dx/order-supplier-summary",
+    title: "受注 仕入先別発注金額",
+    description: "受注出力CSVから、仕入先ごとの発注金額(受注総数量×原価)を多い順に集計します(手配区分が空白・在庫の行は対象外)。",
+  },
+  {
     href: "/dx/receivables-report",
     title: "売掛残高月報",
     description: "拠点別の売掛残高CSVから、当月売上・入金額・当月残高の集計と簡易仕訳を作成します。",
