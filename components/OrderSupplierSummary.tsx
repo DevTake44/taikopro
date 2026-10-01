@@ -18,7 +18,10 @@ import Link from "next/link";
  */
 
 const MIN_COLS = 54;
+const ORDER_NO_COL = 11; // L列: 受注番号
 const HAND_TYPE_COL = 49; // AX列: 手配区分
+const PRODUCT_CODE_COL = 27; // AB列: 品番
+const PRODUCT_NAME_COL = 29; // AD列: 品名
 const QTY_COL = 34; // AI列: 受注総数量
 const COST_COL = 53; // BB列: 原価
 const SUPPLIER_CODE_COL = 50; // AY列: 仕入先コード
@@ -29,6 +32,15 @@ type SupplierRow = {
   name: string;
   amount: number;
   count: number;
+};
+
+// 仕入先名クリックで内訳(受注番号単位・商品)を見られるようにするための明細行。
+type OrderLine = {
+  supplierCode: string;
+  orderNo: string;
+  productCode: string;
+  productName: string;
+  amount: number;
 };
 
 type FileState = {
@@ -75,13 +87,13 @@ function csvEscape(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function parseOrderCsv(text: string): { rows: SupplierRow[]; warnings: string[] } {
+function parseOrderCsv(text: string): { rows: SupplierRow[]; lines: OrderLine[]; warnings: string[] } {
   const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
   const allRows = parsed.data;
   const warnings: string[] = [];
 
   if (allRows.length < 2) {
-    return { rows: [], warnings: ["データ行が見つかりませんでした。"] };
+    return { rows: [], lines: [], warnings: ["データ行が見つかりませんでした。"] };
   }
 
   const header = allRows[0];
@@ -102,6 +114,7 @@ function parseOrderCsv(text: string): { rows: SupplierRow[]; warnings: string[] 
   }
 
   const bySupplier = new Map<string, SupplierRow>();
+  const lines: OrderLine[] = [];
   for (const cols of dataRows) {
     const hand = cleanHandType(cols[HAND_TYPE_COL]);
     if (hand === "" || hand === "在庫") continue;
@@ -118,29 +131,63 @@ function parseOrderCsv(text: string): { rows: SupplierRow[]; warnings: string[] 
     } else {
       bySupplier.set(code, { code, name, amount, count: 1 });
     }
+
+    lines.push({
+      supplierCode: code,
+      orderNo: (cols[ORDER_NO_COL] || "").trim(),
+      productCode: (cols[PRODUCT_CODE_COL] || "").trim(),
+      productName: (cols[PRODUCT_NAME_COL] || "").trim(),
+      amount,
+    });
   }
 
   const rows = Array.from(bySupplier.values()).sort((a, b) => b.amount - a.amount);
   if (rows.length === 0) {
     warnings.push("対象になる行(手配区分が空白・在庫以外)が1件もありませんでした。");
   }
-  return { rows, warnings };
+  return { rows, lines, warnings };
+}
+
+type OrderGroup = { orderNo: string; amount: number; lines: OrderLine[] };
+
+// 仕入先1件分の明細を、受注番号単位(発注金額の多い順)にまとめる。
+// 各受注番号の中の商品行も、金額の多い順に並べる。
+function buildOrderGroups(lines: OrderLine[], supplierCode: string): OrderGroup[] {
+  const byOrder = new Map<string, OrderLine[]>();
+  for (const line of lines) {
+    if (line.supplierCode !== supplierCode) continue;
+    const arr = byOrder.get(line.orderNo) ?? [];
+    arr.push(line);
+    byOrder.set(line.orderNo, arr);
+  }
+  const groups: OrderGroup[] = Array.from(byOrder.entries()).map(([orderNo, orderLines]) => ({
+    orderNo,
+    amount: orderLines.reduce((s, l) => s + l.amount, 0),
+    lines: [...orderLines].sort((a, b) => b.amount - a.amount),
+  }));
+  groups.sort((a, b) => b.amount - a.amount);
+  return groups;
 }
 
 export default function OrderSupplierSummary() {
   const [fileState, setFileState] = useState<FileState>(initialFileState());
   const [rows, setRows] = useState<SupplierRow[]>([]);
+  const [lines, setLines] = useState<OrderLine[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [openSupplier, setOpenSupplier] = useState<string | null>(null);
 
   async function handleFile(f: File) {
     setFileState({ fileName: f.name, loading: true, error: null });
     setRows([]);
+    setLines([]);
     setWarnings([]);
+    setOpenSupplier(null);
     try {
       const text = await readFileSmart(f);
-      const { rows: parsedRows, warnings: parsedWarnings } = parseOrderCsv(text);
+      const { rows: parsedRows, lines: parsedLines, warnings: parsedWarnings } = parseOrderCsv(text);
       setRows(parsedRows);
+      setLines(parsedLines);
       setWarnings(parsedWarnings);
       setFileState({ fileName: f.name, loading: false, error: null });
     } catch (e) {
@@ -149,6 +196,10 @@ export default function OrderSupplierSummary() {
   }
 
   const total = useMemo(() => rows.reduce((s, r) => s + r.amount, 0), [rows]);
+  const openOrderGroups = useMemo(
+    () => (openSupplier ? buildOrderGroups(lines, openSupplier) : []),
+    [lines, openSupplier]
+  );
 
   function downloadCsv() {
     if (rows.length === 0) return;
@@ -238,8 +289,11 @@ export default function OrderSupplierSummary() {
               CSVダウンロード
             </button>
           </div>
-          <p style={{ fontSize: 15, fontWeight: 700, padding: "0 20px 12px" }}>
+          <p style={{ fontSize: 15, fontWeight: 700, padding: "0 20px 2px" }}>
             発注金額合計: {fmtYen(total)}(仕入先{rows.length.toLocaleString("ja-JP")}件)
+          </p>
+          <p className="cell-sub" style={{ padding: "0 20px 12px" }}>
+            仕入先名をクリックすると、受注番号単位(発注金額の多い順)に商品の内訳を表示します。
           </p>
           <div className="matwrap">
             <table className="mat">
@@ -252,14 +306,64 @@ export default function OrderSupplierSummary() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.code}>
-                    <td className="codecol">{r.code}</td>
-                    <td className="namecol">{r.name || "(名称不明)"}</td>
-                    <td><span className="cell-s">{fmtYen(r.amount)}</span></td>
-                    <td><span className="cell-s">{r.count.toLocaleString("ja-JP")}</span></td>
-                  </tr>
-                ))}
+                {rows.flatMap((r) => {
+                  const isOpen = openSupplier === r.code;
+                  const mainRow = (
+                    <tr
+                      key={r.code}
+                      onClick={() => setOpenSupplier(isOpen ? null : r.code)}
+                      style={{ cursor: "pointer", background: isOpen ? "#f5f7fb" : undefined }}
+                      title="クリックで受注番号単位の内訳を表示"
+                    >
+                      <td className="codecol">{r.code}</td>
+                      <td className="namecol">
+                        <span style={{ color: "#2563d9" }}>{isOpen ? "▾ " : "▸ "}</span>
+                        {r.name || "(名称不明)"}
+                      </td>
+                      <td><span className="cell-s">{fmtYen(r.amount)}</span></td>
+                      <td><span className="cell-s">{r.count.toLocaleString("ja-JP")}</span></td>
+                    </tr>
+                  );
+                  if (!isOpen) return [mainRow];
+
+                  const detailRow = (
+                    <tr key={`${r.code}-detail`}>
+                      <td colSpan={4} style={{ padding: 0, background: "#fafbfc" }}>
+                        <div style={{ padding: "10px 20px 16px 40px" }}>
+                          <div style={{ fontSize: 12, color: "var(--ink-faint)", marginBottom: 6 }}>
+                            {r.name || r.code} の内訳(受注番号{openOrderGroups.length}件・発注金額の多い順)
+                          </div>
+                          {openOrderGroups.map((g) => (
+                            <div key={g.orderNo} style={{ marginBottom: 10 }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>
+                                受注番号 {g.orderNo || "(空欄)"} ― {fmtYen(g.amount)}
+                              </div>
+                              <table className="mat" style={{ width: "100%" }}>
+                                <thead>
+                                  <tr>
+                                    <th className="codecol">品番</th>
+                                    <th className="namecol">品名</th>
+                                    <th>金額</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {g.lines.map((l, i) => (
+                                    <tr key={i}>
+                                      <td className="codecol">{l.productCode || "―"}</td>
+                                      <td className="namecol">{l.productName || "―"}</td>
+                                      <td><span className="cell-s">{fmtYen(l.amount)}</span></td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                  return [mainRow, detailRow];
+                })}
               </tbody>
             </table>
           </div>
