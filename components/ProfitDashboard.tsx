@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { ProfitOrder } from "@/lib/profitTypes";
+import type { ProfitOrder, ProfitOrderLineDetail } from "@/lib/profitTypes";
 import { branchLabel } from "@/lib/branch-names";
 import { repLabel } from "@/lib/rep-names";
 import Link from "next/link";
@@ -227,9 +227,59 @@ export default function ProfitDashboard({
   );
   const [periodKey, setPeriodKey] = useState(""); // periodMode === "month" のときだけ使う
   const [dimension, setDimension] = useState<Dimension>("order");
-  const [search, setSearch] = useState("");
+  // 2026-10-07変更: 「得意先名・得意先コード・受注番号・物件名」をまとめた1つの検索欄だと、
+  // 同じ文字列が複数の項目に偶然マッチして絞り込みにくい(かつ入力欄に枠が無く検索エリアと
+  // 気づきにくい)という指摘を受け、項目ごとに別々の検索欄に分けた(複数入力時はAND絞り込み)。
+  const [customerNameQuery, setCustomerNameQuery] = useState("");
+  const [customerCodeQuery, setCustomerCodeQuery] = useState("");
+  const [orderNoQuery, setOrderNoQuery] = useState("");
+  const [projectNameQuery, setProjectNameQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("profit");
   const [sortDir, setSortDir] = useState<1 | -1>(1); // 1=小さい順(赤字が上), -1=大きい順
+
+  // 2026-10-07追加: 受注番号別内訳の「詳細」ボタン用。品番単位の明細(v_profit_lines)を
+  // クリック時に1回だけ取得し、受注番号をキーに結果をキャッシュしておく(同じ受注を
+  // 開き直すたびに再取得しない)。
+  type OrderDetailState =
+    | { status: "loading" }
+    | { status: "error"; message: string }
+    | { status: "done"; rows: ProfitOrderLineDetail[] };
+  const [expandedOrderNo, setExpandedOrderNo] = useState<string | null>(null);
+  const [orderDetails, setOrderDetails] = useState<Record<string, OrderDetailState>>({});
+
+  async function loadOrderDetail(orderNo: string) {
+    setOrderDetails((prev) => ({ ...prev, [orderNo]: { status: "loading" } }));
+    try {
+      const res = await fetch(`/api/profit-order-detail?order_no=${encodeURIComponent(orderNo)}`, {
+        cache: "no-store",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOrderDetails((prev) => ({
+          ...prev,
+          [orderNo]: { status: "error", message: json?.error ?? "取得に失敗しました" },
+        }));
+        return;
+      }
+      setOrderDetails((prev) => ({ ...prev, [orderNo]: { status: "done", rows: json.rows ?? [] } }));
+    } catch (e) {
+      setOrderDetails((prev) => ({
+        ...prev,
+        [orderNo]: { status: "error", message: e instanceof Error ? e.message : String(e) },
+      }));
+    }
+  }
+
+  function toggleOrderDetail(orderNo: string) {
+    if (expandedOrderNo === orderNo) {
+      setExpandedOrderNo(null);
+      return;
+    }
+    setExpandedOrderNo(orderNo);
+    if (!orderDetails[orderNo]) {
+      loadOrderDetail(orderNo);
+    }
+  }
 
   const selectedYear = periodMode === "month" ? periodKey.slice(0, 4) : "";
   const selectedMonth = periodMode === "month" ? periodKey.slice(4, 6) : "";
@@ -266,12 +316,16 @@ export default function ProfitDashboard({
   function resetFilters() {
     setBranch("");
     setRep("");
-    setSearch("");
+    setCustomerNameQuery("");
+    setCustomerCodeQuery("");
+    setOrderNoQuery("");
+    setProjectNameQuery("");
     setDimension("order");
     setPeriodMode(availableFiscalYears.length ? "fy-current" : "all");
     setPeriodKey("");
     setSortKey("profit");
     setSortDir(1);
+    setExpandedOrderNo(null);
   }
 
   const { from: dateFrom, to: dateTo } = useMemo(() => {
@@ -298,26 +352,36 @@ export default function ProfitDashboard({
   }, [orders, branch]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const qName = customerNameQuery.trim().toLowerCase();
+    const qCode = customerCodeQuery.trim().toLowerCase();
+    const qOrder = orderNoQuery.trim().toLowerCase();
+    const qProject = projectNameQuery.trim().toLowerCase();
     return orders.filter((o) => {
       if (branch && o.branch_code !== branch) return false;
       if (rep && o.rep_code !== rep) return false;
       if (dateFrom && (!o.delivery_date || o.delivery_date < dateFrom)) return false;
       if (dateTo && (!o.delivery_date || o.delivery_date > dateTo)) return false;
-      if (q) {
-        const hay = `${o.order_no} ${o.customer_name ?? ""} ${o.customer_code ?? ""} ${o.project_name ?? ""}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
+      if (qName && !(o.customer_name ?? "").toLowerCase().includes(qName)) return false;
+      if (qCode && !(o.customer_code ?? "").toLowerCase().includes(qCode)) return false;
+      if (qOrder && !o.order_no.toLowerCase().includes(qOrder)) return false;
+      if (qProject && !(o.project_name ?? "").toLowerCase().includes(qProject)) return false;
       return true;
     });
-  }, [orders, branch, rep, dateFrom, dateTo, search]);
+  }, [orders, branch, rep, dateFrom, dateTo, customerNameQuery, customerCodeQuery, orderNoQuery, projectNameQuery]);
 
   // 2026-08-28追加: 「内訳の得意先をクリックやチェックで検索窓に転記するようにして」に対応。
-  // 下の「◯◯別 内訳」テーブルで得意先名をクリックすると、その得意先コード(無ければ名前)を
-  // そのまま検索欄に入れて、明細まで絞り込めるようにする。
+  // 下の「◯◯別 内訳」テーブルで得意先名をクリックすると、得意先コード(無ければ得意先名)の
+  // 検索欄に入れて、明細まで絞り込めるようにする。得意先コードは数字のみのため、数字だけの
+  // 値はコード欄、それ以外は名前欄に入れる。
   function selectCustomerInSearch(code: string) {
     if (!code) return;
-    setSearch(code);
+    if (/^\d+$/.test(code)) {
+      setCustomerCodeQuery(code);
+      setCustomerNameQuery("");
+    } else {
+      setCustomerNameQuery(code);
+      setCustomerCodeQuery("");
+    }
     filterCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -517,17 +581,64 @@ export default function ProfitDashboard({
               ))}
             </select>
           </div>
-          <div className="filter-field" style={{ gridColumn: "span 2" }}>
-            <label>検索(得意先名・得意先コード・受注番号・物件名)</label>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="例: イオン、2130029365、〇〇工事"
-              style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12.5 }}
-            />
+        </div>
+
+        <div
+          style={{
+            marginTop: 12,
+            padding: "12px 14px",
+            border: "1px solid var(--rk-border)",
+            borderRadius: 8,
+            background: "var(--rk-bg)",
+          }}
+        >
+          <label style={{ fontSize: 11.5, color: "var(--rk-text-muted)", display: "block", marginBottom: 8 }}>
+            検索(複数入力時はすべてに一致する行だけ表示)
+          </label>
+          <div className="filter-row">
+            <div className="filter-field">
+              <label>得意先名</label>
+              <input
+                type="text"
+                value={customerNameQuery}
+                onChange={(e) => setCustomerNameQuery(e.target.value)}
+                placeholder="例: イオン"
+                style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--rk-border)", borderRadius: 6, fontSize: 12.5 }}
+              />
+            </div>
+            <div className="filter-field">
+              <label>得意先コード</label>
+              <input
+                type="text"
+                value={customerCodeQuery}
+                onChange={(e) => setCustomerCodeQuery(e.target.value)}
+                placeholder="例: 2130029365"
+                style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--rk-border)", borderRadius: 6, fontSize: 12.5 }}
+              />
+            </div>
+            <div className="filter-field">
+              <label>受注番号</label>
+              <input
+                type="text"
+                value={orderNoQuery}
+                onChange={(e) => setOrderNoQuery(e.target.value)}
+                placeholder="例: 2130030434"
+                style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--rk-border)", borderRadius: 6, fontSize: 12.5 }}
+              />
+            </div>
+            <div className="filter-field">
+              <label>物件名</label>
+              <input
+                type="text"
+                value={projectNameQuery}
+                onChange={(e) => setProjectNameQuery(e.target.value)}
+                placeholder="例: 〇〇工事"
+                style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--rk-border)", borderRadius: 6, fontSize: 12.5 }}
+              />
+            </div>
           </div>
         </div>
+
         <div className="filter-row" style={{ marginTop: 10 }}>
           <div className="filter-field" style={{ gridColumn: "span 4" }}>
             <label>期間(決算期・10月始まり)</label>
@@ -716,6 +827,93 @@ export default function ProfitDashboard({
                       </span>
                       <span className="rf-value num">{fmtPct(m)}</span>
                     </div>
+                    <div style={{ marginTop: 6 }}>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        style={{ padding: "3px 10px", fontSize: 11.5 }}
+                        onClick={() => toggleOrderDetail(g.key)}
+                      >
+                        {expandedOrderNo === g.key ? "閉じる" : "詳細"}
+                      </button>
+                    </div>
+                    {expandedOrderNo === g.key && (
+                      <div style={{ marginTop: 8, padding: "10px 12px", background: "var(--rk-bg)", borderRadius: 6 }}>
+                        {(() => {
+                          const state = orderDetails[g.key];
+                          if (!state || state.status === "loading") {
+                            return (
+                              <p className="empty-state" style={{ padding: "10px 0" }}>
+                                <span className="spinner" /> 明細を読み込み中…
+                              </p>
+                            );
+                          }
+                          if (state.status === "error") {
+                            return (
+                              <div>
+                                <p style={{ margin: 0, color: "var(--rk-critical)" }}>
+                                  明細の取得に失敗しました: {state.message}
+                                </p>
+                                <button
+                                  type="button"
+                                  className="ghost-btn"
+                                  style={{ marginTop: 6 }}
+                                  onClick={() => loadOrderDetail(g.key)}
+                                >
+                                  もう一度読み込む
+                                </button>
+                              </div>
+                            );
+                          }
+                          if (state.rows.length === 0) {
+                            return (
+                              <p className="empty-state" style={{ padding: "10px 0" }}>
+                                明細が見つかりませんでした
+                              </p>
+                            );
+                          }
+                          return (
+                            <div className="table-scroll">
+                              <table style={{ minWidth: 760 }}>
+                                <thead>
+                                  <tr>
+                                    <th>品番</th>
+                                    <th>品名</th>
+                                    <th>手配区分</th>
+                                    <th className="num">数量</th>
+                                    <th className="num">単価</th>
+                                    <th className="num">売上</th>
+                                    <th className="num">原価</th>
+                                    <th className="num">利益</th>
+                                    <th>原価の根拠</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {state.rows.map((r) => (
+                                    <tr key={r.sales_line_id}>
+                                      <td>{r.item_code || "—"}</td>
+                                      <td className="wrap-2line-cell">{r.item_name || "—"}</td>
+                                      <td>{r.arrange_type || "—"}</td>
+                                      <td className="num">{r.qty.toLocaleString("ja-JP")}</td>
+                                      <td className="num">{fmtYen(r.sell_price)}</td>
+                                      <td className="num">{fmtYen(r.revenue)}</td>
+                                      <td className="num">{fmtYen(r.cost)}</td>
+                                      <td
+                                        className="num"
+                                        style={{ color: r.profit < 0 ? "var(--rk-critical)" : undefined, fontWeight: 600 }}
+                                      >
+                                        {fmtYen(r.profit)}
+                                      </td>
+                                      <td className="cell-sub">{r.cost_source || "—"}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 );
               })}
