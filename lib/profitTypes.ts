@@ -60,6 +60,27 @@ export type ProfitOrder = {
   unconfirmed_cost_revenue: number;
 };
 
+// public.v_profit_lines ビューの1行の型のうち、売上利益(/sales/profit)の「詳細」ボタンで
+// 受注番号単位の品番別明細を表示するために使う列。v_profit_by_orderはこれをorder_noで
+// 合計したものなので、1件の受注の中身(品番ごとの売上・原価・利益・原価の根拠)を見るには
+// こちらをorder_noで絞り込んで使う。
+export type ProfitOrderLineDetail = {
+  sales_line_id: number;
+  order_line: string;
+  item_code: string | null;
+  item_name: string | null;
+  arrange_type: string | null;
+  delivery_date: string | null;
+  qty: number;
+  sell_price: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+  // 原価の根拠(例: "仕入実績"「原価(仕入未確定)」「原価不明(仕入未登録・仮に利益0円)」など)。
+  // v_profit_linesの定義(lib/profitTypes.tsのコメント参照)を参照。
+  cost_source: string | null;
+};
+
 // public.profit_summary テーブルの1行の型(拠点・営業担当・得意先別 利益集計。20日締め期間単位)
 // gross_profit = revenue - cost (売上総利益、いわゆる粗利)
 // final_profit = gross_profit - freight_actual (運賃の実費まで差し引いた最終利益)
