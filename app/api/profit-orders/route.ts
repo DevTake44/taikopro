@@ -39,8 +39,11 @@ export async function GET(req: NextRequest) {
       : Promise.resolve({ count: null, error: null }),
     supabase
       .from("v_profit_by_order")
+      // 2026-10-07変更: order_noは受注番号が無い行(値引など)で重複するため、常に一意な
+      // order_keyで並べる(order_noだけだとoffsetをずらすページングの境界で行が重複・
+      // 欠落する可能性がある)。
       .select("*")
-      .order("order_no", { ascending: true })
+      .order("order_key", { ascending: true })
       .range(offset, offset + limit - 1),
   ]);
 

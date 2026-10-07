@@ -40,7 +40,13 @@ export type ProfitLine = {
 };
 
 // public.v_profit_by_order マテリアライズドビューの1行の型(利益ダッシュボード・受注番号単位)
+//
+// 2026-10-07変更: 受注番号が入っていない(order_no が空・'0')売上明細行(値引など)は、
+// order_noだけでは一意にならない(全部"0"で同じ)ため、(order_no, customer_code, project_name)
+// の組み合わせで分けたorder_keyを追加した。通常の受注番号が入っている行はorder_key=order_no。
+// 一覧の行キー・ページングの並び順にはorder_keyを使う(order_noは重複しうるため)。
 export type ProfitOrder = {
+  order_key: string;
   order_no: string;
   customer_code: string | null;
   customer_name: string | null;

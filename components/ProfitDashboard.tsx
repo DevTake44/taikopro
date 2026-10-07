@@ -58,6 +58,15 @@ function marginPct(revenue: number, profit: number): number | null {
   return (profit / revenue) * 100;
 }
 
+// 2026-10-07追加: 受注番号="0"(または空)は、受注番号が無い売上明細行(値引・協力値引などの
+// 商品外行)を束ねるための仮の値で、実在する受注ではない(2026-10-07時点152件・33得意先・
+// 6拠点にまたがる)。v_profit_by_order側でも(order_no, customer_code, project_name)単位に
+// 分けてあるため得意先名・物件名の検索・集計では正しく含まれるが、「受注番号」という単位では
+// そもそも意味を持たないため、受注番号別内訳・受注番号検索には出さない。
+function isRealOrderNo(orderNo: string | null | undefined): boolean {
+  return !!orderNo && orderNo !== "0";
+}
+
 function csvEscape(v: unknown): string {
   const s = v === null || v === undefined ? "" : String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -363,7 +372,10 @@ export default function ProfitDashboard({
       if (dateTo && (!o.delivery_date || o.delivery_date > dateTo)) return false;
       if (qName && !(o.customer_name ?? "").toLowerCase().includes(qName)) return false;
       if (qCode && !(o.customer_code ?? "").toLowerCase().includes(qCode)) return false;
-      if (qOrder && !o.order_no.toLowerCase().includes(qOrder)) return false;
+      // 2026-10-07追加: 受注番号="0"(または空)は、受注番号が無い売上明細行(値引など)を
+      // 束ねるための仮の値で実在する受注ではないため、受注番号での検索では対象外にする
+      // (得意先名・物件名での検索では対象に含める。isRealOrderNo参照)。
+      if (qOrder && (!isRealOrderNo(o.order_no) || !o.order_no.toLowerCase().includes(qOrder))) return false;
       if (qProject && !(o.project_name ?? "").toLowerCase().includes(qProject)) return false;
       return true;
     });
@@ -401,21 +413,23 @@ export default function ProfitDashboard({
 
   const groups: GroupRow[] = useMemo(() => {
     if (dimension === "order") {
-      return filtered.map((o) => ({
-        key: o.order_no,
-        label: o.order_no,
-        orderCount: 1,
-        revenue: o.revenue,
-        cost: o.cost,
-        profit: o.profit,
-        customerCode: o.customer_code,
-        customerName: o.customer_name,
-        branchCode: o.branch_code,
-        repCode: o.rep_code,
-        projectName: o.project_name,
-        unconfirmedCostLineCount: o.unconfirmed_cost_line_count,
-        unconfirmedCostRevenue: o.unconfirmed_cost_revenue,
-      }));
+      return filtered
+        .filter((o) => isRealOrderNo(o.order_no))
+        .map((o) => ({
+          key: o.order_no,
+          label: o.order_no,
+          orderCount: 1,
+          revenue: o.revenue,
+          cost: o.cost,
+          profit: o.profit,
+          customerCode: o.customer_code,
+          customerName: o.customer_name,
+          branchCode: o.branch_code,
+          repCode: o.rep_code,
+          projectName: o.project_name,
+          unconfirmedCostLineCount: o.unconfirmed_cost_line_count,
+          unconfirmedCostRevenue: o.unconfirmed_cost_revenue,
+        }));
     }
     if (dimension === "customer") {
       return groupOrders(
