@@ -1,10 +1,10 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import type { InternalTransferLine, TransferPendingLine } from "@/lib/types";
+import type { InternalTransferSummaryRow, TransferPendingLine } from "@/lib/types";
 import { branchLabel, BRANCH_NAMES } from "@/lib/branch-names";
 import { SUPPLIER_LOCATIONS } from "@/lib/supplier-locations";
-import { periodKeyFor, periodRangeFor, periodLabelFor } from "@/lib/period";
+import { periodLabelFor } from "@/lib/period";
 import Link from "next/link";
 
 function fmtYen(v: number | null | undefined) {
@@ -146,25 +146,21 @@ export default function InternalTransferDashboard({
   confirmedRows,
   pendingRows,
 }: {
-  confirmedRows: InternalTransferLine[];
+  confirmedRows: InternalTransferSummaryRow[];
   pendingRows: TransferPendingLine[];
 }) {
   // 20日締めの月単位(202605, 202606, ...)で、データに実際に存在する期間だけを候補にする。
+  // confirmedRowsは既にサーバー側で拠点×期間×場所に集計済みなので、period_keyをそのまま使う。
   const availablePeriods = useMemo(() => {
     const keys = new Set<string>();
     confirmedRows.forEach((r) => {
-      if (r.delivery_date) keys.add(periodKeyFor(r.delivery_date));
+      if (r.period_key) keys.add(r.period_key);
     });
     return Array.from(keys).sort((a, b) => b.localeCompare(a)); // 新しい月が先
   }, [confirmedRows]);
 
   const [branch, setBranch] = useState("");
   const [periodKey, setPeriodKey] = useState(() => (availablePeriods[0] ?? ""));
-
-  const { from: dateFrom, to: dateTo } = useMemo(() => {
-    if (!periodKey) return { from: "", to: "" };
-    return periodRangeFor(periodKey);
-  }, [periodKey]);
 
   const branches = useMemo(
     () =>
@@ -177,12 +173,9 @@ export default function InternalTransferDashboard({
 
   const filteredConfirmed = useMemo(() => {
     return confirmedRows.filter(
-      (r) =>
-        (!branch || r.branch_code === branch) &&
-        (!dateFrom || (r.delivery_date && r.delivery_date >= dateFrom)) &&
-        (!dateTo || (r.delivery_date && r.delivery_date <= dateTo))
+      (r) => (!branch || r.branch_code === branch) && (!periodKey || r.period_key === periodKey)
     );
-  }, [confirmedRows, branch, dateFrom, dateTo]);
+  }, [confirmedRows, branch, periodKey]);
 
   const filteredPending = useMemo(() => {
     return pendingRows.filter((r) => !branch || r.branch_code === branch);

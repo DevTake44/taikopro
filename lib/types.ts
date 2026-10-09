@@ -91,19 +91,19 @@ export type YearMatrixSet = {
   cust_total_count: number; // 得意先の全件数(絞り込み前)
 };
 
-// public.v_internal_transfer_lines マテリアライズドビューの1行の型(社内間金額・確定分)
-export type InternalTransferLine = {
-  sales_line_id: number;
+// public.v_internal_transfer_summary ビューの1行の型(社内間金額・確定分、拠点×期間×
+// 手配区分×場所で事前集計済み)。
+// 元のv_internal_transfer_lines(明細、13万件超・約38MB)をそのままクライアントに
+// 送るとVercelの応答サイズ上限を超えて「Application error: a client-side exception
+// has occurred」を起こしていたため、画面側で実際に使う粒度まで集計してから返す
+// (2026-10-09修正)。
+export type InternalTransferSummaryRow = {
   branch_code: string | null;
-  delivery_date: string | null;
-  order_date: string | null;
+  period_key: string | null; // 20日締めの月度(例: "202610")
   arrange_type: string;
   loc_code: string | null;
   loc_name: string | null;
-  item_code: string | null;
-  item_name: string | null;
   qty: number;
-  assumed_cost: number;
   amount: number;
 };
 
