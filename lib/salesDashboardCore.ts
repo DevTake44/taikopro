@@ -39,9 +39,11 @@ async function buildCoreFrom(
   // 作っていたため、期が切り替わった直後は今期のデータがほぼ無く、前期の月まで
   // さかのぼれなくなっていた。rows自体(全会計年度分)から売上のある月を直接集計することで、
   // 会計年度をまたいで過去の月も選べるようにする。
-  const availableMonths = Array.from(
+  // 全期間ぶん出すと選択肢が多くなりすぎるため、直近12ヶ月だけに絞る。
+  const allAvailableMonths = Array.from(
     new Set(rows.filter((r) => r.sales_amount > 0).map((r) => ymFromDate(r.month)))
   ).sort();
+  const availableMonths = allAvailableMonths.slice(-12);
 
   // 「在庫」タブの期選択用。経営レポートと同じく、各会計年度を今期扱いにした
   // 場合の一式を作っておく(CURはfiscalYearsに無くても必ず入れる)。
