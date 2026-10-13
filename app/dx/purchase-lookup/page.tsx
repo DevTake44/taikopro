@@ -94,8 +94,8 @@ export default function PurchaseLookupPage() {
           <h1>仕入価格検索</h1>
           <p>品番の完全一致、または品名・仕様のキーワード(あいまい検索)で仕入実績を調べます。</p>
         </div>
-        <Link href="/dx" className="ghost-btn-inline">
-          ← 社内DXメニュー
+        <Link href="/sales-app" className="ghost-btn-inline">
+          ← 営業アプリ
         </Link>
       </header>
 

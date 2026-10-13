@@ -74,8 +74,8 @@ export default function RoomReservationLogs() {
           <Link href="/dx/room-reservation" className="ghost-btn" style={{ textDecoration: "none" }}>
             ← カレンダーへ戻る
           </Link>
-          <Link href="/dx" className="ghost-btn" style={{ textDecoration: "none" }}>
-            ← 社内DXメニュー
+          <Link href="/sales-app" className="ghost-btn" style={{ textDecoration: "none" }}>
+            ← 営業アプリ
           </Link>
         </div>
       </div>

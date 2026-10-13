@@ -245,8 +245,8 @@ export default function PriceAlertsDashboard({ rows }: { rows: PriceIncreaseAler
           <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
             データ更新
           </Link>
-          <Link href="/dx" className="ghost-btn" style={{ textDecoration: "none" }}>
-            ← 社内DXメニュー
+          <Link href="/sales-app" className="ghost-btn" style={{ textDecoration: "none" }}>
+            ← 営業アプリ
           </Link>
         </div>
       </div>
