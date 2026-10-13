@@ -35,7 +35,13 @@ async function buildCoreFrom(
 ): Promise<SalesDashboardCore> {
   const stockRows = await stockRowsPromise;
   const fullDataset = buildDashboard(rows, opts);
-  const availableMonths = fullDataset.trend_cur.filter((t) => t.sales > 0).map((t) => t.ym);
+  // 「表示基準月」プルダウンの選択肢。以前はfullDataset.trend_cur(今期の会計年度分のみ)から
+  // 作っていたため、期が切り替わった直後は今期のデータがほぼ無く、前期の月まで
+  // さかのぼれなくなっていた。rows自体(全会計年度分)から売上のある月を直接集計することで、
+  // 会計年度をまたいで過去の月も選べるようにする。
+  const availableMonths = Array.from(
+    new Set(rows.filter((r) => r.sales_amount > 0).map((r) => ymFromDate(r.month)))
+  ).sort();
 
   // 「在庫」タブの期選択用。経営レポートと同じく、各会計年度を今期扱いにした
   // 場合の一式を作っておく(CURはfiscalYearsに無くても必ず入れる)。
