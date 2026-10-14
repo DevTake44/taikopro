@@ -8,9 +8,16 @@
 // なのに、仕入運賃だけなら+200、運送会社運賃だけでも+200に見えてしまう)。
 //
 // そのため、DB側でまず受注番号(伝票)単位に売上・仕入先運賃・運送会社運賃を
-// 突き合わせてから(v_freight_profit_by_order)、期間×拠点×担当×得意先に集計した
-// ビュー(v_freight_profit_summary)を作り、ここではそれを取得して画面表示用に
+// 突き合わせてから(v_freight_profit_by_order_mv)、期間×拠点×担当×得意先に集計した
+// ビュー(v_freight_profit_summary_mv)を作り、ここではそれを取得して画面表示用に
 // 再集計するだけにした。損益の計算自体はDB側のビューで完結している。
+//
+// 【重要】当初はプレーンview(v_freight_profit_by_order/v_freight_profit_summary)で
+// 作ったが、アクセスのたびに受注番号単位の重い集計(sales_lines 151,680行・
+// purchases 134,006行のUNION・集計)を再計算することになり、PostgRESTの
+// statement_timeout(2分)を超えてタイムアウトしていた。v_profit_lines等と同じく
+// マテリアライズドビュー化し、「更新」ボタン(refresh_freight_profit_views)でのみ
+// 再計算するようにした(2026-10-14)。
 
 import { unstable_cache } from "next/cache";
 import { getSupabaseServerClient } from "./supabaseServer";
@@ -41,7 +48,7 @@ async function fetchFreightProfitSummaryRowsUncached(): Promise<FreightProfitSum
   return fetchAllPagesConcurrent<FreightProfitSummaryRow>(
     (from, to) =>
       supabase
-        .from("v_freight_profit_summary")
+        .from("v_freight_profit_summary_mv")
         .select("*")
         .order("period_end", { ascending: true })
         .order("branch_code", { ascending: true })

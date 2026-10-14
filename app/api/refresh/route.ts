@@ -43,6 +43,14 @@ export async function POST() {
       );
     }
 
+    const { error: freightProfitError } = await supabase.rpc("refresh_freight_profit_views");
+    if (freightProfitError) {
+      return NextResponse.json(
+        { error: `運賃 売上・仕入の更新に失敗しました: ${freightProfitError.message}` },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ success: true, refreshed: true });
   } catch (e) {
     return NextResponse.json(
