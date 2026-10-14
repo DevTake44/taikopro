@@ -44,7 +44,6 @@ type Status = {
   refreshing: boolean;
   refreshed: boolean;
   duplicatesRemoved: number | null;
-  pruned: number | null;
   duplicateWarnings: DuplicateWarning[];
   duplicateCandidateTotal: number;
 };
@@ -63,7 +62,6 @@ function initialStatus(): Status {
     refreshing: false,
     refreshed: false,
     duplicatesRemoved: null,
-    pruned: null,
     duplicateWarnings: [],
     duplicateCandidateTotal: 0,
   };
@@ -196,7 +194,6 @@ function UploadBox({
     if (kind === "shippingNote") {
       const batches = chunk(mapped, BATCH_SIZE);
       setStatus((s) => ({ ...s, totalRows: mapped.length, totalBatches: batches.length }));
-      let pruned: number | null = null;
       for (let i = 0; i < batches.length; i++) {
         try {
           const res = await fetch(endpoint, {
@@ -209,12 +206,11 @@ function UploadBox({
             errors.push(`バッチ${i + 1}/${batches.length}: ${json.error ?? res.statusText}`);
           } else {
             sent += typeof json.inserted === "number" ? json.inserted : batches[i].length;
-            if (typeof json.pruned === "number") pruned = (pruned ?? 0) + json.pruned;
           }
         } catch (e) {
           errors.push(`バッチ${i + 1}/${batches.length}: ${String(e)}`);
         }
-        setStatus((s) => ({ ...s, sentRows: sent, doneBatches: i + 1, errors: [...errors], pruned }));
+        setStatus((s) => ({ ...s, sentRows: sent, doneBatches: i + 1, errors: [...errors] }));
       }
       setStatus((s) => ({ ...s, running: false, finished: true }));
       return;
@@ -358,9 +354,6 @@ function UploadBox({
                   <div style={{ color: "#2563d9" }}>
                     うち、受注番号・受注行番号が重複していた{status.duplicatesRemoved.toLocaleString("ja-JP")}件は自動的に1件にまとめました。
                   </div>
-                )}
-                {mode === "accumulate" && status.pruned !== null && status.pruned > 0 && (
-                  <div style={{ color: "#2563d9" }}>あわせて、発行日が3か月より前の古いデータ{status.pruned.toLocaleString("ja-JP")}件を削除しました。</div>
                 )}
               </div>
             )}
