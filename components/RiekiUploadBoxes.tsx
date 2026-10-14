@@ -437,7 +437,7 @@ export default function RiekiUploadBoxes() {
       <UploadBox
         kind="shippingNote"
         title="⑦ 送り状問合せデータ(運賃照合用)"
-        description="送り状問合せCSVを選択してください(得意先コード・受注番号・運送会社名・送り状番号などを含む列構成)。送り状番号をキーに蓄積(upsert)され、発行日が3か月より前の古いデータは自動的に削除されます。"
+        description="送り状問合せCSVを選択してください(得意先コード・受注番号・運送会社名・送り状番号などを含む列構成)。送り状番号をキーに蓄積(upsert)されます(古いデータの自動削除は行いません)。"
         mode="accumulate"
       />
     </>
