@@ -1,11 +1,16 @@
 // 「運賃 売上・仕入」画面用のデータ取得・集計。
-// 運賃は品番(item_code/product_code)="99"で識別する(buildStockMovement.tsで既に
-// 確認済みのコード)。細かい除外条件などは設けず、単純にコード99の行を売上・仕入
-// それぞれ全件集計するだけの画面。
 //
-// 期(会計年度)は、社内間金額機能などと同じ「20日締め」ルール(lib/period.ts)で
-// 判定する。売上側は納品年月日(delivery_date、他機能でも金額集計に使っている基準日)、
-// 仕入側は仕入年月日(purchase_date)を使う。
+// 2026-10-14改修: 以前はsales_lines(item_code=99)とpurchases(product_code=99)を
+// 拠点別・担当別・得意先別にそれぞれ独立して合計していたが、これだと「仕入先への
+// 支払い(仕入運賃)」と「運送会社(西濃・福山)への実費」を両方とも同じ運賃売上と
+// 突き合わせてしまい、どちらも黒字に見えてしまう不具合があった
+// (例: 売上1,000・仕入運賃800・運送会社運賃800の伝票は、本来は仕入計1,600で赤字▲600
+// なのに、仕入運賃だけなら+200、運送会社運賃だけでも+200に見えてしまう)。
+//
+// そのため、DB側でまず受注番号(伝票)単位に売上・仕入先運賃・運送会社運賃を
+// 突き合わせてから(v_freight_profit_by_order)、期間×拠点×担当×得意先に集計した
+// ビュー(v_freight_profit_summary)を作り、ここではそれを取得して画面表示用に
+// 再集計するだけにした。損益の計算自体はDB側のビューで完結している。
 
 import { unstable_cache } from "next/cache";
 import { getSupabaseServerClient } from "./supabaseServer";
@@ -13,75 +18,55 @@ import { fetchAllPagesConcurrent } from "./fetchPaged";
 import { SALES_DATA_CACHE_TAG } from "./salesDataCache";
 import { branchNameOnly } from "./branch-names";
 import { repNameOnly } from "./rep-names";
-import { periodKeyFor, fiscalYearStartOf, fiscalYearLabel } from "./period";
+import { fiscalYearStartOf, fiscalYearLabel } from "./period";
 
 const PAGE_SIZE = 1000;
-const FREIGHT_CODE = "99";
 
-type FreightSalesRow = {
+type FreightProfitSummaryRow = {
+  period_end: string | null;
   branch_code: string | null;
   rep_code: string | null;
   customer_code: string | null;
   customer_name: string | null;
-  qty: number | null;
-  sell_price: number | null;
-  delivery_date: string | null;
+  order_count: number;
+  freight_revenue: number;
+  supplier_freight_cost: number;
+  carrier_freight_cost: number;
+  total_freight_cost: number;
+  freight_profit: number;
 };
 
-type FreightPurchaseRow = {
-  location_code: string | null;
-  staff_code: string | null;
-  customer_code: string | null;
-  customer_name: string | null;
-  amount: number;
-  purchase_date: string | null;
-};
-
-async function fetchFreightSalesRowsUncached(): Promise<FreightSalesRow[]> {
+async function fetchFreightProfitSummaryRowsUncached(): Promise<FreightProfitSummaryRow[]> {
   const supabase = getSupabaseServerClient();
-  return fetchAllPagesConcurrent<FreightSalesRow>(
+  return fetchAllPagesConcurrent<FreightProfitSummaryRow>(
     (from, to) =>
       supabase
-        .from("sales_lines")
-        .select("branch_code, rep_code, customer_code, customer_name, qty, sell_price, delivery_date")
-        .eq("item_code", FREIGHT_CODE)
-        .order("id", { ascending: true })
+        .from("v_freight_profit_summary")
+        .select("*")
+        .order("period_end", { ascending: true })
+        .order("branch_code", { ascending: true })
+        .order("rep_code", { ascending: true })
+        .order("customer_code", { ascending: true })
         .range(from, to),
     { pageSize: PAGE_SIZE, concurrency: 8 }
   );
 }
-export const fetchFreightSalesRows = unstable_cache(fetchFreightSalesRowsUncached, ["fetchFreightSalesRows"], {
-  tags: [SALES_DATA_CACHE_TAG],
-  revalidate: false,
-});
-
-async function fetchFreightPurchaseRowsUncached(): Promise<FreightPurchaseRow[]> {
-  const supabase = getSupabaseServerClient();
-  return fetchAllPagesConcurrent<FreightPurchaseRow>(
-    (from, to) =>
-      supabase
-        .from("purchases")
-        .select("location_code, staff_code, customer_code, customer_name, amount, purchase_date")
-        .eq("product_code", FREIGHT_CODE)
-        .order("id", { ascending: true })
-        .range(from, to),
-    { pageSize: PAGE_SIZE, concurrency: 8 }
-  );
-}
-export const fetchFreightPurchaseRows = unstable_cache(fetchFreightPurchaseRowsUncached, ["fetchFreightPurchaseRows"], {
-  tags: [SALES_DATA_CACHE_TAG],
-  revalidate: false,
-});
+export const fetchFreightProfitSummaryRows = unstable_cache(
+  fetchFreightProfitSummaryRowsUncached,
+  ["fetchFreightProfitSummaryRows"],
+  { tags: [SALES_DATA_CACHE_TAG], revalidate: false }
+);
 
 export type FreightGroupRow = {
   code: string;
   label: string;
-  salesAmount: number;
-  salesCount: number;
-  purchaseAmount: number;
-  purchaseCount: number;
-  grossProfit: number; // 粗利 = 売上運賃 - 仕入運賃
-  grossProfitRate: number | null; // 粗利率 = 粗利 / 売上運賃(売上運賃が0の場合はnull)
+  freightRevenue: number; // 運賃売上
+  supplierCost: number; // 仕入先運賃(purchases product_code=99)
+  carrierCost: number; // 運送会社運賃(西濃・福山などの実費、freight_actual_order_lines)
+  totalCost: number; // 仕入計 = supplierCost + carrierCost
+  grossProfit: number; // 粗利 = 運賃売上 - 仕入計
+  grossProfitRate: number | null;
+  orderCount: number; // 件数(受注番号の数)
 };
 
 export type FreightSummary = {
@@ -100,122 +85,108 @@ export type FreightSummaryByPeriod = {
 const UNKNOWN_CODE = "(不明)";
 
 function withProfit(row: Omit<FreightGroupRow, "grossProfit" | "grossProfitRate">): FreightGroupRow {
-  const grossProfit = row.salesAmount - row.purchaseAmount;
-  const grossProfitRate = row.salesAmount !== 0 ? grossProfit / row.salesAmount : null;
+  const grossProfit = row.freightRevenue - row.totalCost;
+  const grossProfitRate = row.freightRevenue !== 0 ? grossProfit / row.freightRevenue : null;
   return { ...row, grossProfit, grossProfitRate };
 }
 
 function buildGroup(
-  salesRows: FreightSalesRow[],
-  purchaseRows: FreightPurchaseRow[],
-  salesKeyOf: (r: FreightSalesRow) => string,
-  purchaseKeyOf: (r: FreightPurchaseRow) => string,
-  labelOf: (code: string, salesRow: FreightSalesRow | null, purchaseRow: FreightPurchaseRow | null) => string
+  rows: FreightProfitSummaryRow[],
+  keyOf: (r: FreightProfitSummaryRow) => string,
+  labelOf: (code: string, sample: FreightProfitSummaryRow) => string
 ): FreightGroupRow[] {
-  type Acc = { code: string; label: string; salesAmount: number; salesCount: number; purchaseAmount: number; purchaseCount: number };
+  type Acc = {
+    code: string;
+    label: string;
+    freightRevenue: number;
+    supplierCost: number;
+    carrierCost: number;
+    totalCost: number;
+    orderCount: number;
+  };
   const map = new Map<string, Acc>();
-  const sampleSales = new Map<string, FreightSalesRow>();
-  const samplePurchase = new Map<string, FreightPurchaseRow>();
+  const sample = new Map<string, FreightProfitSummaryRow>();
 
-  for (const r of salesRows) {
-    const code = salesKeyOf(r) || UNKNOWN_CODE;
-    if (!sampleSales.has(code)) sampleSales.set(code, r);
-    const g = map.get(code) ?? { code, label: code, salesAmount: 0, salesCount: 0, purchaseAmount: 0, purchaseCount: 0 };
-    g.salesAmount += (r.qty ?? 0) * (r.sell_price ?? 0);
-    g.salesCount += 1;
-    map.set(code, g);
-  }
-  for (const r of purchaseRows) {
-    const code = purchaseKeyOf(r) || UNKNOWN_CODE;
-    if (!samplePurchase.has(code)) samplePurchase.set(code, r);
-    const g = map.get(code) ?? { code, label: code, salesAmount: 0, salesCount: 0, purchaseAmount: 0, purchaseCount: 0 };
-    g.purchaseAmount += r.amount ?? 0;
-    g.purchaseCount += 1;
+  for (const r of rows) {
+    const code = keyOf(r) || UNKNOWN_CODE;
+    if (!sample.has(code)) sample.set(code, r);
+    const g =
+      map.get(code) ??
+      { code, label: code, freightRevenue: 0, supplierCost: 0, carrierCost: 0, totalCost: 0, orderCount: 0 };
+    g.freightRevenue += r.freight_revenue;
+    g.supplierCost += r.supplier_freight_cost;
+    g.carrierCost += r.carrier_freight_cost;
+    g.totalCost += r.total_freight_cost;
+    g.orderCount += r.order_count;
     map.set(code, g);
   }
 
   for (const [code, g] of map) {
-    g.label = labelOf(code, sampleSales.get(code) ?? null, samplePurchase.get(code) ?? null);
+    g.label = labelOf(code, sample.get(code)!);
   }
 
   return Array.from(map.values())
     .map(withProfit)
-    .sort((a, b) => b.salesAmount + b.purchaseAmount - (a.salesAmount + a.purchaseAmount));
+    .sort((a, b) => b.freightRevenue + b.totalCost - (a.freightRevenue + a.totalCost));
 }
 
-export function buildFreightSummary(
-  salesRows: FreightSalesRow[],
-  purchaseRows: FreightPurchaseRow[]
-): FreightSummary {
+export function buildFreightSummary(rows: FreightProfitSummaryRow[]): FreightSummary {
   const total = withProfit({
     code: "ALL",
     label: "合計",
-    salesAmount: salesRows.reduce((s, r) => s + (r.qty ?? 0) * (r.sell_price ?? 0), 0),
-    salesCount: salesRows.length,
-    purchaseAmount: purchaseRows.reduce((s, r) => s + (r.amount ?? 0), 0),
-    purchaseCount: purchaseRows.length,
+    freightRevenue: rows.reduce((s, r) => s + r.freight_revenue, 0),
+    supplierCost: rows.reduce((s, r) => s + r.supplier_freight_cost, 0),
+    carrierCost: rows.reduce((s, r) => s + r.carrier_freight_cost, 0),
+    totalCost: rows.reduce((s, r) => s + r.total_freight_cost, 0),
+    orderCount: rows.reduce((s, r) => s + r.order_count, 0),
   });
 
   const byBranch = buildGroup(
-    salesRows,
-    purchaseRows,
+    rows,
     (r) => r.branch_code ?? "",
-    (r) => r.location_code ?? "",
     (code) => (code === UNKNOWN_CODE ? code : branchNameOnly(code))
   );
 
   const byRep = buildGroup(
-    salesRows,
-    purchaseRows,
+    rows,
     (r) => r.rep_code ?? "",
-    (r) => r.staff_code ?? "",
     (code) => (code === UNKNOWN_CODE ? code : repNameOnly(code))
   );
 
   const byCustomer = buildGroup(
-    salesRows,
-    purchaseRows,
+    rows,
     (r) => r.customer_code ?? "",
-    (r) => r.customer_code ?? "",
-    (code, salesRow, purchaseRow) =>
-      code === UNKNOWN_CODE ? code : salesRow?.customer_name ?? purchaseRow?.customer_name ?? code
+    (code, sample) => (code === UNKNOWN_CODE ? code : sample.customer_name ?? code)
   );
 
   return { total, byBranch, byRep, byCustomer };
 }
 
-function fiscalYearStartFor(dateStr: string | null): number | null {
-  if (!dateStr) return null;
-  return fiscalYearStartOf(periodKeyFor(dateStr));
+// period_end("YYYY-MM-DD"、20日締め期間の末日)が属する会計年度を求める。
+// period_endの年月そのものがその期間のperiodKey("YYYYMM")になる
+// (例: 期間202610の期間末日は2026-10-20)。
+function fiscalYearStartFor(periodEnd: string | null): number | null {
+  if (!periodEnd) return null;
+  const [y, m] = periodEnd.split("-");
+  if (!y || !m) return null;
+  return fiscalYearStartOf(`${y}${m}`);
 }
 
-// 売上(delivery_date)・仕入(purchase_date)を20日締めルールで期(会計年度)に振り分け、
-// データが存在する期ごとに合計・拠点別・担当別・得意先別の集計を作る。新しい期が先。
-export function buildFreightSummaryByPeriod(
-  salesRows: FreightSalesRow[],
-  purchaseRows: FreightPurchaseRow[]
-): FreightSummaryByPeriod[] {
-  const salesByYear = new Map<number, FreightSalesRow[]>();
-  for (const r of salesRows) {
-    const y = fiscalYearStartFor(r.delivery_date);
+// 期(会計年度)ごとに、データが存在する期だけ合計・拠点別・担当別・得意先別の集計を作る。新しい期が先。
+export function buildFreightSummaryByPeriod(rows: FreightProfitSummaryRow[]): FreightSummaryByPeriod[] {
+  const byYear = new Map<number, FreightProfitSummaryRow[]>();
+  for (const r of rows) {
+    const y = fiscalYearStartFor(r.period_end);
     if (y === null) continue;
-    if (!salesByYear.has(y)) salesByYear.set(y, []);
-    salesByYear.get(y)!.push(r);
+    if (!byYear.has(y)) byYear.set(y, []);
+    byYear.get(y)!.push(r);
   }
 
-  const purchaseByYear = new Map<number, FreightPurchaseRow[]>();
-  for (const r of purchaseRows) {
-    const y = fiscalYearStartFor(r.purchase_date);
-    if (y === null) continue;
-    if (!purchaseByYear.has(y)) purchaseByYear.set(y, []);
-    purchaseByYear.get(y)!.push(r);
-  }
-
-  const years = Array.from(new Set([...salesByYear.keys(), ...purchaseByYear.keys()])).sort((a, b) => b - a);
+  const years = Array.from(byYear.keys()).sort((a, b) => b - a);
 
   return years.map((y) => ({
     fiscalYearStart: y,
     label: fiscalYearLabel(y),
-    summary: buildFreightSummary(salesByYear.get(y) ?? [], purchaseByYear.get(y) ?? []),
+    summary: buildFreightSummary(byYear.get(y) ?? []),
   }));
 }

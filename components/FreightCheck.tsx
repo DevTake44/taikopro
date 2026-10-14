@@ -706,13 +706,98 @@ export default function FreightCheck({
     return { rows, unresolvedPeriodCount, unresolvedSourceLabelCount };
   }, [results]);
 
+  // 2026-10-14追加(運賃 売上・仕入 伝票単位の損益): 上のfreightAggregationとは別に、
+  // 受注番号(orderNo)単位でも集計する。受注番号が判明しない行(no_mapping、orderNoが
+  // null)は、どの伝票の運賃か分からないため対象外。これをfreight_actual_order_linesに
+  // 保存することで、「運賃 売上・仕入」画面が受注番号単位で売上(sales_lines)・
+  // 仕入先運賃(purchases)と突き合わせ、伝票単位の正しい損益(売上-仕入計)を出せるようにする。
+  const freightOrderAggregation = useMemo(() => {
+    type Group = {
+      order_no: string;
+      carrier: string;
+      source_label: string;
+      period_end: string;
+      branch_code: string | null;
+      rep_code: string | null;
+      customer_code: string | null;
+      customer_name: string | null;
+      shipment_count: number;
+      matched_count: number;
+      no_freight_charge_count: number;
+      no_sales_data_count: number;
+      actual_freight: number;
+      charged_freight: number;
+      margin: number;
+      source_files: Set<string>;
+    };
+    const groups = new Map<string, Group>();
+
+    for (const r of results) {
+      if (!r.orderNo) continue; // no_mapping(受注番号不明)は対象外
+      if (!r.periodEnd || !r.sourceLabel.trim()) continue; // freightAggregationと同じ除外条件
+      const key = `${r.orderNo}__${r.carrier}__${r.sourceLabel}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          order_no: r.orderNo,
+          carrier: r.carrier,
+          source_label: r.sourceLabel,
+          period_end: r.periodEnd,
+          branch_code: r.branchCode,
+          rep_code: r.repCode,
+          customer_code: r.customerCode,
+          customer_name: r.customerName,
+          shipment_count: 0,
+          matched_count: 0,
+          no_freight_charge_count: 0,
+          no_sales_data_count: 0,
+          actual_freight: 0,
+          charged_freight: 0,
+          margin: 0,
+          source_files: new Set(),
+        };
+        groups.set(key, g);
+      }
+      g.shipment_count++;
+      g.actual_freight += r.actualFreight;
+      g.source_files.add(r.sourceFile);
+      if (r.status === "matched") {
+        g.matched_count++;
+        g.charged_freight += r.chargedFreight ?? 0;
+        g.margin += r.margin ?? 0;
+      } else if (r.status === "no_freight_charge") g.no_freight_charge_count++;
+      else if (r.status === "no_sales_data") g.no_sales_data_count++;
+    }
+
+    const rows = Array.from(groups.values()).map((g) => ({
+      order_no: g.order_no,
+      carrier: g.carrier,
+      source_label: g.source_label,
+      period_end: g.period_end,
+      branch_code: g.branch_code,
+      rep_code: g.rep_code,
+      customer_code: g.customer_code,
+      customer_name: g.customer_name,
+      shipment_count: g.shipment_count,
+      matched_count: g.matched_count,
+      no_freight_charge_count: g.no_freight_charge_count,
+      no_sales_data_count: g.no_sales_data_count,
+      actual_freight: Math.round(g.actual_freight),
+      charged_freight: Math.round(g.charged_freight),
+      margin: Math.round(g.margin),
+      source_files: Array.from(g.source_files).join(", "),
+    }));
+
+    return { rows };
+  }, [results]);
+
   async function saveFreightAggregation() {
     setFreightSaveState({ saving: true, saved: false, error: null, savedCount: null });
     try {
       const res = await fetch("/api/upload/freight-actual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: freightAggregation.rows }),
+        body: JSON.stringify({ rows: freightAggregation.rows, orderRows: freightOrderAggregation.rows }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -1205,11 +1290,13 @@ export default function FreightCheck({
                   保存中…
                 </>
               ) : (
-                "この集計をDBに保存(拠点/営業/得意先別の利益計算用)"
+                "この集計をDBに保存(拠点/営業/得意先別・受注番号別の利益計算用)"
               )}
             </button>
             <p className="cell-sub" style={{ marginTop: 6 }}>
               同じ期間×運送会社×請求元の組み合わせを再保存すると、その分だけ上書き(洗い替え)されます(他の請求元・期間のデータは残ります)。
+              受注番号単位のデータ(受注番号不明分を除く{freightOrderAggregation.rows.length.toLocaleString("ja-JP")}件)も同時に保存され、
+              「運賃 売上・仕入」画面で伝票単位の損益に使われます。
             </p>
             {freightSaveState.saved && (
               <p style={{ color: "var(--rk-good)", marginTop: 6 }}>

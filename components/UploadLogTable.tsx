@@ -10,6 +10,7 @@ const UPLOAD_TYPE_LABELS: Record<string, string> = {
   shipping_note_mapping: "送り状問合せデータ",
   stock_transfer_pending: "社内間(未納品の拠点間移動)",
   freight_actual_summary: "運賃実績集計",
+  freight_actual_order_lines: "運賃実績集計(受注番号単位)",
 };
 
 const ACTION_LABELS: Record<string, string> = {

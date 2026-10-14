@@ -1,9 +1,5 @@
 import Link from "next/link";
-import {
-  fetchFreightSalesRows,
-  fetchFreightPurchaseRows,
-  buildFreightSummaryByPeriod,
-} from "@/lib/fetchFreightSummary";
+import { fetchFreightProfitSummaryRows, buildFreightSummaryByPeriod } from "@/lib/fetchFreightSummary";
 import type { FreightGroupRow, FreightSummary } from "@/lib/fetchFreightSummary";
 
 export const dynamic = "force-dynamic";
@@ -25,29 +21,31 @@ function GroupTable({ title, rows }: { title: string; rows: FreightGroupRow[] })
           <thead>
             <tr>
               <th>名称</th>
-              <th>売上運賃</th>
-              <th>仕入運賃</th>
+              <th>運賃売上</th>
+              <th>仕入先運賃</th>
+              <th>運送会社運賃</th>
+              <th>仕入計</th>
               <th>粗利</th>
               <th>粗利率</th>
-              <th>件数(売上/仕入)</th>
+              <th>件数</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.code}>
                 <td>{r.label}</td>
-                <td>¥{r.salesAmount.toLocaleString()}</td>
-                <td>¥{r.purchaseAmount.toLocaleString()}</td>
+                <td>¥{r.freightRevenue.toLocaleString()}</td>
+                <td>¥{r.supplierCost.toLocaleString()}</td>
+                <td>¥{r.carrierCost.toLocaleString()}</td>
+                <td>¥{r.totalCost.toLocaleString()}</td>
                 <td>¥{r.grossProfit.toLocaleString()}</td>
                 <td>{formatRate(r.grossProfitRate)}</td>
-                <td>
-                  {r.salesCount.toLocaleString()} / {r.purchaseCount.toLocaleString()}
-                </td>
+                <td>{r.orderCount.toLocaleString()}</td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="cell-sub">
+                <td colSpan={8} className="cell-sub">
                   データがありません。
                 </td>
               </tr>
@@ -73,13 +71,20 @@ function PeriodSection({ label, summary }: { label: string; summary: FreightSumm
         <div style={{ padding: "0 20px 20px", display: "flex", gap: 32, flexWrap: "wrap" }}>
           <div>
             <p className="cell-sub">運賃売上合計</p>
-            <p style={{ fontSize: 20, fontWeight: 700 }}>¥{summary.total.salesAmount.toLocaleString()}</p>
-            <p className="cell-sub">{summary.total.salesCount.toLocaleString()}件</p>
+            <p style={{ fontSize: 20, fontWeight: 700 }}>¥{summary.total.freightRevenue.toLocaleString()}</p>
+            <p className="cell-sub">{summary.total.orderCount.toLocaleString()}件</p>
           </div>
           <div>
-            <p className="cell-sub">運賃仕入合計</p>
-            <p style={{ fontSize: 20, fontWeight: 700 }}>¥{summary.total.purchaseAmount.toLocaleString()}</p>
-            <p className="cell-sub">{summary.total.purchaseCount.toLocaleString()}件</p>
+            <p className="cell-sub">仕入先運賃</p>
+            <p style={{ fontSize: 20, fontWeight: 700 }}>¥{summary.total.supplierCost.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="cell-sub">運送会社運賃</p>
+            <p style={{ fontSize: 20, fontWeight: 700 }}>¥{summary.total.carrierCost.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="cell-sub">仕入計</p>
+            <p style={{ fontSize: 20, fontWeight: 700 }}>¥{summary.total.totalCost.toLocaleString()}</p>
           </div>
           <div>
             <p className="cell-sub">粗利</p>
@@ -101,15 +106,18 @@ function PeriodSection({ label, summary }: { label: string; summary: FreightSumm
 
 export default async function FreightSummaryPage() {
   try {
-    const [salesRows, purchaseRows] = await Promise.all([fetchFreightSalesRows(), fetchFreightPurchaseRows()]);
-    const periods = buildFreightSummaryByPeriod(salesRows, purchaseRows);
+    const rows = await fetchFreightProfitSummaryRows();
+    const periods = buildFreightSummaryByPeriod(rows);
 
     return (
-      <div className="wrap" style={{ maxWidth: 1000 }}>
+      <div className="wrap" style={{ maxWidth: 1100 }}>
         <header className="top" style={{ marginBottom: 20 }}>
           <div className="title">
             <h1>運賃 売上・仕入</h1>
-            <p>品番コード99(運賃)の売上・仕入を、期別に合計・拠点別・担当別・得意先別で確認します。</p>
+            <p>
+              品番コード99(運賃)の売上を、仕入先運賃(purchases)・運送会社運賃(西濃・福山などの実費)の両方と
+              受注番号(伝票)単位で突き合わせたうえで、期別に合計・拠点別・担当別・得意先別に確認します。
+            </p>
           </div>
           <Link href="/dx" className="ghost-btn-inline">
             ← 社内DXメニュー
