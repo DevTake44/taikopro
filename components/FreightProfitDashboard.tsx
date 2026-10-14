@@ -12,6 +12,9 @@ import type { FreightProfitOrderRow } from "@/app/api/freight-profit-order/route
 
 type Dim = "branch" | "rep" | "customer";
 type Metric = "revenue" | "cost" | "profit" | "margin";
+// "total"は今表示中の指標(タブ)で並べる。"sales"/"profitAmt"は表示中のタブに関係なく
+// 常に運賃売上・粗利額で並べる。
+type SortKey = "code" | "name" | "total" | "sales" | "profitAmt";
 
 const DIM_LABEL: Record<Dim, string> = { branch: "拠点別", rep: "担当別", customer: "得意先別" };
 const METRIC_TABS: [Metric, string][] = [
@@ -61,6 +64,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
   const [compareYear, setCompareYear] = useState<number | "none">("none");
   const [dim, setDim] = useState<Dim>("branch");
   const [metric, setMetric] = useState<Metric>("revenue");
+  const [sortKey, setSortKey] = useState<SortKey>("total");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filter, setFilter] = useState("");
 
@@ -117,11 +121,31 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
       r = r.filter((row) => (nameOf(dim, row.code, row.name) + row.code).toLowerCase().includes(f));
     }
     return [...r].sort((a, b) => {
-      const va = metricOfTotal(metric, a) ?? -Infinity;
-      const vb = metricOfTotal(metric, b) ?? -Infinity;
+      if (sortKey === "code") {
+        const na = Number(a.code);
+        const nb = Number(b.code);
+        const cmp =
+          Number.isFinite(na) && Number.isFinite(nb) ? na - nb : a.code.localeCompare(b.code, "ja");
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+      if (sortKey === "name") {
+        const cmp = nameOf(dim, a.code, a.name).localeCompare(nameOf(dim, b.code, b.name), "ja");
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+      const sortMetric: Metric = sortKey === "sales" ? "revenue" : sortKey === "profitAmt" ? "profit" : metric;
+      const va = metricOfTotal(sortMetric, a) ?? -Infinity;
+      const vb = metricOfTotal(sortMetric, b) ?? -Infinity;
       return sortDir === "asc" ? va - vb : vb - va;
     });
-  }, [rows, filter, dim, metric, sortDir]);
+  }, [rows, filter, dim, metric, sortKey, sortDir]);
+
+  function onSort(k: "code" | "name" | "total") {
+    if (k === sortKey) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else {
+      setSortKey(k);
+      setSortDir(k === "code" || k === "name" ? "asc" : "desc");
+    }
+  }
 
   const grandRow = useMemo(() => {
     const monthsTotal: FreightMonthCell[] = Array.from({ length: 12 }, () => ({ s: 0, p: 0, carrier: 0, supplier: 0 }));
@@ -408,12 +432,20 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
           <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
             並び順:
             <select
-              value={sortDir}
-              onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
+              value={`${sortKey}_${sortDir}`}
+              onChange={(e) => {
+                const [k, d] = e.target.value.split("_") as [SortKey, "asc" | "desc"];
+                setSortKey(k);
+                setSortDir(d);
+              }}
               style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
             >
-              <option value="desc">トータル(多い順)</option>
-              <option value="asc">トータル(少ない順)</option>
+              <option value="total_desc">トータル(表示中の指標・多い順)</option>
+              <option value="total_asc">トータル(表示中の指標・少ない順)</option>
+              <option value="sales_desc">運賃売上(多い順)</option>
+              <option value="profitAmt_desc">粗利額(多い順)</option>
+              <option value="code_asc">コード順</option>
+              <option value="name_asc">{DIM_LABEL[dim].replace("別", "")}名(あいうえお順)</option>
             </select>
           </label>
           <button className="ghost-btn" onClick={downloadCsv} disabled={filteredRows.length === 0}>
@@ -432,12 +464,18 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
             <table className="mat">
               <thead>
                 <tr>
-                  <th className="codecol">コード</th>
-                  <th className="namecol">{DIM_LABEL[dim].replace("別", "")}</th>
+                  <th className="codecol" onClick={() => onSort("code")}>
+                    コード{sortKey === "code" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                  </th>
+                  <th className="namecol" onClick={() => onSort("name")}>
+                    {DIM_LABEL[dim].replace("別", "")}{sortKey === "name" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                  </th>
                   {months.map((m) => (
                     <th key={m}>{monL(m)}</th>
                   ))}
-                  <th className="totcol">トータル</th>
+                  <th className="totcol" onClick={() => onSort("total")}>
+                    トータル{sortKey === "total" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                  </th>
                 </tr>
               </thead>
               <tbody>
