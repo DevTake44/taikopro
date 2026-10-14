@@ -9,6 +9,7 @@ import { monL } from "@/lib/format";
 import { monthsOfFiscalYear } from "@/lib/fiscal";
 import type { FreightMonthCell, FreightYearDimRow } from "@/app/api/freight-profit-matrix/route";
 import type { FreightProfitOrderRow } from "@/app/api/freight-profit-order/route";
+import type { RepBranchPair } from "@/app/api/freight-profit-rep-branches/route";
 
 type Dim = "branch" | "rep" | "customer";
 type Metric = "revenue" | "cost" | "profit" | "margin";
@@ -85,6 +86,42 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [orderTruncated, setOrderTruncated] = useState(false);
+
+  // 拠点×担当の実在する組み合わせ(担当プルダウンを選択中の拠点だけに絞り込むため)。
+  const [repBranchPairs, setRepBranchPairs] = useState<RepBranchPair[]>([]);
+  useEffect(() => {
+    fetch("/api/freight-profit-rep-branches")
+      .then((res) => res.json())
+      .then((json) => setRepBranchPairs(json.pairs ?? []))
+      .catch(() => {});
+  }, []);
+
+  // 選択中の拠点に実在する担当コードだけに絞った一覧(拠点未選択なら全担当)。
+  const repCodesForBranch = useMemo(() => {
+    if (!branchFilter) return Object.keys(REP_NAMES);
+    const set = new Set(repBranchPairs.filter((p) => p.branch_code === branchFilter).map((p) => p.rep_code));
+    return Object.keys(REP_NAMES).filter((code) => set.has(code));
+  }, [branchFilter, repBranchPairs]);
+
+  // 拠点を変更して、選択中の担当がその拠点に存在しなくなったら選択を解除する。
+  useEffect(() => {
+    if (repFilter && !repCodesForBranch.includes(repFilter)) {
+      setRepFilter("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchFilter]);
+
+  function clearFilters() {
+    setBranchFilter("");
+    setRepFilter("");
+    setCustomerFilter("");
+    setMonthFilter("");
+  }
+
+  function selectCustomerFilter(code: string | null | undefined) {
+    if (!code) return;
+    setCustomerFilter(code);
+  }
 
   const months = useMemo(() => monthsOfFiscalYear(baseYear), [baseYear]);
   // 月選択プルダウン用。period_end("YYYY-MM-DD")のリスト(表示期間の会計年度12ヶ月分)。
@@ -498,7 +535,13 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
                     </td>
                     <td style={{ textAlign: "left" }}>{branchLabel(r.branch_code)}</td>
                     <td style={{ textAlign: "left" }}>{repLabel(r.rep_code)}</td>
-                    <td style={{ textAlign: "left" }}>{r.customer_name || r.customer_code || "—"}</td>
+                    <td
+                      style={{ textAlign: "left", cursor: r.customer_code ? "pointer" : undefined }}
+                      title={r.customer_code ? "クリックで得意先検索窓に入力" : undefined}
+                      onClick={() => selectCustomerFilter(r.customer_code)}
+                    >
+                      {r.customer_name || r.customer_code || "—"}
+                    </td>
                     <td>{fmtYen(r.freight_revenue)}</td>
                     <td>{fmtYen(r.supplier_freight_cost)}</td>
                     <td>{fmtYen(r.carrier_freight_cost)}</td>
@@ -556,7 +599,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
               style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
             >
               <option value="">全担当</option>
-              {Object.keys(REP_NAMES).map((code) => (
+              {repCodesForBranch.map((code) => (
                 <option key={code} value={code}>
                   {repLabel(code)}
                 </option>
@@ -567,10 +610,10 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
             得意先で絞込:
             <input
               type="text"
-              placeholder="名前・コードで検索"
+              placeholder="名前・コードで検索(表の得意先コードクリックでも入力可)"
               value={customerFilter}
               onChange={(e) => setCustomerFilter(e.target.value)}
-              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2", minWidth: 160 }}
+              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2", minWidth: 220 }}
             />
           </label>
           <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -588,6 +631,13 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
               ))}
             </select>
           </label>
+          <button
+            className="ghost-btn"
+            onClick={clearFilters}
+            disabled={!branchFilter && !repFilter && !customerFilter && !monthFilter}
+          >
+            絞り込みをクリア
+          </button>
         </div>
         <div className="card-head" style={{ paddingTop: 0, flexWrap: "wrap", gap: 16 }}>
           <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -684,7 +734,13 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
                 )}
                 {filteredRows.map((r) => (
                   <tr key={r.code || "unknown"}>
-                    <td>{r.code || "—"}</td>
+                    <td
+                      style={dim === "customer" ? { cursor: "pointer" } : undefined}
+                      title={dim === "customer" ? "クリックで得意先検索窓に入力" : undefined}
+                      onClick={() => dim === "customer" && selectCustomerFilter(r.code)}
+                    >
+                      {r.code || "—"}
+                    </td>
                     <td>{nameOf(dim, r.code, r.name)}</td>
                     <td className="num">{fmtYen(r.total_s)}</td>
                     <td className="num">{fmtYen(r.total_supplier)}</td>
@@ -747,7 +803,14 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
                   const cmp = compareByCode.get(r.code);
                   return (
                     <tr key={r.code || "unknown"}>
-                      <td className="codecol">{r.code || "—"}</td>
+                      <td
+                        className="codecol"
+                        style={dim === "customer" ? { cursor: "pointer" } : undefined}
+                        title={dim === "customer" ? "クリックで得意先検索窓に入力" : undefined}
+                        onClick={() => dim === "customer" && selectCustomerFilter(r.code)}
+                      >
+                        {r.code || "—"}
+                      </td>
                       <td className="namecol">{nameOf(dim, r.code, r.name)}</td>
                       {r.months.map((c, i) => (
                         <Fragment key={i}>{renderCell(c, cmp?.months[i])}</Fragment>
