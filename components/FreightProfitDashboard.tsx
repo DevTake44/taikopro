@@ -84,6 +84,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
   const [orderRows, setOrderRows] = useState<FreightProfitOrderRow[] | null>(null);
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
+  const [orderTruncated, setOrderTruncated] = useState(false);
 
   const months = useMemo(() => monthsOfFiscalYear(baseYear), [baseYear]);
   // 月選択プルダウン用。period_end("YYYY-MM-DD")のリスト(表示期間の会計年度12ヶ月分)。
@@ -182,6 +183,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
     if (!q) return;
     setOrderLoading(true);
     setOrderError(null);
+    setOrderTruncated(false);
     try {
       const res = await fetch(`/api/freight-profit-order?order_no=${encodeURIComponent(q)}`);
       const json = await res.json();
@@ -196,6 +198,76 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
     } finally {
       setOrderLoading(false);
     }
+  }
+
+  // 現在の絞り込み条件(拠点・担当・得意先・月)に一致する受注の一覧を表示する。
+  // 各担当にそのまま渡せるレベルの受注明細として使うことを想定(月の指定が必須)。
+  async function listOrdersByFilter() {
+    if (!monthFilter) return;
+    setOrderLoading(true);
+    setOrderError(null);
+    setOrderQuery("");
+    try {
+      const params = new URLSearchParams({ month: monthFilter });
+      if (branchFilter) params.set("branch", branchFilter);
+      if (repFilter) params.set("rep", repFilter);
+      if (customerFilter.trim()) params.set("customer", customerFilter.trim());
+      const res = await fetch(`/api/freight-profit-order?${params.toString()}`);
+      const json = await res.json();
+      if (json.error) {
+        setOrderError(json.error);
+        setOrderRows(null);
+      } else {
+        setOrderRows(json.rows ?? []);
+        setOrderTruncated(!!json.truncated);
+      }
+    } catch (e) {
+      setOrderError(String(e));
+    } finally {
+      setOrderLoading(false);
+    }
+  }
+
+  function downloadOrderCsv() {
+    if (!orderRows || orderRows.length === 0) return;
+    const lines: string[] = [
+      ["受注番号", "月度", "拠点", "担当", "得意先コード", "得意先", "運賃売上", "仕入先運賃", "運送会社運賃", "仕入計", "粗利", "運送会社"]
+        .map(csvEscape)
+        .join(","),
+    ];
+    orderRows.forEach((r) => {
+      lines.push(
+        [
+          r.order_no,
+          r.period_end ? periodLabelFor(periodKeyFor(r.period_end)) : "",
+          branchLabel(r.branch_code),
+          repLabel(r.rep_code),
+          r.customer_code ?? "",
+          r.customer_name ?? "",
+          Math.round(r.freight_revenue),
+          Math.round(r.supplier_freight_cost),
+          Math.round(r.carrier_freight_cost),
+          Math.round(r.total_freight_cost),
+          Math.round(r.freight_profit),
+          r.carriers ?? "",
+        ]
+          .map(csvEscape)
+          .join(",")
+      );
+    });
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const periodLabel = monthFilter ? periodLabelFor(periodKeyFor(monthFilter)) : "検索結果";
+    const filterSuffix = [branchFilter && branchLabel(branchFilter), repFilter && repLabel(repFilter)]
+      .filter(Boolean)
+      .join("_");
+    a.download = `運賃_受注明細_${periodLabel}${filterSuffix ? "_" + filterSuffix : ""}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   function downloadCsv() {
@@ -362,7 +434,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
       </header>
 
       <div className="card" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginTop: 0 }}>受注番号検索</h2>
+        <h2 style={{ marginTop: 0 }}>受注明細(受注番号単位)</h2>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <input
             type="text"
@@ -373,52 +445,66 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
             style={{ padding: "6px 10px", border: "1px solid var(--rk-border)", borderRadius: 6, minWidth: 220 }}
           />
           <button className="ghost-btn" onClick={searchOrder} disabled={!orderQuery.trim() || orderLoading}>
-            {orderLoading ? "検索中…" : "検索"}
+            {orderLoading ? "検索中…" : "番号で検索"}
           </button>
+          <span className="cell-sub">または</span>
+          <button className="ghost-btn" onClick={listOrdersByFilter} disabled={!monthFilter || orderLoading}>
+            {orderLoading ? "取得中…" : "上の絞り込み条件(拠点・担当・得意先・月)で一覧表示"}
+          </button>
+          {!monthFilter && <span className="cell-sub">※一覧表示には「月で絞込」の指定が必要です</span>}
           {orderRows !== null && (
-            <span className="result-count">{orderRows.length.toLocaleString("ja-JP")}件ヒット(最大50件)</span>
+            <>
+              <span className="result-count">
+                {orderRows.length.toLocaleString("ja-JP")}件{orderTruncated ? "(上限到達・絞り込みを追加してください)" : ""}
+              </span>
+              <button className="ghost-btn" onClick={downloadOrderCsv} disabled={orderRows.length === 0}>
+                この受注明細をCSVでダウンロード
+              </button>
+            </>
           )}
         </div>
         {orderError && <p style={{ color: "var(--rk-critical)", marginTop: 8 }}>{orderError}</p>}
         {orderRows !== null && (
-          <div className="table-scroll" style={{ marginTop: 12 }}>
-            <table>
+          <div className="matwrap">
+            <table className="goaltable">
               <thead>
                 <tr>
                   <th>受注番号</th>
-                  <th>月度</th>
-                  <th>拠点</th>
-                  <th>担当</th>
-                  <th>得意先</th>
+                  <th style={{ textAlign: "left" }}>月度</th>
+                  <th style={{ textAlign: "left" }}>拠点</th>
+                  <th style={{ textAlign: "left" }}>担当</th>
+                  <th style={{ textAlign: "left" }}>得意先</th>
                   <th>運賃売上</th>
                   <th>仕入先運賃</th>
                   <th>運送会社運賃</th>
                   <th>仕入計</th>
                   <th>粗利</th>
-                  <th>運送会社</th>
+                  <th style={{ textAlign: "left" }}>運送会社</th>
                 </tr>
               </thead>
               <tbody>
                 {orderRows.length === 0 && (
                   <tr>
                     <td colSpan={11} className="empty-state">
-                      該当する受注番号がありません。
+                      該当する受注がありません。
                     </td>
                   </tr>
                 )}
                 {orderRows.map((r) => (
                   <tr key={r.order_no}>
                     <td>{r.order_no}</td>
-                    <td>{r.period_end ? periodLabelFor(periodKeyFor(r.period_end)) : "—"}</td>
-                    <td>{branchLabel(r.branch_code)}</td>
-                    <td>{repLabel(r.rep_code)}</td>
-                    <td>{r.customer_name || r.customer_code || "—"}</td>
-                    <td className="num">{fmtYen(r.freight_revenue)}</td>
-                    <td className="num">{fmtYen(r.supplier_freight_cost)}</td>
-                    <td className="num">{fmtYen(r.carrier_freight_cost)}</td>
-                    <td className="num">{fmtYen(r.total_freight_cost)}</td>
-                    <td className="num">{fmtYen(r.freight_profit)}</td>
-                    <td>{r.carriers || "—"}</td>
+                    <td style={{ textAlign: "left" }}>
+                      {r.period_end ? periodLabelFor(periodKeyFor(r.period_end)) : "—"}
+                    </td>
+                    <td style={{ textAlign: "left" }}>{branchLabel(r.branch_code)}</td>
+                    <td style={{ textAlign: "left" }}>{repLabel(r.rep_code)}</td>
+                    <td style={{ textAlign: "left" }}>{r.customer_name || r.customer_code || "—"}</td>
+                    <td>{fmtYen(r.freight_revenue)}</td>
+                    <td>{fmtYen(r.supplier_freight_cost)}</td>
+                    <td>{fmtYen(r.carrier_freight_cost)}</td>
+                    <td>{fmtYen(r.total_freight_cost)}</td>
+                    <td>{fmtYen(r.freight_profit)}</td>
+                    <td style={{ textAlign: "left" }}>{r.carriers || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -567,8 +653,8 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
           // 月で絞り込んでいる時は、12ヶ月の列が1列しか埋まらず見づらいため、
           // 単月の内訳(運賃売上・仕入先運賃・運送会社運賃・仕入計・粗利・件数)を
           // シンプルな一覧で表示する。
-          <div className="table-scroll">
-            <table>
+          <div className="matwrap">
+            <table className="goaltable">
               <thead>
                 <tr>
                   <th onClick={() => onSort("code")} style={{ cursor: "pointer" }}>
