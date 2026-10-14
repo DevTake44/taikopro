@@ -1,4 +1,5 @@
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { fiscalYearStartOf } from "@/lib/period";
 import FreightProfitDashboard from "@/components/FreightProfitDashboard";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,16 @@ export default async function FreightSummaryPage() {
     );
   }
 
-  const availablePeriods = (data ?? []).map((r) => r.period_end as string);
-  return <FreightProfitDashboard availablePeriods={availablePeriods} />;
+  // period_end("YYYY-MM-DD")から会計年度(10月始まりの西暦年)の一覧を作る(新しい年度が先)。
+  const years = Array.from(
+    new Set(
+      (data ?? []).map((r) => {
+        const periodEnd = r.period_end as string;
+        const [y, m] = periodEnd.split("-");
+        return fiscalYearStartOf(`${y}${m}`);
+      })
+    )
+  ).sort((a, b) => b - a);
+
+  return <FreightProfitDashboard availableYears={years} />;
 }

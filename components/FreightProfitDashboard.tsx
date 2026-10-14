@@ -1,25 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { branchLabel } from "@/lib/branch-names";
 import { repLabel } from "@/lib/rep-names";
-import { periodKeyFor, periodLabelFor } from "@/lib/period";
-import type { FreightProfitBreakdownRow } from "@/app/api/freight-profit-breakdown/route";
+import { periodKeyFor, periodLabelFor, fiscalYearLabel } from "@/lib/period";
+import { monL } from "@/lib/format";
+import { monthsOfFiscalYear } from "@/lib/fiscal";
+import type { FreightMonthCell, FreightYearDimRow } from "@/app/api/freight-profit-matrix/route";
 import type { FreightProfitOrderRow } from "@/app/api/freight-profit-order/route";
 
 type Dim = "branch" | "rep" | "customer";
+type Metric = "revenue" | "cost" | "profit" | "margin";
 
 const DIM_LABEL: Record<Dim, string> = { branch: "拠点別", rep: "担当別", customer: "得意先別" };
+const METRIC_TABS: [Metric, string][] = [
+  ["revenue", "運賃売上"],
+  ["cost", "仕入計"],
+  ["profit", "粗利額"],
+  ["margin", "粗利率"],
+];
 
 function fmtYen(v: number | null | undefined) {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   return `¥${Math.round(v).toLocaleString("ja-JP")}`;
 }
 
-function fmtRate(revenue: number, profit: number): string {
-  if (!revenue) return "—";
-  return `${((profit / revenue) * 100).toFixed(1)}%`;
+function jpn(v: number) {
+  return Math.round(v).toLocaleString("ja-JP");
 }
 
 function csvEscape(v: unknown): string {
@@ -27,23 +35,38 @@ function csvEscape(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function labelFor(dim: Dim, r: FreightProfitBreakdownRow): string {
-  if (dim === "branch") return branchLabel(r.branch_code);
-  if (dim === "rep") return repLabel(r.rep_code);
-  return r.customer_name || r.customer_code || "(不明)";
+function metricOfCell(metric: Metric, c: FreightMonthCell): number | null {
+  if (metric === "revenue") return c.s;
+  if (metric === "cost") return c.p;
+  if (metric === "profit") return c.s - c.p;
+  return c.s ? Math.round(((c.s - c.p) / c.s) * 1000) / 10 : null;
 }
 
-function codeFor(dim: Dim, r: FreightProfitBreakdownRow): string {
-  if (dim === "branch") return r.branch_code ?? "";
-  if (dim === "rep") return r.rep_code ?? "";
-  return r.customer_code ?? "";
+function metricOfTotal(metric: Metric, r: FreightYearDimRow): number | null {
+  if (metric === "revenue") return r.total_s;
+  if (metric === "cost") return r.total_p;
+  if (metric === "profit") return r.total_s - r.total_p;
+  return r.total_s ? Math.round(((r.total_s - r.total_p) / r.total_s) * 1000) / 10 : null;
 }
 
-export default function FreightProfitDashboard({ availablePeriods }: { availablePeriods: string[] }) {
-  // 月(period_end、20日締め)の選択。既定は最新月。
-  const [periodKey, setPeriodKey] = useState<string>(() => availablePeriods[0] ?? "");
+function nameOf(dim: Dim, code: string, name: string): string {
+  if (dim === "branch") return branchLabel(code);
+  if (dim === "rep") return repLabel(code);
+  return name || code || "(不明)";
+}
+
+export default function FreightProfitDashboard({ availableYears }: { availableYears: number[] }) {
+  const latestYear = availableYears[0];
+  const [baseYear, setBaseYear] = useState<number>(latestYear);
+  const [compareYear, setCompareYear] = useState<number | "none">("none");
   const [dim, setDim] = useState<Dim>("branch");
-  const [rows, setRows] = useState<FreightProfitBreakdownRow[]>([]);
+  const [metric, setMetric] = useState<Metric>("revenue");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [filter, setFilter] = useState("");
+
+  const [rows, setRows] = useState<FreightYearDimRow[]>([]);
+  const [compareRows, setCompareRows] = useState<FreightYearDimRow[] | null>(null);
+  const [custTotalCount, setCustTotalCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,20 +75,26 @@ export default function FreightProfitDashboard({ availablePeriods }: { available
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
 
+  const months = useMemo(() => monthsOfFiscalYear(baseYear), [baseYear]);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    const periodParam = periodKey || "all";
-    fetch(`/api/freight-profit-breakdown?period=${encodeURIComponent(periodParam)}&dim=${dim}`)
+    const params = new URLSearchParams({ year: String(baseYear), dim });
+    if (compareYear !== "none") params.set("compareYear", String(compareYear));
+    fetch(`/api/freight-profit-matrix?${params.toString()}`)
       .then((res) => res.json())
       .then((json) => {
         if (cancelled) return;
         if (json.error) {
           setError(json.error);
           setRows([]);
+          setCompareRows(null);
         } else {
           setRows(json.rows ?? []);
+          setCompareRows(json.compareRows ?? null);
+          setCustTotalCount(json.custTotalCount ?? null);
         }
       })
       .catch((e) => {
@@ -77,30 +106,39 @@ export default function FreightProfitDashboard({ availablePeriods }: { available
     return () => {
       cancelled = true;
     };
-  }, [periodKey, dim]);
+  }, [baseYear, compareYear, dim]);
 
-  const sortedRows = useMemo(() => [...rows].sort((a, b) => b.freight_revenue - a.freight_revenue), [rows]);
+  const compareByCode = useMemo(() => new Map((compareRows ?? []).map((r) => [r.code, r])), [compareRows]);
 
-  const totals = useMemo(() => {
-    return rows.reduce(
-      (acc, r) => ({
-        freight_revenue: acc.freight_revenue + r.freight_revenue,
-        supplier_freight_cost: acc.supplier_freight_cost + r.supplier_freight_cost,
-        carrier_freight_cost: acc.carrier_freight_cost + r.carrier_freight_cost,
-        total_freight_cost: acc.total_freight_cost + r.total_freight_cost,
-        freight_profit: acc.freight_profit + r.freight_profit,
-        order_count: acc.order_count + r.order_count,
-      }),
-      {
-        freight_revenue: 0,
-        supplier_freight_cost: 0,
-        carrier_freight_cost: 0,
-        total_freight_cost: 0,
-        freight_profit: 0,
-        order_count: 0,
-      }
-    );
-  }, [rows]);
+  const filteredRows = useMemo(() => {
+    let r = rows;
+    if (filter) {
+      const f = filter.toLowerCase();
+      r = r.filter((row) => (nameOf(dim, row.code, row.name) + row.code).toLowerCase().includes(f));
+    }
+    return [...r].sort((a, b) => {
+      const va = metricOfTotal(metric, a) ?? -Infinity;
+      const vb = metricOfTotal(metric, b) ?? -Infinity;
+      return sortDir === "asc" ? va - vb : vb - va;
+    });
+  }, [rows, filter, dim, metric, sortDir]);
+
+  const grandRow = useMemo(() => {
+    const monthsTotal: FreightMonthCell[] = Array.from({ length: 12 }, () => ({ s: 0, p: 0, carrier: 0, supplier: 0 }));
+    let total_s = 0;
+    let total_p = 0;
+    for (const r of filteredRows) {
+      r.months.forEach((c, i) => {
+        monthsTotal[i].s += c.s;
+        monthsTotal[i].p += c.p;
+        monthsTotal[i].carrier += c.carrier;
+        monthsTotal[i].supplier += c.supplier;
+      });
+      total_s += r.total_s;
+      total_p += r.total_p;
+    }
+    return { code: "", name: "合計", months: monthsTotal, total_s, total_p } as FreightYearDimRow;
+  }, [filteredRows]);
 
   async function searchOrder() {
     const q = orderQuery.trim();
@@ -124,25 +162,18 @@ export default function FreightProfitDashboard({ availablePeriods }: { available
   }
 
   function downloadCsv() {
-    if (sortedRows.length === 0) return;
-    const periodLabel = periodKey ? periodLabelFor(periodKeyFor(periodKey)) : "全期間";
+    if (filteredRows.length === 0) return;
+    const metricLabel = METRIC_TABS.find(([m]) => m === metric)?.[1] ?? "";
     const lines: string[] = [
-      ["コード", "名称", "運賃売上", "仕入先運賃", "運送会社運賃", "仕入計", "粗利", "粗利率", "件数"]
-        .map(csvEscape)
-        .join(","),
+      ["コード", "名称", ...months.map(monL), "トータル"].map(csvEscape).join(","),
     ];
-    sortedRows.forEach((r) => {
+    filteredRows.forEach((r) => {
       lines.push(
         [
-          codeFor(dim, r),
-          labelFor(dim, r),
-          Math.round(r.freight_revenue),
-          Math.round(r.supplier_freight_cost),
-          Math.round(r.carrier_freight_cost),
-          Math.round(r.total_freight_cost),
-          Math.round(r.freight_profit),
-          fmtRate(r.freight_revenue, r.freight_profit),
-          r.order_count,
+          r.code,
+          nameOf(dim, r.code, r.name),
+          ...r.months.map((c) => metricOfCell(metric, c) ?? ""),
+          metricOfTotal(metric, r) ?? "",
         ]
           .map(csvEscape)
           .join(",")
@@ -152,13 +183,8 @@ export default function FreightProfitDashboard({ availablePeriods }: { available
       [
         "",
         "合計",
-        Math.round(totals.freight_revenue),
-        Math.round(totals.supplier_freight_cost),
-        Math.round(totals.carrier_freight_cost),
-        Math.round(totals.total_freight_cost),
-        Math.round(totals.freight_profit),
-        fmtRate(totals.freight_revenue, totals.freight_profit),
-        totals.order_count,
+        ...grandRow.months.map((c) => metricOfCell(metric, c) ?? ""),
+        metricOfTotal(metric, grandRow) ?? "",
       ]
         .map(csvEscape)
         .join(",")
@@ -168,21 +194,79 @@ export default function FreightProfitDashboard({ availablePeriods }: { available
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `運賃売上仕入_${DIM_LABEL[dim]}_${periodLabel}.csv`;
+    a.download = `運賃売上仕入_${DIM_LABEL[dim]}_${metricLabel}_${fiscalYearLabel(baseYear)}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
 
+  function renderCell(base: FreightMonthCell, cmp: FreightMonthCell | undefined) {
+    const isPct = metric === "margin";
+    const v = metricOfCell(metric, base);
+    if (compareYear !== "none") {
+      const cv = cmp ? metricOfCell(metric, cmp) : 0;
+      if (v === null || cv === null) return <td><span className="cell-s" style={{ color: "#c8ccd4" }}>―</span></td>;
+      const d = isPct ? Math.round((v - cv) * 10) / 10 : v - cv;
+      return (
+        <td>
+          <span className={`cell-s ${d >= 0 ? "val-pos" : "val-neg"}`}>
+            {d >= 0 ? "+" : ""}
+            {isPct ? `${d}pt` : jpn(d)}
+          </span>
+        </td>
+      );
+    }
+    if (v === null) return <td><span className="cell-s" style={{ color: "#c8ccd4" }}>―</span></td>;
+    if (metric === "profit") {
+      return <td><span className={`cell-s ${v >= 0 ? "val-pos" : "val-neg"}`}>{v >= 0 ? "+" : ""}{jpn(v)}</span></td>;
+    }
+    if (isPct) {
+      const good = v >= 0;
+      return (
+        <td className={good ? "cell-good" : "cell-bad"}>
+          <span className={`cell-s ${good ? "m-good" : "m-bad"}`}>{v.toFixed(1)}%</span>
+        </td>
+      );
+    }
+    return <td><span className="cell-s">{jpn(v)}</span></td>;
+  }
+
+  function renderTotalCell(r: FreightYearDimRow) {
+    const isPct = metric === "margin";
+    const v = metricOfTotal(metric, r);
+    if (compareYear !== "none") {
+      const cmp = compareByCode.get(r.code);
+      const cv = cmp ? metricOfTotal(metric, cmp) : 0;
+      if (v === null || cv === null) return <td className="totcol"><span className="cell-s">―</span></td>;
+      const d = isPct ? Math.round((v - cv) * 10) / 10 : v - cv;
+      return (
+        <td className="totcol">
+          <span className={`cell-s ${d >= 0 ? "val-pos" : "val-neg"}`}>
+            {d >= 0 ? "+" : ""}
+            {isPct ? `${d}pt` : jpn(d)}
+          </span>
+        </td>
+      );
+    }
+    if (v === null) return <td className="totcol"><span className="cell-s">―</span></td>;
+    if (metric === "profit") {
+      return <td className="totcol"><span className={`cell-s ${v >= 0 ? "val-pos" : "val-neg"}`}>{v >= 0 ? "+" : ""}{jpn(v)}</span></td>;
+    }
+    if (isPct) {
+      return <td className="totcol"><span className={`cell-s ${v >= 0 ? "m-good" : "m-bad"}`}>{v.toFixed(1)}%</span></td>;
+    }
+    return <td className="totcol"><span className="cell-s">{jpn(v)}</span></td>;
+  }
+
   return (
-    <div className="wrap" style={{ maxWidth: 1200 }}>
+    <div className="wrap" style={{ maxWidth: 1400 }}>
       <header className="top" style={{ marginBottom: 20 }}>
         <div className="title">
           <h1>運賃 売上・仕入</h1>
           <p>
             品番コード99(運賃)の売上を、仕入先運賃(purchases)・運送会社運賃(西濃・福山などの実費)の両方と
-            受注番号(伝票)単位で突き合わせたうえで、月単位・拠点別・担当別・得意先別に確認します。
+            受注番号(伝票)単位で突き合わせたうえで、月別マトリクスで確認します。
           </p>
         </div>
         <Link href="/dx" className="ghost-btn-inline">
@@ -256,79 +340,87 @@ export default function FreightProfitDashboard({ availablePeriods }: { available
         )}
       </div>
 
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginTop: 0 }}>絞り込み</h2>
-        <div className="filter-row">
-          <div className="filter-field" style={{ gridColumn: "span 3" }}>
-            <label>月(20日締め)</label>
-            <div className="segmented">
-              <button type="button" className={periodKey === "" ? "active" : ""} onClick={() => setPeriodKey("")}>
-                全期間
+      <div className="card">
+        <div className="card-head">
+          <div className="tabs">
+            {(["branch", "rep", "customer"] as Dim[]).map((d) => (
+              <button
+                key={d}
+                className={dim === d ? "active" : ""}
+                onClick={() => {
+                  setDim(d);
+                  setFilter("");
+                }}
+              >
+                {DIM_LABEL[d]}
               </button>
-              {availablePeriods.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={periodKey === p ? "active" : ""}
-                  onClick={() => setPeriodKey(p)}
-                >
-                  {periodLabelFor(periodKeyFor(p))}
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
-          <div className="filter-field">
-            <label>表示軸</label>
-            <div className="segmented">
-              {(["branch", "rep", "customer"] as Dim[]).map((d) => (
-                <button key={d} type="button" className={dim === d ? "active" : ""} onClick={() => setDim(d)}>
-                  {DIM_LABEL[d]}
-                </button>
-              ))}
-            </div>
+          {dim === "customer" && (
+            <input
+              type="text"
+              className="search"
+              placeholder="名前・コードで検索"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+          )}
+        </div>
+        <div className="card-head" style={{ paddingTop: 0 }}>
+          <div className="tabs">
+            {METRIC_TABS.map(([m, label]) => (
+              <button key={m} className={metric === m ? "active" : ""} onClick={() => setMetric(m)}>
+                {label}
+              </button>
+            ))}
           </div>
         </div>
-        <div className="filter-actions">
-          <button className="ghost-btn" onClick={downloadCsv} disabled={sortedRows.length === 0}>
+        <div className="card-head" style={{ paddingTop: 0, flexWrap: "wrap", gap: 16 }}>
+          <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            表示期間:
+            <select
+              value={baseYear}
+              onChange={(e) => setBaseYear(Number(e.target.value))}
+              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+            >
+              {availableYears.map((y) => (
+                <option key={y} value={y}>
+                  {fiscalYearLabel(y)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            対比期間:
+            <select
+              value={compareYear}
+              onChange={(e) => setCompareYear(e.target.value === "none" ? "none" : Number(e.target.value))}
+              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+            >
+              <option value="none">対比なし</option>
+              {availableYears.map((y) => (
+                <option key={y} value={y} disabled={y === baseYear}>
+                  {fiscalYearLabel(y)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            並び順:
+            <select
+              value={sortDir}
+              onChange={(e) => setSortDir(e.target.value as "asc" | "desc")}
+              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+            >
+              <option value="desc">トータル(多い順)</option>
+              <option value="asc">トータル(少ない順)</option>
+            </select>
+          </label>
+          <button className="ghost-btn" onClick={downloadCsv} disabled={filteredRows.length === 0}>
             この{DIM_LABEL[dim]}結果をCSVでダウンロード
           </button>
-          <span className="result-count">
-            {sortedRows.length.toLocaleString("ja-JP")}件 ／ 運賃売上合計 {fmtYen(totals.freight_revenue)}
-          </span>
         </div>
-      </div>
 
-      <div className="kpi-row">
-        <div className="kpi-tile">
-          <div className="label">運賃売上</div>
-          <div className="value">{fmtYen(totals.freight_revenue)}</div>
-        </div>
-        <div className="kpi-tile">
-          <div className="label">仕入先運賃</div>
-          <div className="value">{fmtYen(totals.supplier_freight_cost)}</div>
-        </div>
-        <div className="kpi-tile">
-          <div className="label">運送会社運賃</div>
-          <div className="value">{fmtYen(totals.carrier_freight_cost)}</div>
-        </div>
-        <div className="kpi-tile">
-          <div className="label">仕入計</div>
-          <div className="value">{fmtYen(totals.total_freight_cost)}</div>
-        </div>
-        <div className="kpi-tile">
-          <div className="label">粗利</div>
-          <div className="value">{fmtYen(totals.freight_profit)}</div>
-        </div>
-        <div className="kpi-tile">
-          <div className="label">粗利率</div>
-          <div className="value">{fmtRate(totals.freight_revenue, totals.freight_profit)}</div>
-        </div>
-      </div>
-
-      <div className="card">
-        <h2 style={{ marginTop: 0 }}>
-          {DIM_LABEL[dim]}({periodKey ? periodLabelFor(periodKeyFor(periodKey)) : "全期間"})
-        </h2>
         {loading ? (
           <p className="cell-sub" style={{ padding: "0 20px 20px" }}>
             読み込み中…
@@ -336,46 +428,70 @@ export default function FreightProfitDashboard({ availablePeriods }: { available
         ) : error ? (
           <p style={{ color: "var(--rk-critical)", padding: "0 20px 20px" }}>{error}</p>
         ) : (
-          <div className="table-scroll">
-            <table>
+          <div className="matwrap">
+            <table className="mat">
               <thead>
                 <tr>
-                  <th>コード</th>
-                  <th>名称</th>
-                  <th>運賃売上</th>
-                  <th>仕入先運賃</th>
-                  <th>運送会社運賃</th>
-                  <th>仕入計</th>
-                  <th>粗利</th>
-                  <th>粗利率</th>
-                  <th>件数</th>
+                  <th className="codecol">コード</th>
+                  <th className="namecol">{DIM_LABEL[dim].replace("別", "")}</th>
+                  {months.map((m) => (
+                    <th key={m}>{monL(m)}</th>
+                  ))}
+                  <th className="totcol">トータル</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedRows.length === 0 && (
+                {filteredRows.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="empty-state">
+                    <td colSpan={15} className="empty-state">
                       この条件に一致するデータはありません。
                     </td>
                   </tr>
                 )}
-                {sortedRows.map((r) => (
-                  <tr key={codeFor(dim, r) || "unknown"}>
-                    <td>{codeFor(dim, r) || "—"}</td>
-                    <td>{labelFor(dim, r)}</td>
-                    <td className="num">{fmtYen(r.freight_revenue)}</td>
-                    <td className="num">{fmtYen(r.supplier_freight_cost)}</td>
-                    <td className="num">{fmtYen(r.carrier_freight_cost)}</td>
-                    <td className="num">{fmtYen(r.total_freight_cost)}</td>
-                    <td className="num">{fmtYen(r.freight_profit)}</td>
-                    <td>{fmtRate(r.freight_revenue, r.freight_profit)}</td>
-                    <td className="num">{r.order_count.toLocaleString("ja-JP")}</td>
-                  </tr>
-                ))}
+                {filteredRows.map((r) => {
+                  const cmp = compareByCode.get(r.code);
+                  return (
+                    <tr key={r.code || "unknown"}>
+                      <td className="codecol">{r.code || "—"}</td>
+                      <td className="namecol">{nameOf(dim, r.code, r.name)}</td>
+                      {r.months.map((c, i) => (
+                        <Fragment key={i}>{renderCell(c, cmp?.months[i])}</Fragment>
+                      ))}
+                      {renderTotalCell(r)}
+                    </tr>
+                  );
+                })}
               </tbody>
+              <tfoot className="mat-foot">
+                <tr>
+                  <td className="codecol" />
+                  <td className="namecol">合計</td>
+                  {grandRow.months.map((c, i) => {
+                    const cmpTotal = compareRows
+                      ? compareRows.reduce(
+                          (acc, r) => {
+                            acc.s += r.months[i]?.s ?? 0;
+                            acc.p += r.months[i]?.p ?? 0;
+                            acc.carrier += r.months[i]?.carrier ?? 0;
+                            acc.supplier += r.months[i]?.supplier ?? 0;
+                            return acc;
+                          },
+                          { s: 0, p: 0, carrier: 0, supplier: 0 } as FreightMonthCell
+                        )
+                      : undefined;
+                    return <Fragment key={i}>{renderCell(c, cmpTotal)}</Fragment>;
+                  })}
+                  {renderTotalCell(grandRow)}
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
+        <p style={{ fontSize: 11, color: "var(--ink-faint)", padding: "8px 20px 16px" }}>
+          {dim === "customer"
+            ? `得意先は運賃売上上位100件(全${(custTotalCount ?? 0).toLocaleString()}件)。検索で絞込。`
+            : "4つのボタンで表示を切替。対比期間を選ぶと、各セルに対比先との差額を表示します。"}
+        </p>
       </div>
     </div>
   );
