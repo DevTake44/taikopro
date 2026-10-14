@@ -127,11 +127,17 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
   // 月選択プルダウン用。period_end("YYYY-MM-DD")のリスト(表示期間の会計年度12ヶ月分)。
   const monthPeriodEnds = useMemo(() => fiscalYearPeriods(baseYear).map((k) => periodRangeFor(k).to), [baseYear]);
 
+  // 得意先トップ100の選び方を、画面の「並び順」と連動させる。これにより例えば
+  // 「粗利額の低い順」を選ぶと、運賃売上0円で仕入だけ計上されている(=運賃売上順の
+  // トップ100には出てこない)得意先も拾えるようになる。
+  const capMetric: Metric = sortKey === "sales" ? "revenue" : sortKey === "profitAmt" ? "profit" : metric;
+  const capDir: "asc" | "desc" = sortKey === "code" || sortKey === "name" ? "desc" : sortDir;
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    const params = new URLSearchParams({ year: String(baseYear), dim });
+    const params = new URLSearchParams({ year: String(baseYear), dim, capMetric, capDir });
     if (compareYear !== "none") params.set("compareYear", String(compareYear));
     if (monthFilter) params.set("month", monthFilter);
     if (branchFilter) params.set("branch", branchFilter);
@@ -160,7 +166,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
     return () => {
       cancelled = true;
     };
-  }, [baseYear, compareYear, dim, monthFilter, branchFilter, repFilter, customerFilter]);
+  }, [baseYear, compareYear, dim, monthFilter, branchFilter, repFilter, customerFilter, capMetric, capDir]);
 
   const compareByCode = useMemo(() => new Map((compareRows ?? []).map((r) => [r.code, r])), [compareRows]);
 
@@ -684,6 +690,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
               <option value="total_asc">トータル(表示中の指標・少ない順)</option>
               <option value="sales_desc">運賃売上(多い順)</option>
               <option value="profitAmt_desc">粗利額(多い順)</option>
+              <option value="profitAmt_asc">粗利額(低い順)</option>
               <option value="code_asc">コード順</option>
               <option value="name_asc">{DIM_LABEL[dim].replace("別", "")}名(あいうえお順)</option>
             </select>

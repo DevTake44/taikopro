@@ -9,6 +9,9 @@ type Dim = "branch" | "rep" | "customer";
 const VALID_DIMS = new Set(["branch", "rep", "customer"]);
 const CUSTOMER_LIMIT = 100;
 
+type CapMetric = "revenue" | "cost" | "profit" | "margin";
+const VALID_CAP_METRICS = new Set(["revenue", "cost", "profit", "margin"]);
+
 type MatrixRpcRow = {
   code: string;
   branch_code: string | null;
@@ -48,9 +51,27 @@ function labelFor(dim: Dim, r: MatrixRpcRow): string {
   return r.code || "(不明)";
 }
 
+// 得意先(上位100件に絞る対象)の並び替え基準。画面側の「並び順」選択と連動させる
+// ことで、例えば「粗利額の低い順」を選んだ時に、運賃売上0円で仕入だけ計上されている
+// (=トップ100(運賃売上順)には出てこない)得意先も拾えるようにする。
+function rankValue(metric: CapMetric, total_s: number, total_p: number): number {
+  if (metric === "revenue") return total_s;
+  if (metric === "cost") return total_p;
+  if (metric === "profit") return total_s - total_p;
+  // marginは売上0だと計算できないため、売上が無い行を「最も低い」扱いにする
+  // (運賃売上0・仕入だけの行を見つけたいケースでそのまま有効に働くため)。
+  return total_s ? (total_s - total_p) / total_s : -Infinity;
+}
+
 // columnPeriodEndsは常に会計年度の12期間(列位置合わせ用)。queryPeriodEndsは実際に
 // RPCへ渡す期間(month絞り込み時は1件だけ)。
-function buildRows(rows: MatrixRpcRow[], columnPeriodEnds: string[], dim: Dim): FreightYearDimRow[] {
+function buildRows(
+  rows: MatrixRpcRow[],
+  columnPeriodEnds: string[],
+  dim: Dim,
+  capMetric: CapMetric,
+  capDir: "asc" | "desc"
+): FreightYearDimRow[] {
   const indexByPeriod = new Map(columnPeriodEnds.map((p, i) => [p, i]));
   const map = new Map<string, FreightYearDimRow>();
   for (const r of rows) {
@@ -81,7 +102,11 @@ function buildRows(rows: MatrixRpcRow[], columnPeriodEnds: string[], dim: Dim): 
     row.total_carrier += r.carrier_freight_cost;
     row.order_count += r.order_count;
   }
-  return Array.from(map.values()).sort((a, b) => b.total_s - a.total_s);
+  return Array.from(map.values()).sort((a, b) => {
+    const va = rankValue(capMetric, a.total_s, a.total_p);
+    const vb = rankValue(capMetric, b.total_s, b.total_p);
+    return capDir === "asc" ? va - vb : vb - va;
+  });
 }
 
 async function fetchMatrix(
@@ -89,7 +114,9 @@ async function fetchMatrix(
   queryPeriodEnds: string[],
   columnPeriodEnds: string[],
   dim: Dim,
-  filters: Filters
+  filters: Filters,
+  capMetric: CapMetric,
+  capDir: "asc" | "desc"
 ): Promise<{ rows: FreightYearDimRow[]; totalCount: number }> {
   // 2026-10-14追加: p_branch_code/p_rep_code/p_customer_filterを追加した際、旧シグネチャ
   // (p_period_ends, p_dimの2引数)がDBツールのDROPハングで消せず残っているため、必ず
@@ -103,7 +130,7 @@ async function fetchMatrix(
     p_customer_filter: filters.customer,
   });
   if (error) throw new Error(error.message);
-  const built = buildRows((data ?? []) as MatrixRpcRow[], columnPeriodEnds, dim);
+  const built = buildRows((data ?? []) as MatrixRpcRow[], columnPeriodEnds, dim, capMetric, capDir);
   const totalCount = built.length;
   const limited = dim === "customer" ? built.slice(0, CUSTOMER_LIMIT) : built;
   return { rows: limited, totalCount };
@@ -120,6 +147,10 @@ export async function GET(req: NextRequest) {
     rep: searchParams.get("rep") || null,
     customer: searchParams.get("customer")?.trim() || null,
   };
+  // 得意先トップ100を選ぶ基準(画面の「並び順」と連動)。未指定ならこれまで通り運賃売上の多い順。
+  const capMetricParam = (searchParams.get("capMetric") as CapMetric | null) ?? "revenue";
+  const capMetric: CapMetric = VALID_CAP_METRICS.has(capMetricParam) ? capMetricParam : "revenue";
+  const capDir: "asc" | "desc" = searchParams.get("capDir") === "asc" ? "asc" : "desc";
 
   if (!dim || !VALID_DIMS.has(dim)) {
     return NextResponse.json({ error: "dim は branch/rep/customer のいずれかを指定してください。" }, { status: 400 });
@@ -136,7 +167,7 @@ export async function GET(req: NextRequest) {
   try {
     const fullYearPeriodEnds = periodEndsOfFiscalYear(year);
     const queryPeriodEnds = monthParam ? [monthParam] : fullYearPeriodEnds;
-    const base = await fetchMatrix(supabase, queryPeriodEnds, fullYearPeriodEnds, dim, filters);
+    const base = await fetchMatrix(supabase, queryPeriodEnds, fullYearPeriodEnds, dim, filters, capMetric, capDir);
 
     let compareRows: FreightYearDimRow[] | null = null;
     if (compareYearParam) {
@@ -147,7 +178,15 @@ export async function GET(req: NextRequest) {
         const compareQueryPeriodEnds = monthParam
           ? compareFullYearPeriodEnds.filter((p) => p.slice(5, 7) === monthParam.slice(5, 7))
           : compareFullYearPeriodEnds;
-        const compare = await fetchMatrix(supabase, compareQueryPeriodEnds, compareFullYearPeriodEnds, dim, filters);
+        const compare = await fetchMatrix(
+          supabase,
+          compareQueryPeriodEnds,
+          compareFullYearPeriodEnds,
+          dim,
+          filters,
+          capMetric,
+          capDir
+        );
         compareRows = compare.rows;
       }
     }
