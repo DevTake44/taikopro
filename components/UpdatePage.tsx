@@ -331,8 +331,8 @@ function CustomerMasterUploadBox() {
 
   return (
     <UploadBoxShell
-      title="⑤ 得意先マスタの更新(締め日・未売上受注チェック用)"
-      description="得意先マスタCSVを、そのままアップロードしてください。得意先コード・得意先名上段/下段・締日・削除フラグの列を使用します。"
+      title="⑤ 得意先マスタの更新(締め日・未売上受注チェック・見積/請求書用)"
+      description="得意先マスタCSVを、そのままアップロードしてください。得意先コード・得意先名上段/下段・締日・削除フラグ・郵便番号・住所上段/下段１/下段２の列を使用します。"
       file={file}
       setFile={setFile}
       progress={progress}

@@ -11,7 +11,12 @@ import type { BranchRepPair } from "@/app/api/quote-customer-branch-reps/route";
 
 type Kind = "quote" | "invoice";
 
-type CustomerOption = { customer_code: string; customer_name: string };
+type CustomerOption = {
+  customer_code: string;
+  customer_name: string;
+  postal_code: string | null;
+  address: string | null;
+};
 type ProductOption = { product_code: string; product_name: string; spec: string | null; primary_supplier_price: number | null };
 type SalesHistoryOption = { product_code: string; product_name: string; unit_price: number | null; qty: number | null; delivery_date: string };
 
@@ -135,6 +140,9 @@ export default function DocumentEditor({
   function selectCustomer(c: CustomerOption) {
     setCustomerCode(c.customer_code);
     setCustomerName(c.customer_name);
+    // 得意先マスタに住所があれば自動入力する(無ければ手入力のまま)。
+    if (c.postal_code) setCustomerPostalCode(c.postal_code);
+    if (c.address) setCustomerAddress(c.address);
     setCustomerResults(null);
     setCustomerQuery("");
   }
