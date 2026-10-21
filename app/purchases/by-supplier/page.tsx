@@ -1,4 +1,5 @@
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { fiscalYearStartOf } from "@/lib/period";
 import PurchaseSupplierReport from "@/components/PurchaseSupplierReport";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +21,16 @@ export default async function PurchaseBySupplierPage() {
     );
   }
 
-  // 実在する四半期末日を新しい順に一覧化する(前年同期分が無い四半期は選んでも
-  // 前期側が0円になるだけなので、特に除外はしない)。
-  const quarterEnds = Array.from(new Set((data ?? []).map((r) => r.quarter_end as string))).sort((a, b) =>
-    a < b ? 1 : -1
-  );
+  // quarter_end("YYYY-MM-DD")から会計年度(10月始まりの西暦年)の一覧を作る(新しい年度が先)。
+  const years = Array.from(
+    new Set(
+      (data ?? []).map((r) => {
+        const quarterEnd = r.quarter_end as string;
+        const [y, m] = quarterEnd.split("-");
+        return fiscalYearStartOf(`${y}${m}`);
+      })
+    )
+  ).sort((a, b) => b - a);
 
-  return <PurchaseSupplierReport quarterEnds={quarterEnds} />;
+  return <PurchaseSupplierReport years={years} />;
 }

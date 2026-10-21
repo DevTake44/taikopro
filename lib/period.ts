@@ -105,6 +105,13 @@ export function quarterLabelFor(quarterEndDate: string): string {
   return `${y}年${startMonth}-${m}月期(第${qNum}四半期)`;
 }
 
+// マトリクス表の列見出しなど、短く出したい場所向け("10-12月"など)。
+export function quarterShortLabel(quarterEndDate: string): string {
+  const m = parseInt(quarterEndDate.slice(5, 7), 10);
+  const startMonth = m === 12 ? 10 : m - 2;
+  return `${startMonth}-${m}月`;
+}
+
 // 1年前の同じ四半期の末日を返す(昨対比用)。
 export function sameQuarterLastYear(quarterEndDate: string): string {
   const prevYear = parseInt(quarterEndDate.slice(0, 4), 10) - 1;

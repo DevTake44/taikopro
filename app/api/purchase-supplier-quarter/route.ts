@@ -1,40 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
-import { sameQuarterLastYear } from "@/lib/period";
+import { fiscalYearQuarterEnds } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-export type PurchaseSupplierQuarterRow = {
+export type SupplierQuarterCell = { amount: number; line_count: number };
+export type PurchaseSupplierMatrixRow = {
   supplier_code: string;
   supplier_name: string;
-  current_amount: number;
-  prev_amount: number;
-  diff: number;
-  diff_rate: number | null;
-  line_count: number;
+  quarters: SupplierQuarterCell[]; // 4件(第1〜第4四半期)
+  total_amount: number;
+  total_line_count: number;
+  cmp: { quarters: SupplierQuarterCell[]; total_amount: number } | null; // 対比年度(選んでいなければnull)
 };
 
-// 仕入先別・四半期の仕入額(v_purchase_supplier_quarter、仕入先×四半期あたり
-// 最大800件程度)を、指定の四半期と前年同期ぶん取得し、仕入先単位にまとめて返す。
-// 検索・並び替えは件数が少ないためブラウザ側で行う。
+// 仕入先別・四半期の仕入額(v_purchase_supplier_quarter)を、指定の会計年度
+// (10月始まり、9/20決算)の4四半期ぶんまとめてマトリクス形式で返す。
+// 売上ダッシュボードの月別マトリクスと同じ考え方で、対比年度を選ぶとその年度分も
+// あわせて返す。検索・並び替えは件数が少ないためブラウザ側で行う。
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const quarterEnd = searchParams.get("quarterEnd");
-  if (!quarterEnd || !/^\d{4}-\d{2}-\d{2}$/.test(quarterEnd)) {
-    return NextResponse.json({ error: "quarterEnd(YYYY-MM-DD)を指定してください。" }, { status: 400 });
+  const yearParam = searchParams.get("year");
+  const compareYearParam = searchParams.get("compareYear");
+
+  const year = yearParam ? parseInt(yearParam, 10) : NaN;
+  if (!Number.isFinite(year)) {
+    return NextResponse.json({ error: "year(会計年度の期首西暦年)を指定してください。" }, { status: 400 });
   }
-  const prevQuarterEnd = sameQuarterLastYear(quarterEnd);
+  const compareYear = compareYearParam ? parseInt(compareYearParam, 10) : null;
+  const compareYearValid = compareYear !== null && Number.isFinite(compareYear);
+
+  const quarterEnds = fiscalYearQuarterEnds(year);
+  const compareQuarterEnds = compareYearValid ? fiscalYearQuarterEnds(compareYear as number) : null;
+  const allQuarterEnds = [...quarterEnds, ...(compareQuarterEnds ?? [])];
 
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from("v_purchase_supplier_quarter")
     .select("supplier_code, supplier_name, quarter_end, total_amount, line_count")
-    .in("quarter_end", [quarterEnd, prevQuarterEnd]);
+    .in("quarter_end", allQuarterEnds);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const map = new Map<string, PurchaseSupplierQuarterRow>();
+  const indexByQuarter = new Map(quarterEnds.map((q, i) => [q, i]));
+  const cmpIndexByQuarter = compareQuarterEnds ? new Map(compareQuarterEnds.map((q, i) => [q, i])) : null;
+
+  const map = new Map<string, PurchaseSupplierMatrixRow>();
   for (const r of data ?? []) {
     const code = r.supplier_code as string;
     let row = map.get(code);
@@ -42,28 +54,29 @@ export async function GET(req: NextRequest) {
       row = {
         supplier_code: code,
         supplier_name: (r.supplier_name as string) || code,
-        current_amount: 0,
-        prev_amount: 0,
-        diff: 0,
-        diff_rate: null,
-        line_count: 0,
+        quarters: Array.from({ length: 4 }, () => ({ amount: 0, line_count: 0 })),
+        total_amount: 0,
+        total_line_count: 0,
+        cmp: compareQuarterEnds
+          ? { quarters: Array.from({ length: 4 }, () => ({ amount: 0, line_count: 0 })), total_amount: 0 }
+          : null,
       };
       map.set(code, row);
     }
-    if (r.quarter_end === quarterEnd) {
-      row.current_amount = Number(r.total_amount);
-      row.line_count = Number(r.line_count);
-      if ((r.supplier_name as string) || null) row.supplier_name = r.supplier_name as string;
-    } else {
-      row.prev_amount = Number(r.total_amount);
+
+    const qi = indexByQuarter.get(r.quarter_end as string);
+    if (qi !== undefined) {
+      row.quarters[qi] = { amount: Number(r.total_amount), line_count: Number(r.line_count) };
+      row.total_amount += Number(r.total_amount);
+      row.total_line_count += Number(r.line_count);
+      continue;
+    }
+    const ci = cmpIndexByQuarter?.get(r.quarter_end as string);
+    if (ci !== undefined && row.cmp) {
+      row.cmp.quarters[ci] = { amount: Number(r.total_amount), line_count: Number(r.line_count) };
+      row.cmp.total_amount += Number(r.total_amount);
     }
   }
 
-  const rows = Array.from(map.values()).map((r) => ({
-    ...r,
-    diff: r.current_amount - r.prev_amount,
-    diff_rate: r.prev_amount ? (r.current_amount - r.prev_amount) / r.prev_amount : null,
-  }));
-
-  return NextResponse.json({ rows, quarterEnd, prevQuarterEnd });
+  return NextResponse.json({ rows: Array.from(map.values()), quarterEnds, compareQuarterEnds });
 }

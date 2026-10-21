@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { fiscalYearRangeFor } from "@/lib/period";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -34,32 +35,29 @@ function aggregate(
   return Array.from(map.values()).sort((a, b) => b.amount - a.amount);
 }
 
-// 特定の仕入先・四半期について、purchasesを直接絞り込んで
-// 拠点別・商品別・得意先別に集計する(1仕入先×1四半期分なので都度集計で十分高速)。
+// 特定の仕入先・会計年度について、purchasesを直接絞り込んで
+// 拠点別・商品別・得意先別に集計する(1仕入先×1年度分なので都度集計で十分高速)。
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const supplierCode = searchParams.get("supplier_code");
-  const quarterEnd = searchParams.get("quarterEnd");
-  if (!supplierCode || !quarterEnd || !/^\d{4}-\d{2}-\d{2}$/.test(quarterEnd)) {
+  const yearParam = searchParams.get("year");
+  const year = yearParam ? parseInt(yearParam, 10) : NaN;
+  if (!supplierCode || !Number.isFinite(year)) {
     return NextResponse.json(
-      { error: "supplier_code・quarterEnd(YYYY-MM-DD)を指定してください。" },
+      { error: "supplier_code・year(会計年度の期首西暦年)を指定してください。" },
       { status: 400 }
     );
   }
 
-  const end = new Date(`${quarterEnd}T00:00:00Z`);
-  const start = new Date(end);
-  start.setUTCMonth(start.getUTCMonth() - 2);
-  start.setUTCDate(start.getUTCDate() + 1);
-  const fromStr = start.toISOString().slice(0, 10);
+  const { from, to } = fiscalYearRangeFor(year);
 
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from("purchases")
     .select("location_code, product_code, product_name, customer_code, customer_name, amount")
     .eq("supplier_code", supplierCode)
-    .gte("purchase_date", fromStr)
-    .lte("purchase_date", quarterEnd);
+    .gte("purchase_date", from)
+    .lte("purchase_date", to);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
