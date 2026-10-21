@@ -134,7 +134,7 @@ export default function PurchaseSupplierReport({ years }: { years: number[] }) {
       <header className="top" style={{ marginBottom: 20 }}>
         <div className="title">
           <h1>仕入先別 仕入額 昨対比</h1>
-          <p>四半期(9/20決算)ごとの仕入先別仕入額を、仕入額・昨対額・増減率セットで確認します。</p>
+          <p>四半期(9/20決算)ごとの仕入先別仕入額を、仕入額・昨対差額・増減率セットで確認します。</p>
         </div>
         <Link href="/management" className="ghost-btn-inline">
           ← 経営管理
@@ -336,7 +336,7 @@ function SubHeaders({ hasCompare, isTotal }: { hasCompare: boolean; isTotal?: bo
       <th className={cls} style={GROUP_BORDER}>
         仕入額
       </th>
-      <th>昨対額</th>
+      <th>昨対差額</th>
       <th>増減率</th>
     </>
   );
@@ -369,7 +369,9 @@ function QuarterCells({
       <td className={cls} style={GROUP_BORDER}>
         {cell.amount ? yen(cell.amount) : "—"}
       </td>
-      <td>{cmpAmount ? yen(cmpAmount) : "—"}</td>
+      <td style={{ color: diff < 0 ? "var(--direct)" : undefined }}>
+        {diff === 0 ? "±0" : `${diff > 0 ? "+" : ""}${yen(diff)}`}
+      </td>
       <td style={{ color: rate !== null && rate < 0 ? "var(--direct)" : undefined }}>
         {rate === null ? "—" : `${rate >= 0 ? "+" : ""}${rate.toFixed(1)}%`}
       </td>
