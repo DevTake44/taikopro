@@ -20,7 +20,17 @@ type CustomerOption = {
 type ProductOption = { product_code: string; product_name: string; spec: string | null; primary_supplier_price: number | null };
 type SalesHistoryOption = { product_code: string; product_name: string; unit_price: number | null; qty: number | null; delivery_date: string };
 
-function emptyLine(source: DocumentLine["source"]): DocumentLine {
+// 仕入値・仕入先・利益率・参照売価は見積データとしては保存しない(単価を決めるための
+// 参考情報)。保存時は EditableLine から DocumentLine の項目だけを取り出して送る。
+type EditableLine = DocumentLine & {
+  cost_price?: number | null;
+  cost_supplier_name?: string | null;
+  margin_pct?: number | null;
+  reference_price?: number | null;
+  reference_customer_name?: string | null;
+};
+
+function emptyLine(source: DocumentLine["source"]): EditableLine {
   return {
     line_no: 0,
     product_code: null,
@@ -32,7 +42,28 @@ function emptyLine(source: DocumentLine["source"]): DocumentLine {
     tax_type: "10",
     note: null,
     source,
+    cost_price: null,
+    cost_supplier_name: null,
+    margin_pct: null,
+    reference_price: null,
+    reference_customer_name: null,
   };
+}
+
+function toSavedLines(lines: EditableLine[]): DocumentLine[] {
+  return lines.map((l) => ({
+    id: l.id,
+    line_no: l.line_no,
+    product_code: l.product_code,
+    product_name: l.product_name,
+    spec: l.spec,
+    qty: l.qty,
+    unit_price: l.unit_price,
+    amount: l.amount,
+    tax_type: l.tax_type,
+    note: l.note,
+    source: l.source,
+  }));
 }
 
 export default function DocumentEditor({
@@ -67,7 +98,7 @@ export default function DocumentEditor({
   );
   const [staffName, setStaffName] = useState(doc?.staff_name ?? "");
   const [note, setNote] = useState(doc?.note ?? "");
-  const [lines, setLines] = useState<DocumentLine[]>(doc?.lines ?? []);
+  const [lines, setLines] = useState<EditableLine[]>(doc?.lines ?? []);
 
   const [saving, setSaving] = useState(false);
   const [converting, setConverting] = useState(false);
@@ -159,18 +190,49 @@ export default function DocumentEditor({
     }
   }
 
-  function addLine(line: DocumentLine) {
+  function addLine(line: EditableLine) {
+    const index = lines.length;
     setLines((prev) => [...prev, { ...line, line_no: prev.length + 1, amount: line.qty * line.unit_price }]);
+    return index;
+  }
+
+  // 品番がセットされた明細行に、直近の仕入値・仕入先と他得意先への参照売価を取得して埋める。
+  // 見積は作成中の画面であり、単価を決める材料として常に見えている必要があるため、
+  // 品番が追加・変更されるたびに呼ぶ。
+  async function refreshLineMeta(index: number, productCode: string) {
+    if (!productCode.trim()) return;
+    try {
+      const params = new URLSearchParams({ product_code: productCode.trim() });
+      if (customerCode) params.set("exclude_customer_code", customerCode);
+      const res = await fetch(`/api/quote-product-cost?${params.toString()}`);
+      const json = await res.json();
+      setLines((prev) =>
+        prev.map((l, i) =>
+          i === index
+            ? {
+                ...l,
+                cost_price: json.cost_price ?? null,
+                cost_supplier_name: json.cost_supplier_name ?? null,
+                reference_price: json.reference_price ?? null,
+                reference_customer_name: json.reference_customer_name ?? null,
+              }
+            : l
+        )
+      );
+    } catch {
+      // 参考情報の取得失敗は無視する(単価入力自体は手動でできるため)。
+    }
   }
 
   function addFromProduct(p: ProductOption) {
-    addLine({
+    const index = addLine({
       ...emptyLine("product"),
       product_code: p.product_code,
       product_name: p.product_name,
       spec: p.spec,
       unit_price: 0,
     });
+    refreshLineMeta(index, p.product_code);
     setShowProductSearch(false);
     setProductQuery("");
     setProductResults(null);
@@ -194,13 +256,14 @@ export default function DocumentEditor({
   }
 
   function addFromHistory(h: SalesHistoryOption) {
-    addLine({
+    const index = addLine({
       ...emptyLine("sales_history"),
       product_code: h.product_code,
       product_name: h.product_name,
       qty: h.qty ?? 1,
       unit_price: h.unit_price ?? 0,
     });
+    if (h.product_code) refreshLineMeta(index, h.product_code);
     setShowHistorySearch(false);
     setHistoryQuery("");
     setHistoryResults(null);
@@ -210,11 +273,28 @@ export default function DocumentEditor({
     addLine(emptyLine("manual"));
   }
 
-  function updateLine(index: number, patch: Partial<DocumentLine>) {
+  function updateLine(index: number, patch: Partial<EditableLine>) {
     setLines((prev) =>
       prev.map((l, i) => {
         if (i !== index) return l;
         const next = { ...l, ...patch };
+        next.amount = next.qty * next.unit_price;
+        return next;
+      })
+    );
+  }
+
+  // 利益率を入力したら、仕入値から売値(単価)を自動計算する。
+  // 利益率 = 利益 ÷ 売値 の考え方(他ページと同じ)なので、売値 = 仕入値 ÷ (1 − 利益率/100)。
+  function updateMargin(index: number, marginStr: string) {
+    const margin = marginStr === "" ? null : Number(marginStr);
+    setLines((prev) =>
+      prev.map((l, i) => {
+        if (i !== index) return l;
+        const next: EditableLine = { ...l, margin_pct: Number.isNaN(margin) ? null : margin };
+        if (margin !== null && !Number.isNaN(margin) && margin < 100 && l.cost_price != null) {
+          next.unit_price = Math.round(l.cost_price / (1 - margin / 100));
+        }
         next.amount = next.qty * next.unit_price;
         return next;
       })
@@ -232,6 +312,7 @@ export default function DocumentEditor({
     }
     setSaving(true);
     setError(null);
+    const savedLines = toSavedLines(lines);
     const header = {
       customer_code: customerCode || null,
       customer_name: customerName.trim(),
@@ -248,7 +329,7 @@ export default function DocumentEditor({
         const res = await fetch(kind === "quote" ? "/api/quotes" : "/api/invoices", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ header, lines }),
+          body: JSON.stringify({ header, lines: savedLines }),
         });
         const json = await res.json();
         if (json.error) throw new Error(json.error);
@@ -257,7 +338,7 @@ export default function DocumentEditor({
         const res = await fetch(kind === "quote" ? `/api/quotes/${doc.id}` : `/api/invoices/${doc.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ header, lines, confirm: kind === "invoice" ? confirm : undefined }),
+          body: JSON.stringify({ header, lines: savedLines, confirm: kind === "invoice" ? confirm : undefined }),
         });
         const json = await res.json();
         if (json.error) throw new Error(json.error);
@@ -499,18 +580,32 @@ export default function DocumentEditor({
           <table className="mat">
             <thead>
               <tr>
-                <th className="namecol">品番/品名</th>
+                <th className="codecol">商品コード</th>
+                <th className="namecol">商品名</th>
                 <th>数量</th>
                 <th>単価</th>
                 <th>金額</th>
                 <th>税区分</th>
                 <th className="namecol">備考</th>
+                <th>仕入値</th>
+                <th className="namecol">仕入先</th>
+                <th>利益率</th>
+                <th>参照売価</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {lines.map((l, i) => (
                 <tr key={i}>
+                  <td className="codecol">
+                    <input
+                      type="text"
+                      value={l.product_code ?? ""}
+                      onChange={(e) => updateLine(i, { product_code: e.target.value || null })}
+                      onBlur={(e) => refreshLineMeta(i, e.target.value)}
+                      style={{ width: 90, padding: "4px 6px" }}
+                    />
+                  </td>
                   <td className="namecol">
                     <input
                       type="text"
@@ -551,6 +646,29 @@ export default function DocumentEditor({
                       style={{ width: "100%", padding: "4px 6px" }}
                     />
                   </td>
+                  <td>{l.cost_price != null ? yen(l.cost_price) : "—"}</td>
+                  <td className="namecol">{l.cost_supplier_name ?? "—"}</td>
+                  <td>
+                    <input
+                      type="number"
+                      value={l.margin_pct ?? ""}
+                      onChange={(e) => updateMargin(i, e.target.value)}
+                      placeholder="%"
+                      style={{ width: 60, padding: "4px 6px", textAlign: "right" }}
+                    />
+                  </td>
+                  <td>
+                    {l.reference_price != null ? (
+                      <span title={l.reference_customer_name ?? ""}>
+                        {yen(l.reference_price)}
+                        {l.reference_customer_name && (
+                          <span className="cell-sub"> ({l.reference_customer_name})</span>
+                        )}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td>
                     <button type="button" onClick={() => removeLine(i)}>
                       ×
@@ -560,7 +678,7 @@ export default function DocumentEditor({
               ))}
               {lines.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="cell-sub" style={{ padding: 16 }}>
+                  <td colSpan={12} className="cell-sub" style={{ padding: 16 }}>
                     明細がありません。上のボタンから追加してください。
                   </td>
                 </tr>
