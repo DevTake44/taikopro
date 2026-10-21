@@ -51,6 +51,14 @@ export async function POST() {
       );
     }
 
+    const { error: purchaseSupplierError } = await supabase.rpc("refresh_purchase_supplier_views");
+    if (purchaseSupplierError) {
+      return NextResponse.json(
+        { error: `仕入先別 仕入額の更新に失敗しました: ${purchaseSupplierError.message}` },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ success: true, refreshed: true });
   } catch (e) {
     return NextResponse.json(
