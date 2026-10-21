@@ -8,7 +8,11 @@ import { branchNameOnly } from "@/lib/branch-names";
 import type { PurchaseSupplierMatrixRow, SupplierQuarterCell } from "@/app/api/purchase-supplier-quarter/route";
 import type { PurchaseBreakdownRow } from "@/app/api/purchase-supplier-detail/route";
 
-type SortKey = "code" | "name" | "total";
+type SortKey = "code" | "name" | "total" | "diff";
+
+function diffValue(row: PurchaseSupplierMatrixRow): number {
+  return row.total_amount - (row.cmp?.total_amount ?? 0);
+}
 
 export default function PurchaseSupplierReport({ years }: { years: number[] }) {
   // yearsは期首の西暦年(新しい順)
@@ -81,6 +85,9 @@ export default function PurchaseSupplierReport({ years }: { years: number[] }) {
       if (sortKey === "name") {
         return sortDir === "asc" ? a.supplier_name.localeCompare(b.supplier_name, "ja") : b.supplier_name.localeCompare(a.supplier_name, "ja");
       }
+      if (sortKey === "diff") {
+        return sortDir === "asc" ? diffValue(a) - diffValue(b) : diffValue(b) - diffValue(a);
+      }
       return sortDir === "asc" ? a.total_amount - b.total_amount : b.total_amount - a.total_amount;
     });
   }, [rows, query, sortKey, sortDir]);
@@ -89,7 +96,7 @@ export default function PurchaseSupplierReport({ years }: { years: number[] }) {
     if (k === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(k);
-      setSortDir(k === "total" ? "desc" : "asc");
+      setSortDir(k === "name" || k === "code" ? "asc" : "desc");
     }
   }
 
@@ -174,6 +181,8 @@ export default function PurchaseSupplierReport({ years }: { years: number[] }) {
             >
               <option value="total_desc">トータル仕入額(多い順)</option>
               <option value="total_asc">トータル仕入額(少ない順)</option>
+              <option value="diff_desc">昨対差額(増加が多い順)</option>
+              <option value="diff_asc">昨対差額(減少が多い順)</option>
               <option value="code_asc">仕入先コード順</option>
               <option value="name_asc">仕入先名(あいうえお順)</option>
             </select>
