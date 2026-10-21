@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { yen, jpn } from "@/lib/format";
 import { fiscalYearLabel, quarterShortLabel } from "@/lib/period";
@@ -214,11 +214,11 @@ export default function PurchaseSupplierReport({ years }: { years: number[] }) {
                     仕入先名{sortArrow("name")}
                   </th>
                   {quarterEnds.map((q) => (
-                    <th key={q} colSpan={hasCompare ? 3 : 1}>
+                    <th key={q} colSpan={hasCompare ? 3 : 1} style={GROUP_BORDER}>
                       {quarterShortLabel(q)}
                     </th>
                   ))}
-                  <th className="totcol" colSpan={hasCompare ? 3 : 1} onClick={() => onSort("total")}>
+                  <th className="totcol" colSpan={hasCompare ? 3 : 1} onClick={() => onSort("total")} style={GROUP_BORDER}>
                     トータル{sortArrow("total")}
                   </th>
                 </tr>
@@ -307,12 +307,19 @@ export default function PurchaseSupplierReport({ years }: { years: number[] }) {
   );
 }
 
+// 四半期ブロック(・トータルブロック)の境目を区切る縦線。既存の月別マトリクスの
+// トータル列と同じ考え方(ブロックの先頭セルだけに左罫線を引く)を、各四半期の
+// 先頭(仕入額)セルにも適用し、12列+トータルが壁のように見えないようにする。
+const GROUP_BORDER: CSSProperties = { borderLeft: "2px solid var(--line)" };
+
 function SubHeaders({ hasCompare, isTotal }: { hasCompare: boolean; isTotal?: boolean }) {
   const cls = isTotal ? "totcol" : undefined;
-  if (!hasCompare) return <th className={cls}>仕入額</th>;
+  if (!hasCompare) return <th className={cls} style={GROUP_BORDER}>仕入額</th>;
   return (
     <>
-      <th className={cls}>仕入額</th>
+      <th className={cls} style={GROUP_BORDER}>
+        仕入額
+      </th>
       <th>昨対額</th>
       <th>増減率</th>
     </>
@@ -332,14 +339,20 @@ function QuarterCells({
 }) {
   const cls = isTotal ? "totcol" : undefined;
   if (!hasCompare) {
-    return <td className={cls}>{cell.amount ? yen(cell.amount) : "—"}</td>;
+    return (
+      <td className={cls} style={GROUP_BORDER}>
+        {cell.amount ? yen(cell.amount) : "—"}
+      </td>
+    );
   }
   const cmpAmount = cmp?.amount ?? 0;
   const diff = cell.amount - cmpAmount;
   const rate = cmpAmount ? (diff / cmpAmount) * 100 : null;
   return (
     <>
-      <td className={cls}>{cell.amount ? yen(cell.amount) : "—"}</td>
+      <td className={cls} style={GROUP_BORDER}>
+        {cell.amount ? yen(cell.amount) : "—"}
+      </td>
       <td>{cmpAmount ? yen(cmpAmount) : "—"}</td>
       <td style={{ color: rate !== null && rate < 0 ? "var(--direct)" : undefined }}>
         {rate === null ? "—" : `${rate >= 0 ? "+" : ""}${rate.toFixed(1)}%`}
