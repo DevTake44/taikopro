@@ -218,18 +218,18 @@ export default function DocumentEditor({
       const res = await fetch(`/api/quote-product-cost?${params.toString()}`);
       const json = await res.json();
       setLines((prev) =>
-        prev.map((l, i) =>
-          i === index
-            ? {
-                ...l,
-                ...(applyCost
-                  ? { cost_price: json.cost_price ?? null, cost_supplier_name: json.cost_supplier_name ?? null }
-                  : {}),
-                reference_price: json.reference_price ?? null,
-                reference_customer_name: json.reference_customer_name ?? null,
-              }
-            : l
-        )
+        prev.map((l, i) => {
+          if (i !== index) return l;
+          const costPrice: number | null = applyCost ? json.cost_price ?? null : l.cost_price ?? null;
+          const margin = computeMarginPct(costPrice, l.unit_price);
+          return {
+            ...l,
+            ...(applyCost ? { cost_price: costPrice, cost_supplier_name: json.cost_supplier_name ?? null } : {}),
+            ...(margin !== null ? { margin_pct: margin } : {}),
+            reference_price: json.reference_price ?? null,
+            reference_customer_name: json.reference_customer_name ?? null,
+          };
+        })
       );
     } catch {
       // 参考情報の取得失敗は無視する(単価入力自体は手動でできるため)。
@@ -268,14 +268,16 @@ export default function DocumentEditor({
   }
 
   function addFromHistory(h: SalesHistoryOption) {
+    const unitPrice = h.unit_price ?? 0;
     const index = addLine({
       ...emptyLine("sales_history"),
       product_code: h.product_code,
       product_name: h.product_name,
       qty: h.qty ?? 1,
-      unit_price: h.unit_price ?? 0,
+      unit_price: unitPrice,
       cost_price: h.cost_price,
       cost_supplier_name: h.cost_supplier_name,
+      margin_pct: computeMarginPct(h.cost_price, unitPrice),
     });
     // 仕入値・仕入先はこの行自体の実績値を使うので上書きしない。参照売価(他得意先)だけ取得する。
     if (h.product_code) refreshLineMeta(index, h.product_code, false);
@@ -299,8 +301,14 @@ export default function DocumentEditor({
     );
   }
 
+  // 利益率 = (売値 − 仕入値) ÷ 売値 の考え方(他ページと同じ「利益 ÷ 売上」)。
+  function computeMarginPct(costPrice: number | null | undefined, unitPrice: number): number | null {
+    if (costPrice == null || unitPrice <= 0) return null;
+    return Math.round(((unitPrice - costPrice) / unitPrice) * 1000) / 10;
+  }
+
   // 利益率を入力したら、仕入値から売値(単価)を自動計算する。
-  // 利益率 = 利益 ÷ 売値 の考え方(他ページと同じ)なので、売値 = 仕入値 ÷ (1 − 利益率/100)。
+  // 売値 = 仕入値 ÷ (1 − 利益率/100)。
   function updateMargin(index: number, marginStr: string) {
     const margin = marginStr === "" ? null : Number(marginStr);
     setLines((prev) =>
@@ -310,6 +318,21 @@ export default function DocumentEditor({
         if (margin !== null && !Number.isNaN(margin) && margin < 100 && l.cost_price != null) {
           next.unit_price = Math.round(l.cost_price / (1 - margin / 100));
         }
+        next.amount = next.qty * next.unit_price;
+        return next;
+      })
+    );
+  }
+
+  // 単価を直接入力したら、仕入値から利益率を逆算して表示する(利益率⇄単価の双方向計算)。
+  function updateUnitPrice(index: number, priceStr: string) {
+    const price = Number(priceStr);
+    setLines((prev) =>
+      prev.map((l, i) => {
+        if (i !== index) return l;
+        const next: EditableLine = { ...l, unit_price: Number.isNaN(price) ? 0 : price };
+        const margin = computeMarginPct(next.cost_price, next.unit_price);
+        if (margin !== null) next.margin_pct = margin;
         next.amount = next.qty * next.unit_price;
         return next;
       })
@@ -641,7 +664,7 @@ export default function DocumentEditor({
                     <input
                       type="number"
                       value={l.unit_price}
-                      onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) })}
+                      onChange={(e) => updateUnitPrice(i, e.target.value)}
                       style={{ width: 90, padding: "4px 6px", textAlign: "right" }}
                     />
                   </td>
