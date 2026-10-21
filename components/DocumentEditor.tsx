@@ -18,7 +18,15 @@ type CustomerOption = {
   address: string | null;
 };
 type ProductOption = { product_code: string; product_name: string; spec: string | null; primary_supplier_price: number | null };
-type SalesHistoryOption = { product_code: string; product_name: string; unit_price: number | null; qty: number | null; delivery_date: string };
+type SalesHistoryOption = {
+  product_code: string;
+  product_name: string;
+  unit_price: number | null;
+  cost_price: number | null;
+  cost_supplier_name: string | null;
+  qty: number | null;
+  delivery_date: string;
+};
 
 // 仕入値・仕入先・利益率・参照売価は見積データとしては保存しない(単価を決めるための
 // 参考情報)。保存時は EditableLine から DocumentLine の項目だけを取り出して送る。
@@ -199,7 +207,10 @@ export default function DocumentEditor({
   // 品番がセットされた明細行に、直近の仕入値・仕入先と他得意先への参照売価を取得して埋める。
   // 見積は作成中の画面であり、単価を決める材料として常に見えている必要があるため、
   // 品番が追加・変更されるたびに呼ぶ。
-  async function refreshLineMeta(index: number, productCode: string) {
+  // applyCost=falseの場合は参照売価のみ更新する(過去売上から追加した行は、その行自体に
+  // 記録済みの仕入値・仕入先(assumed_cost/supplier_name)の方が、品番だけを頼りにした
+  // purchases検索より正確なため上書きしない)。
+  async function refreshLineMeta(index: number, productCode: string, applyCost = true) {
     if (!productCode.trim()) return;
     try {
       const params = new URLSearchParams({ product_code: productCode.trim() });
@@ -211,8 +222,9 @@ export default function DocumentEditor({
           i === index
             ? {
                 ...l,
-                cost_price: json.cost_price ?? null,
-                cost_supplier_name: json.cost_supplier_name ?? null,
+                ...(applyCost
+                  ? { cost_price: json.cost_price ?? null, cost_supplier_name: json.cost_supplier_name ?? null }
+                  : {}),
                 reference_price: json.reference_price ?? null,
                 reference_customer_name: json.reference_customer_name ?? null,
               }
@@ -262,8 +274,11 @@ export default function DocumentEditor({
       product_name: h.product_name,
       qty: h.qty ?? 1,
       unit_price: h.unit_price ?? 0,
+      cost_price: h.cost_price,
+      cost_supplier_name: h.cost_supplier_name,
     });
-    if (h.product_code) refreshLineMeta(index, h.product_code);
+    // 仕入値・仕入先はこの行自体の実績値を使うので上書きしない。参照売価(他得意先)だけ取得する。
+    if (h.product_code) refreshLineMeta(index, h.product_code, false);
     setShowHistorySearch(false);
     setHistoryQuery("");
     setHistoryResults(null);
