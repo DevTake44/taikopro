@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
+import { fetchAllPagesConcurrent } from "@/lib/fetchPaged";
 
 export const dynamic = "force-dynamic";
 
@@ -24,13 +25,16 @@ export async function GET(req: NextRequest) {
   // 拠点・担当での絞り込みがある場合は、対応表から該当する得意先コードを先に求める。
   let allowedCodes: Set<string> | null = null;
   if (branch || rep) {
-    let mapQuery = supabase.from("v_customer_branch_rep_map").select("customer_code");
-    if (branch) mapQuery = mapQuery.eq("branch_code", branch);
-    if (rep) mapQuery = mapQuery.eq("rep_code", rep);
-    const { data: mapRows, error: mapError } = await mapQuery.limit(2000);
-    if (mapError) return NextResponse.json({ error: mapError.message }, { status: 500 });
+    // v_customer_branch_rep_mapは拠点によって1000行を超えるため、
+    // Data APIの1000行上限に引っかからないようページングして全件取得する。
+    const mapRows = await fetchAllPagesConcurrent<{ customer_code: string }>((from, to) => {
+      let q = supabase.from("v_customer_branch_rep_map").select("customer_code").range(from, to);
+      if (branch) q = q.eq("branch_code", branch);
+      if (rep) q = q.eq("rep_code", rep);
+      return q;
+    });
 
-    allowedCodes = new Set((mapRows ?? []).map((r) => r.customer_code as string));
+    allowedCodes = new Set(mapRows.map((r) => r.customer_code));
     if (allowedCodes.size === 0) return NextResponse.json({ rows: [] });
 
     if (!query) {

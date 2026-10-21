@@ -9,16 +9,15 @@ export type BranchRepPair = { branch_code: string; rep_code: string | null };
 // 対応表(実績ベース)。
 export async function GET() {
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase.from("v_customer_branch_rep_map").select("branch_code, rep_code");
+  // v_customer_branch_rep_map(得意先単位、5000行超)を直接selectすると
+  // Data APIの1000行上限に引っかかり拠点が一部しか返らなくなるため、
+  // 重複排除済みの軽量ビューを使う。
+  const { data, error } = await supabase.from("v_customer_branch_rep_pairs").select("branch_code, rep_code");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const seen = new Set<string>();
-  const pairs: BranchRepPair[] = [];
-  for (const r of data ?? []) {
-    const key = `${r.branch_code}::${r.rep_code ?? ""}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    pairs.push({ branch_code: r.branch_code as string, rep_code: r.rep_code as string | null });
-  }
+  const pairs: BranchRepPair[] = (data ?? []).map((r) => ({
+    branch_code: r.branch_code as string,
+    rep_code: r.rep_code as string | null,
+  }));
   return NextResponse.json({ pairs });
 }
