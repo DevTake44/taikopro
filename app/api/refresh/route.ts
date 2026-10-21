@@ -59,6 +59,14 @@ export async function POST() {
       );
     }
 
+    const { error: customerBranchRepError } = await supabase.rpc("refresh_customer_branch_rep_map");
+    if (customerBranchRepError) {
+      return NextResponse.json(
+        { error: `拠点・担当別の得意先対応表の更新に失敗しました: ${customerBranchRepError.message}` },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ success: true, refreshed: true });
   } catch (e) {
     return NextResponse.json(

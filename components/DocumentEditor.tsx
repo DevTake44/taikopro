@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { yen } from "@/lib/format";
 import { calcTotals, type DocumentLine, type DocumentWithLines, type TaxType } from "@/lib/quoteTypes";
+import { BRANCH_NAMES } from "@/lib/branch-names";
+import { REP_NAMES } from "@/lib/rep-names";
+import type { BranchRepPair } from "@/app/api/quote-customer-branch-reps/route";
 
 type Kind = "quote" | "invoice";
 
@@ -66,10 +69,32 @@ export default function DocumentEditor({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 得意先検索
+  // 得意先検索(拠点・担当で絞り込み)
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<CustomerOption[] | null>(null);
   const [customerSearching, setCustomerSearching] = useState(false);
+  const [branchFilter, setBranchFilter] = useState("");
+  const [repFilter, setRepFilter] = useState("");
+  const [branchRepPairs, setBranchRepPairs] = useState<BranchRepPair[]>([]);
+
+  useEffect(() => {
+    fetch("/api/quote-customer-branch-reps")
+      .then((r) => r.json())
+      .then((json) => setBranchRepPairs(json.pairs ?? []))
+      .catch(() => {});
+  }, []);
+
+  const branchCodes = useMemo(
+    () => Array.from(new Set(branchRepPairs.map((p) => p.branch_code))).sort(),
+    [branchRepPairs]
+  );
+  const repCodesForBranch = useMemo(() => {
+    const codes = branchRepPairs
+      .filter((p) => (branchFilter ? p.branch_code === branchFilter : true))
+      .map((p) => p.rep_code)
+      .filter((c): c is string => !!c);
+    return Array.from(new Set(codes)).sort();
+  }, [branchRepPairs, branchFilter]);
 
   // 商品検索(明細追加)
   const [productQuery, setProductQuery] = useState("");
@@ -85,11 +110,21 @@ export default function DocumentEditor({
 
   const totals = useMemo(() => calcTotals(lines), [lines]);
 
+  function onBranchFilterChange(v: string) {
+    setBranchFilter(v);
+    // 拠点を変えたら、担当が新しい拠点に存在しない値のままにならないようリセットする。
+    setRepFilter("");
+  }
+
   async function searchCustomer() {
-    if (!customerQuery.trim()) return;
+    if (!customerQuery.trim() && !branchFilter && !repFilter) return;
     setCustomerSearching(true);
     try {
-      const res = await fetch(`/api/quote-customer-search?query=${encodeURIComponent(customerQuery.trim())}`);
+      const params = new URLSearchParams();
+      if (customerQuery.trim()) params.set("query", customerQuery.trim());
+      if (branchFilter) params.set("branch", branchFilter);
+      if (repFilter) params.set("rep", repFilter);
+      const res = await fetch(`/api/quote-customer-search?${params.toString()}`);
       const json = await res.json();
       setCustomerResults(json.rows ?? []);
     } finally {
@@ -277,10 +312,28 @@ export default function DocumentEditor({
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
           <div>
             <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>得意先</label>
+            <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+              <select value={branchFilter} onChange={(e) => onBranchFilterChange(e.target.value)} style={{ flex: 1 }}>
+                <option value="">拠点(すべて)</option>
+                {branchCodes.map((code) => (
+                  <option key={code} value={code}>
+                    {BRANCH_NAMES[code] ?? code}
+                  </option>
+                ))}
+              </select>
+              <select value={repFilter} onChange={(e) => setRepFilter(e.target.value)} style={{ flex: 1 }}>
+                <option value="">担当(すべて)</option>
+                {repCodesForBranch.map((code) => (
+                  <option key={code} value={code}>
+                    {REP_NAMES[code] ?? code}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div style={{ display: "flex", gap: 6 }}>
               <input
                 type="text"
-                placeholder="得意先コード・得意先名で検索"
+                placeholder="得意先コード・得意先名で検索(拠点/担当のみでも一覧表示できます)"
                 value={customerQuery}
                 onChange={(e) => setCustomerQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && searchCustomer()}
