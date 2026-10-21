@@ -28,14 +28,17 @@ type SalesHistoryOption = {
   delivery_date: string;
 };
 
+type ReferenceOption = { customer_code: string; customer_name: string; unit_price: number; delivery_date: string };
+
 // 仕入値・仕入先・利益率・参照売価は見積データとしては保存しない(単価を決めるための
 // 参考情報)。保存時は EditableLine から DocumentLine の項目だけを取り出して送る。
 type EditableLine = DocumentLine & {
   cost_price?: number | null;
   cost_supplier_name?: string | null;
   margin_pct?: number | null;
-  reference_price?: number | null;
-  reference_customer_name?: string | null;
+  // 参照売価: 販売実績のある得意先の中から選べるようにする(先頭=直近)。
+  referenceOptions?: ReferenceOption[];
+  selectedReferenceCode?: string | null;
 };
 
 function emptyLine(source: DocumentLine["source"]): EditableLine {
@@ -53,8 +56,8 @@ function emptyLine(source: DocumentLine["source"]): EditableLine {
     cost_price: null,
     cost_supplier_name: null,
     margin_pct: null,
-    reference_price: null,
-    reference_customer_name: null,
+    referenceOptions: [],
+    selectedReferenceCode: null,
   };
 }
 
@@ -217,6 +220,7 @@ export default function DocumentEditor({
       if (customerCode) params.set("exclude_customer_code", customerCode);
       const res = await fetch(`/api/quote-product-cost?${params.toString()}`);
       const json = await res.json();
+      const options: ReferenceOption[] = json.reference_options ?? [];
       setLines((prev) =>
         prev.map((l, i) => {
           if (i !== index) return l;
@@ -226,14 +230,34 @@ export default function DocumentEditor({
             ...l,
             ...(applyCost ? { cost_price: costPrice, cost_supplier_name: json.cost_supplier_name ?? null } : {}),
             ...(margin !== null ? { margin_pct: margin } : {}),
-            reference_price: json.reference_price ?? null,
-            reference_customer_name: json.reference_customer_name ?? null,
+            referenceOptions: options,
+            selectedReferenceCode: options[0]?.customer_code ?? null,
           };
         })
       );
     } catch {
       // 参考情報の取得失敗は無視する(単価入力自体は手動でできるため)。
     }
+  }
+
+  function selectReferenceOption(index: number, customerCode: string) {
+    setLines((prev) => prev.map((l, i) => (i === index ? { ...l, selectedReferenceCode: customerCode } : l)));
+  }
+
+  // 選んだ参照売価をこの行の単価に反映する(利益率も連動して再計算)。
+  function applyReferencePrice(index: number) {
+    setLines((prev) =>
+      prev.map((l, i) => {
+        if (i !== index) return l;
+        const option = l.referenceOptions?.find((o) => o.customer_code === l.selectedReferenceCode);
+        if (!option) return l;
+        const next: EditableLine = { ...l, unit_price: option.unit_price };
+        const margin = computeMarginPct(next.cost_price, next.unit_price);
+        if (margin !== null) next.margin_pct = margin;
+        next.amount = next.qty * next.unit_price;
+        return next;
+      })
+    );
   }
 
   function addFromProduct(p: ProductOption) {
@@ -624,96 +648,110 @@ export default function DocumentEditor({
                 <th>単価</th>
                 <th>金額</th>
                 <th>税区分</th>
-                <th className="namecol">備考</th>
+                <th>備考</th>
                 <th>仕入値</th>
-                <th className="namecol">仕入先</th>
+                <th>仕入先</th>
                 <th>利益率</th>
-                <th>参照売価</th>
+                <th>参照売価(得意先選択可)</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {lines.map((l, i) => (
-                <tr key={i}>
-                  <td className="codecol">
-                    <input
-                      type="text"
-                      value={l.product_code ?? ""}
-                      onChange={(e) => updateLine(i, { product_code: e.target.value || null })}
-                      onBlur={(e) => refreshLineMeta(i, e.target.value)}
-                      style={{ width: 90, padding: "4px 6px" }}
-                    />
-                  </td>
-                  <td className="namecol">
-                    <input
-                      type="text"
-                      value={l.product_name}
-                      onChange={(e) => updateLine(i, { product_name: e.target.value })}
-                      style={{ width: "100%", padding: "4px 6px" }}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={l.qty}
-                      onChange={(e) => updateLine(i, { qty: Number(e.target.value) })}
-                      style={{ width: 70, padding: "4px 6px", textAlign: "right" }}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={l.unit_price}
-                      onChange={(e) => updateUnitPrice(i, e.target.value)}
-                      style={{ width: 90, padding: "4px 6px", textAlign: "right" }}
-                    />
-                  </td>
-                  <td>{yen(l.amount)}</td>
-                  <td>
-                    <select value={l.tax_type} onChange={(e) => updateLine(i, { tax_type: e.target.value as TaxType })}>
-                      <option value="10">10%</option>
-                      <option value="8">8%(軽減)</option>
-                      <option value="0">非課税</option>
-                    </select>
-                  </td>
-                  <td className="namecol">
-                    <input
-                      type="text"
-                      value={l.note ?? ""}
-                      onChange={(e) => updateLine(i, { note: e.target.value || null })}
-                      style={{ width: "100%", padding: "4px 6px" }}
-                    />
-                  </td>
-                  <td>{l.cost_price != null ? yen(l.cost_price) : "—"}</td>
-                  <td className="namecol">{l.cost_supplier_name ?? "—"}</td>
-                  <td>
-                    <input
-                      type="number"
-                      value={l.margin_pct ?? ""}
-                      onChange={(e) => updateMargin(i, e.target.value)}
-                      placeholder="%"
-                      style={{ width: 60, padding: "4px 6px", textAlign: "right" }}
-                    />
-                  </td>
-                  <td>
-                    {l.reference_price != null ? (
-                      <span title={l.reference_customer_name ?? ""}>
-                        {yen(l.reference_price)}
-                        {l.reference_customer_name && (
-                          <span className="cell-sub"> ({l.reference_customer_name})</span>
-                        )}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td>
-                    <button type="button" onClick={() => removeLine(i)}>
-                      ×
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {lines.map((l, i) => {
+                const options = l.referenceOptions ?? [];
+                const selected = options.find((o) => o.customer_code === l.selectedReferenceCode) ?? options[0];
+                return (
+                  <tr key={i}>
+                    <td className="codecol">
+                      <input
+                        type="text"
+                        value={l.product_code ?? ""}
+                        onChange={(e) => updateLine(i, { product_code: e.target.value || null })}
+                        onBlur={(e) => refreshLineMeta(i, e.target.value)}
+                        style={{ width: 90, padding: "4px 6px" }}
+                      />
+                    </td>
+                    <td className="namecol">
+                      <input
+                        type="text"
+                        value={l.product_name}
+                        onChange={(e) => updateLine(i, { product_name: e.target.value })}
+                        style={{ width: "100%", minWidth: 260, padding: "4px 6px" }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        value={l.qty}
+                        onChange={(e) => updateLine(i, { qty: Number(e.target.value) })}
+                        style={{ width: 70, padding: "4px 6px", textAlign: "right" }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        value={l.unit_price}
+                        onChange={(e) => updateUnitPrice(i, e.target.value)}
+                        style={{ width: 90, padding: "4px 6px", textAlign: "right" }}
+                      />
+                    </td>
+                    <td>{yen(l.amount)}</td>
+                    <td>
+                      <select value={l.tax_type} onChange={(e) => updateLine(i, { tax_type: e.target.value as TaxType })}>
+                        <option value="10">10%</option>
+                        <option value="8">8%(軽減)</option>
+                        <option value="0">非課税</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        value={l.note ?? ""}
+                        onChange={(e) => updateLine(i, { note: e.target.value || null })}
+                        style={{ width: 120, padding: "4px 6px" }}
+                      />
+                    </td>
+                    <td>{l.cost_price != null ? yen(l.cost_price) : "—"}</td>
+                    <td style={{ minWidth: 110 }}>{l.cost_supplier_name ?? "—"}</td>
+                    <td>
+                      <input
+                        type="number"
+                        value={l.margin_pct ?? ""}
+                        onChange={(e) => updateMargin(i, e.target.value)}
+                        placeholder="%"
+                        style={{ width: 60, padding: "4px 6px", textAlign: "right" }}
+                      />
+                    </td>
+                    <td style={{ minWidth: 220 }}>
+                      {options.length > 0 ? (
+                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          <select
+                            value={selected?.customer_code ?? ""}
+                            onChange={(e) => selectReferenceOption(i, e.target.value)}
+                            style={{ flex: 1, fontSize: 12, padding: "3px 4px" }}
+                          >
+                            {options.map((o) => (
+                              <option key={o.customer_code} value={o.customer_code}>
+                                {o.customer_name} ¥{o.unit_price}({o.delivery_date})
+                              </option>
+                            ))}
+                          </select>
+                          <button type="button" onClick={() => applyReferencePrice(i)} title="この価格を単価に反映">
+                            →単価
+                          </button>
+                        </div>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>
+                      <button type="button" onClick={() => removeLine(i)}>
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
               {lines.length === 0 && (
                 <tr>
                   <td colSpan={12} className="cell-sub" style={{ padding: 16 }}>

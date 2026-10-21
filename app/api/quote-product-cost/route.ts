@@ -24,9 +24,7 @@ export async function GET(req: NextRequest) {
     cost_price: null,
     cost_supplier_name: null,
     cost_date: null,
-    reference_price: null,
-    reference_customer_name: null,
-    reference_date: null,
+    reference_options: [] as { customer_code: string; customer_name: string; unit_price: number; delivery_date: string }[],
   };
   if (NON_PRODUCT_CODES.has(productCode)) return NextResponse.json(empty);
 
@@ -40,12 +38,14 @@ export async function GET(req: NextRequest) {
       .order("purchase_date", { ascending: false })
       .limit(1),
     (() => {
+      // 得意先ごとに選べるよう、販売実績のある得意先を直近順に複数件取得する
+      // (同じ得意先の重複は後でJS側で最新1件に絞る)。
       let q = supabase
         .from("sales_lines")
-        .select("customer_name, sell_price, delivery_date")
+        .select("customer_code, customer_name, sell_price, delivery_date")
         .eq("item_code", productCode)
         .order("delivery_date", { ascending: false })
-        .limit(1);
+        .limit(200);
       if (excludeCustomerCode) q = q.neq("customer_code", excludeCustomerCode);
       return q;
     })(),
@@ -78,14 +78,25 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const ref = refQuery.data?.[0] ?? null;
+  const seenCustomers = new Set<string>();
+  const referenceOptions: { customer_code: string; customer_name: string; unit_price: number; delivery_date: string }[] = [];
+  for (const r of refQuery.data ?? []) {
+    const code = r.customer_code as string;
+    if (seenCustomers.has(code)) continue;
+    seenCustomers.add(code);
+    referenceOptions.push({
+      customer_code: code,
+      customer_name: r.customer_name as string,
+      unit_price: r.sell_price as number,
+      delivery_date: r.delivery_date as string,
+    });
+    if (referenceOptions.length >= 20) break;
+  }
 
   return NextResponse.json({
     cost_price: costPrice,
     cost_supplier_name: costSupplierName,
     cost_date: costDate,
-    reference_price: ref?.sell_price ?? null,
-    reference_customer_name: ref?.customer_name ?? null,
-    reference_date: ref?.delivery_date ?? null,
+    reference_options: referenceOptions,
   });
 }
