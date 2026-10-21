@@ -24,6 +24,11 @@ const SALES_APP_LINKS: MenuLink[] = [
     title: "会議室予約",
     description: "東京の会議室の週間予約状況を確認し、予約・変更・削除ができます。",
   },
+  {
+    href: "/sales-app/quotes",
+    title: "見積書・請求書作成",
+    description: "得意先マスタ・商品マスタ・過去の売上明細から選んで見積書を作成し、そのまま請求書に転用できます。",
+  },
 ];
 
 export default function SalesAppMenuPage() {
