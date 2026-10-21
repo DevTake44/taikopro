@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { fiscalYearRangeFor } from "@/lib/period";
+import { fetchAllPagesConcurrent } from "@/lib/fetchPaged";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export type PurchaseBreakdownRow = { code: string; name: string; amount: number; line_count: number };
 
@@ -36,7 +37,10 @@ function aggregate(
 }
 
 // 特定の仕入先・会計年度について、purchasesを直接絞り込んで
-// 拠点別・商品別・得意先別に集計する(1仕入先×1年度分なので都度集計で十分高速)。
+// 拠点別・商品別・得意先別に集計する(1仕入先×1年度分に絞られるので都度集計で
+// 十分高速)。ただし仕入先によっては1年で数万件(最大手は6万件超)になるため、
+// Data APIのデフォルト上限(1,000件)で切り捨てられないようページングして
+// 全件取得する(マトリクス側と同じ原因で見つかった不具合)。
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const supplierCode = searchParams.get("supplier_code");
@@ -52,16 +56,21 @@ export async function GET(req: NextRequest) {
   const { from, to } = fiscalYearRangeFor(year);
 
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("purchases")
-    .select("location_code, product_code, product_name, customer_code, customer_name, amount")
-    .eq("supplier_code", supplierCode)
-    .gte("purchase_date", from)
-    .lte("purchase_date", to);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const rows = (data ?? []) as PurchaseRow[];
+  let rows: PurchaseRow[];
+  try {
+    rows = await fetchAllPagesConcurrent<PurchaseRow>((rangeFrom, rangeTo) =>
+      supabase
+        .from("purchases")
+        .select("location_code, product_code, product_name, customer_code, customer_name, amount")
+        .eq("supplier_code", supplierCode)
+        .gte("purchase_date", from)
+        .lte("purchase_date", to)
+        .order("id", { ascending: true })
+        .range(rangeFrom, rangeTo)
+    );
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
 
   return NextResponse.json({
     byLocation: aggregate(
