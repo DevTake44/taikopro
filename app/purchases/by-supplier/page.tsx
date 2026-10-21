@@ -8,7 +8,7 @@ export const maxDuration = 30;
 export default async function PurchaseBySupplierPage() {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
-    .from("v_purchase_supplier_quarter")
+    .from("v_purchase_supplier_quarter_periods")
     .select("quarter_end")
     .order("quarter_end", { ascending: false });
 
