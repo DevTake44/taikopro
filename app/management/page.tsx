@@ -24,6 +24,11 @@ const MANAGEMENT_LINKS: MenuLink[] = [
     title: "売上利益",
     description: "受注番号単位の売上・原価・利益を、得意先・物件・担当などで切り替えて確認します。",
   },
+  {
+    href: "/purchases/by-supplier",
+    title: "仕入先別 仕入額 昨対比",
+    description: "四半期(9/20決算)ごとの仕入先別仕入額を前年同期と比較します。仕入先を選ぶと拠点別・商品別・得意先別の内訳も見られます。",
+  },
 ];
 
 export default function ManagementMenuPage() {

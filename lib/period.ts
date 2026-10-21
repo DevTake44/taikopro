@@ -78,3 +78,35 @@ export function fiscalYearRangeFor(startCalYear: number): { from: string; to: st
 export function fiscalYearLabel(startCalYear: number): string {
   return `${startCalYear}年10月期(${startCalYear}/10〜${startCalYear + 1}/9)`;
 }
+
+// 四半期(10-12月/1-3月/4-6月/7-9月、20日締め)関連のヘルパー。
+// 決算期の4四半期は、FISCAL_START_MONTHが10のため暦の四半期(1-3,4-6,7-9,10-12月)と
+// たまたま完全に一致する(DB側のマテリアライズドビューもdate_trunc('quarter', ...)を使用)。
+
+// 決算期(期首の西暦年)に属する4つの四半期末日("YYYY-MM-DD")を、期首側から順に返す。
+export function fiscalYearQuarterEnds(startCalYear: number): string[] {
+  const periods = fiscalYearPeriods(startCalYear);
+  return [0, 1, 2, 3].map((q) => periodRangeFor(periods[q * 3 + 2]).to);
+}
+
+const QUARTER_NUMBER_BY_END_MONTH: Record<number, number> = { 12: 1, 3: 2, 6: 3, 9: 4 };
+
+// 四半期末日("YYYY-MM-DD")から、決算期内の四半期番号(1〜4)を返す。
+export function quarterNumberFor(quarterEndDate: string): number {
+  const m = parseInt(quarterEndDate.slice(5, 7), 10);
+  return QUARTER_NUMBER_BY_END_MONTH[m] ?? 0;
+}
+
+export function quarterLabelFor(quarterEndDate: string): string {
+  const y = quarterEndDate.slice(0, 4);
+  const m = parseInt(quarterEndDate.slice(5, 7), 10);
+  const startMonth = m === 12 ? 10 : m - 2;
+  const qNum = quarterNumberFor(quarterEndDate);
+  return `${y}年${startMonth}-${m}月期(第${qNum}四半期)`;
+}
+
+// 1年前の同じ四半期の末日を返す(昨対比用)。
+export function sameQuarterLastYear(quarterEndDate: string): string {
+  const prevYear = parseInt(quarterEndDate.slice(0, 4), 10) - 1;
+  return `${prevYear}${quarterEndDate.slice(4)}`;
+}
