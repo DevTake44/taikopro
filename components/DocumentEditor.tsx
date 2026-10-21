@@ -379,12 +379,12 @@ export default function DocumentEditor({
               onChange={(e) => setCustomerPostalCode(e.target.value)}
               style={{ width: "100%", padding: "6px 10px", marginBottom: 4 }}
             />
-            <input
-              type="text"
-              placeholder="住所"
+            <textarea
+              placeholder="住所(マスタと異なる届け先・請求先の場合は書き換えてください。2行目以降はEnterで改行できます)"
               value={customerAddress ?? ""}
               onChange={(e) => setCustomerAddress(e.target.value)}
-              style={{ width: "100%", padding: "6px 10px" }}
+              rows={2}
+              style={{ width: "100%", padding: "6px 10px", resize: "vertical", fontFamily: "inherit" }}
             />
           </div>
 

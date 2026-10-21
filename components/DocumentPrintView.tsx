@@ -31,7 +31,7 @@ export default function DocumentPrintView({
         <div>
           <div style={{ fontSize: 14, marginBottom: 6 }}>
             {doc.customer_postal_code && <div>〒{doc.customer_postal_code}</div>}
-            {doc.customer_address && <div>{doc.customer_address}</div>}
+            {doc.customer_address && <div style={{ whiteSpace: "pre-wrap" }}>{doc.customer_address}</div>}
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, borderBottom: "1px solid #333", paddingBottom: 4, minWidth: 260 }}>
             {doc.customer_name} 御中
