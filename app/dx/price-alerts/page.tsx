@@ -45,8 +45,8 @@ export default async function PriceAlertsPage() {
       <div className="rk">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <h1>値上げ検知ダッシュボード</h1>
-          <Link href="/dx" className="ghost-btn" style={{ textDecoration: "none" }}>
-            ← 社内DXメニュー
+          <Link href="/sales-app" className="ghost-btn" style={{ textDecoration: "none" }}>
+            ← 営業アプリ
           </Link>
         </div>
         <div className="card">

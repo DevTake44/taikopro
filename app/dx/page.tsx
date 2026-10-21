@@ -10,19 +10,9 @@ type ToolLink = {
 
 const TOOLS: ToolLink[] = [
   {
-    href: "/dx/purchase-lookup",
-    title: "仕入価格検索",
-    description: "品番・品名から、仕入先ごとの最新価格や仕入実績の履歴を検索します。",
-  },
-  {
     href: "/dx/stock",
     title: "不動在庫チェック",
     description: "在庫仕入(拠点90・91)の内訳と、出荷実績との突き合わせによる不動在庫候補を確認します。",
-  },
-  {
-    href: "/dx/price-alerts",
-    title: "値上げ検知ダッシュボード",
-    description: "仕入・売上データから値上げの兆候を検知して一覧表示します。",
   },
   {
     href: "/dx/internal-transfer",
@@ -65,14 +55,14 @@ const TOOLS: ToolLink[] = [
     description: "運送会社の請求データと得意先への運賃請求額を突き合わせ、運賃利益を確認します。",
   },
   {
+    href: "/dx/freight-summary",
+    title: "運賃 売上・仕入",
+    description: "品番コード99(運賃)の売上・仕入を、合計・拠点別・担当別・得意先別に確認します。",
+  },
+  {
     href: "/dx/upload",
     title: "データ更新",
     description: "各画面のもとになる売上・仕入・商品マスタ・仕入先マスタのCSVをアップロードして反映します。",
-  },
-  {
-    href: "/dx/room-reservation",
-    title: "会議室予約",
-    description: "東京の会議室の週間予約状況を確認し、予約・変更・削除ができます。",
   },
   {
     href: "/dx/detail-check",

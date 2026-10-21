@@ -32,14 +32,37 @@ type FreightActualSummaryInsertRow = {
   source_files: string | null;
 };
 
+// 2026-10-14追加: 受注番号単位の実費運賃(freight_actual_order_lines)。
+// 「運賃 売上・仕入」画面で、売上(sales_lines)・仕入先運賃(purchases)と受注番号で
+// 突き合わせ、伝票単位の損益を出すために使う。
+type FreightActualOrderInsertRow = {
+  order_no: string;
+  carrier: string;
+  source_label: string;
+  period_end: string;
+  branch_code: string | null;
+  rep_code: string | null;
+  customer_code: string | null;
+  customer_name: string | null;
+  shipment_count: number;
+  matched_count: number;
+  no_freight_charge_count: number;
+  no_sales_data_count: number;
+  actual_freight: number;
+  charged_freight: number;
+  margin: number;
+  source_files: string | null;
+};
+
 export async function POST(req: NextRequest) {
-  let body: { rows?: FreightActualSummaryInsertRow[] };
+  let body: { rows?: FreightActualSummaryInsertRow[]; orderRows?: FreightActualOrderInsertRow[] };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "リクエストの形式が不正です(JSONではありません)。" }, { status: 400 });
   }
   const rows = body.rows;
+  const orderRows = body.orderRows ?? [];
   if (!Array.isArray(rows)) {
     return NextResponse.json({ error: "rows が配列ではありません。" }, { status: 400 });
   }
@@ -49,6 +72,15 @@ export async function POST(req: NextRequest) {
   if (rows.length > MAX_ROWS) {
     return NextResponse.json(
       { error: `対象行数が想定より多すぎます(${rows.length}件 > 上限${MAX_ROWS}件)。` },
+      { status: 400 }
+    );
+  }
+  if (!Array.isArray(orderRows)) {
+    return NextResponse.json({ error: "orderRows が配列ではありません。" }, { status: 400 });
+  }
+  if (orderRows.length > MAX_ROWS * 10) {
+    return NextResponse.json(
+      { error: `受注番号単位の対象行数が想定より多すぎます(${orderRows.length}件)。` },
       { status: 400 }
     );
   }
@@ -66,17 +98,33 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+  for (const r of orderRows) {
+    if (!r.order_no) {
+      return NextResponse.json({ error: `order_no が空の行があります: ${JSON.stringify(r)}` }, { status: 400 });
+    }
+    if (!r.period_end || !/^\d{4}-\d{2}-\d{2}$/.test(r.period_end)) {
+      return NextResponse.json({ error: `period_end の形式が不正な受注番号行があります: ${JSON.stringify(r)}` }, { status: 400 });
+    }
+    if (!r.carrier || !r.source_label) {
+      return NextResponse.json({ error: `carrier/source_label が空の受注番号行があります: ${JSON.stringify(r)}` }, { status: 400 });
+    }
+  }
 
   const supabase = getSupabaseServerClient();
 
   // 対象となる (period_end, carrier, source_label) の組み合わせを洗い出し、それぞれ既存行を削除する。
+  // freight_actual_summary・freight_actual_order_lines の両方とも、このキーで洗い替えする
+  // (rowsとorderRowsは同じ運賃照合結果から作っているため、組み合わせは同じになるはず)。
   const SEP = "\x01";
-  const targetTriples = Array.from(new Set(rows.map((r) => `${r.period_end}${SEP}${r.carrier}${SEP}${r.source_label}`))).map(
-    (k) => {
-      const [period_end, carrier, source_label] = k.split(SEP);
-      return { period_end, carrier, source_label };
-    }
-  );
+  const targetTriples = Array.from(
+    new Set([
+      ...rows.map((r) => `${r.period_end}${SEP}${r.carrier}${SEP}${r.source_label}`),
+      ...orderRows.map((r) => `${r.period_end}${SEP}${r.carrier}${SEP}${r.source_label}`),
+    ])
+  ).map((k) => {
+    const [period_end, carrier, source_label] = k.split(SEP);
+    return { period_end, carrier, source_label };
+  });
 
   for (const { period_end, carrier, source_label } of targetTriples) {
     const { error: deleteError } = await supabase
@@ -89,6 +137,16 @@ export async function POST(req: NextRequest) {
       await logUpload({ uploadType: "freight_actual_summary", action: "cleanup", success: false, errorMessage: deleteError.message });
       return NextResponse.json({ error: `既存データの削除に失敗しました: ${deleteError.message}` }, { status: 500 });
     }
+    const { error: deleteOrderError } = await supabase
+      .from("freight_actual_order_lines")
+      .delete()
+      .eq("period_end", period_end)
+      .eq("carrier", carrier)
+      .eq("source_label", source_label);
+    if (deleteOrderError) {
+      await logUpload({ uploadType: "freight_actual_order_lines", action: "cleanup", success: false, errorMessage: deleteOrderError.message });
+      return NextResponse.json({ error: `既存データ(受注番号単位)の削除に失敗しました: ${deleteOrderError.message}` }, { status: 500 });
+    }
   }
 
   const nowIso = new Date().toISOString();
@@ -99,7 +157,22 @@ export async function POST(req: NextRequest) {
     await logUpload({ uploadType: "freight_actual_summary", rowCount: rows.length, success: false, errorMessage: insertError.message });
     return NextResponse.json({ error: `保存に失敗しました: ${insertError.message}` }, { status: 500 });
   }
-
   await logUpload({ uploadType: "freight_actual_summary", rowCount: rows.length, success: true });
-  return NextResponse.json({ inserted: rows.length, periods: targetTriples.length });
+
+  if (orderRows.length > 0) {
+    const orderPayload = orderRows.map((r) => ({ ...r, created_at: nowIso, updated_at: nowIso }));
+    const { error: insertOrderError } = await supabase.from("freight_actual_order_lines").insert(orderPayload);
+    if (insertOrderError) {
+      await logUpload({
+        uploadType: "freight_actual_order_lines",
+        rowCount: orderRows.length,
+        success: false,
+        errorMessage: insertOrderError.message,
+      });
+      return NextResponse.json({ error: `保存に失敗しました(受注番号単位): ${insertOrderError.message}` }, { status: 500 });
+    }
+    await logUpload({ uploadType: "freight_actual_order_lines", rowCount: orderRows.length, success: true });
+  }
+
+  return NextResponse.json({ inserted: rows.length, insertedOrderRows: orderRows.length, periods: targetTriples.length });
 }

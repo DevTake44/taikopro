@@ -173,8 +173,8 @@ export default function RoomReservationCalendar() {
           <Link href="/dx/room-reservation/history" className="ghost-btn" style={{ textDecoration: "none" }}>
             履歴
           </Link>
-          <Link href="/dx" className="ghost-btn" style={{ textDecoration: "none" }}>
-            ← 社内DXメニュー
+          <Link href="/sales-app" className="ghost-btn" style={{ textDecoration: "none" }}>
+            ← 営業アプリ
           </Link>
         </div>
       </div>
