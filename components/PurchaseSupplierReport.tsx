@@ -12,17 +12,19 @@ type SortKey = "code" | "name" | "total";
 
 export default function PurchaseSupplierReport({ years }: { years: number[] }) {
   // yearsは期首の西暦年(新しい順)
-  const [baseYear, setBaseYear] = useState<number>(years[0] ?? new Date().getFullYear());
+  const [baseYear, setBaseYearState] = useState<number>(years[0] ?? new Date().getFullYear());
   const [compareYear, setCompareYear] = useState<number | "none">(
     years.includes(baseYear - 1) ? baseYear - 1 : "none"
   );
 
-  // 表示年度を変えたら、対比年度も自動的に「その前年」へ追従させる
-  // (前年のデータがあれば)。ユーザーが手動で別の年度を選んだ場合はそのまま尊重する。
-  useEffect(() => {
-    setCompareYear(years.includes(baseYear - 1) ? baseYear - 1 : "none");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseYear]);
+  // 表示年度を変える時は、対比年度(前年、無ければ対比なし)も同じイベント内で
+  // 一緒に更新する。以前は別のuseEffectで後追いしていたため、表示年度だけが
+  // 変わり対比年度が古い値(=新しい表示年度と同じ値になることもある)のまま
+  // 一瞬問い合わせが飛び、対比が出ないことがあった。
+  function setBaseYear(y: number) {
+    setBaseYearState(y);
+    setCompareYear(years.includes(y - 1) ? y - 1 : "none");
+  }
 
   const [rows, setRows] = useState<PurchaseSupplierMatrixRow[]>([]);
   const [quarterEnds, setQuarterEnds] = useState<string[]>([]);
@@ -203,9 +205,9 @@ export default function PurchaseSupplierReport({ years }: { years: number[] }) {
               {filteredSorted.length.toLocaleString("ja-JP")}件 / 全{rows.length.toLocaleString("ja-JP")}件
             </span>
           </div>
-          <div className="matwrap">
+          <div className="matwrap" style={{ maxHeight: "70vh", overflowY: "auto" }}>
             <table className="mat">
-              <thead>
+              <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
                 <tr>
                   <th className="codecol" rowSpan={2} onClick={() => onSort("code")}>
                     仕入先コード{sortArrow("code")}
@@ -214,11 +216,16 @@ export default function PurchaseSupplierReport({ years }: { years: number[] }) {
                     仕入先名{sortArrow("name")}
                   </th>
                   {quarterEnds.map((q) => (
-                    <th key={q} colSpan={hasCompare ? 3 : 1} style={GROUP_BORDER}>
+                    <th key={q} colSpan={hasCompare ? 3 : 1} style={{ ...GROUP_BORDER, textAlign: "center" }}>
                       {quarterShortLabel(q)}
                     </th>
                   ))}
-                  <th className="totcol" colSpan={hasCompare ? 3 : 1} onClick={() => onSort("total")} style={GROUP_BORDER}>
+                  <th
+                    className="totcol"
+                    colSpan={hasCompare ? 3 : 1}
+                    onClick={() => onSort("total")}
+                    style={{ ...GROUP_BORDER, textAlign: "center" }}
+                  >
                     トータル{sortArrow("total")}
                   </th>
                 </tr>
