@@ -94,7 +94,7 @@ export default function DocumentPrintView({
         </tbody>
       </table>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+      <div className="totals-block" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
         <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 280 }}>
           <tbody>
             <tr>
@@ -121,16 +121,27 @@ export default function DocumentPrintView({
         </table>
       </div>
 
-      {doc.note && (
-        <div style={{ fontSize: 12, marginBottom: 10 }}>
-          <div style={{ fontWeight: 700, marginBottom: 2 }}>備考</div>
-          <div style={{ whiteSpace: "pre-wrap" }}>{doc.note}</div>
-        </div>
-      )}
+      <div className="footer-block">
+        {doc.note && (
+          <div style={{ fontSize: 12, marginBottom: 10 }}>
+            <div style={{ fontWeight: 700, marginBottom: 2 }}>備考</div>
+            <div style={{ whiteSpace: "pre-wrap" }}>{doc.note}</div>
+          </div>
+        )}
 
-      {doc.staff_name && <div style={{ fontSize: 12, textAlign: "right" }}>担当: {doc.staff_name}</div>}
+        {doc.staff_name && <div style={{ fontSize: 12, textAlign: "right" }}>担当: {doc.staff_name}</div>}
+      </div>
 
       <style jsx global>{`
+        /* A4(210mm×297mm)に固定する。画面プレビューもA4の縦横比・余白で表示し、
+           印刷時の見た目とズレないようにする。
+           明細が1ページに収まらない場合は、表ヘッダーを各ページで繰り返し表示し
+           (thead; display:table-header-groupは主要ブラウザでページをまたいだ印刷時に
+           自動で各ページの先頭に再掲される)、行の途中でページが割れないようにする。 */
+        @page {
+          size: A4;
+          margin: 15mm;
+        }
         @media print {
           .no-print {
             display: none !important;
@@ -138,14 +149,36 @@ export default function DocumentPrintView({
           body {
             background: #fff !important;
           }
+          .print-page {
+            width: auto;
+            min-height: 0;
+            margin: 0;
+            padding: 0;
+            box-shadow: none;
+          }
         }
         .print-page {
-          max-width: 800px;
+          width: 210mm;
+          min-height: 297mm;
           margin: 20px auto;
-          padding: 24px;
+          padding: 15mm;
           background: #fff;
           font-family: sans-serif;
           color: #222;
+          box-sizing: border-box;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+        }
+        .print-page table thead {
+          display: table-header-group;
+        }
+        .print-page table tr {
+          page-break-inside: avoid;
+          break-inside: avoid;
+        }
+        .print-page .totals-block,
+        .print-page .footer-block {
+          page-break-inside: avoid;
+          break-inside: avoid;
         }
       `}</style>
     </div>
