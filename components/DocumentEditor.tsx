@@ -321,7 +321,9 @@ export default function DocumentEditor({
   }
 
   function addManualLine() {
-    addLine(emptyLine("manual"));
+    // 自由入力は諸口(通常税率)扱いが多いため、商品コードは77700を初期値にしておく
+    // (仕入実績が無い前提のため、仕入値・仕入先は手入力で埋める)。
+    addLine({ ...emptyLine("manual"), product_code: "77700" });
   }
 
   function updateLine(index: number, patch: Partial<EditableLine>) {
@@ -758,8 +760,22 @@ export default function DocumentEditor({
                         style={{ width: "100%", padding: "4px 6px", boxSizing: "border-box" }}
                       />
                     </td>
-                    <td>{l.cost_price != null ? yen(l.cost_price) : "—"}</td>
-                    <td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{l.cost_supplier_name ?? "—"}</td>
+                    <td>
+                      <input
+                        type="number"
+                        value={l.cost_price ?? ""}
+                        onChange={(e) => updateLine(i, { cost_price: e.target.value === "" ? null : Number(e.target.value) })}
+                        style={{ width: "100%", padding: "4px 6px", textAlign: "right", boxSizing: "border-box" }}
+                      />
+                    </td>
+                    <td style={{ whiteSpace: "normal" }}>
+                      <input
+                        type="text"
+                        value={l.cost_supplier_name ?? ""}
+                        onChange={(e) => updateLine(i, { cost_supplier_name: e.target.value || null })}
+                        style={{ width: "100%", padding: "4px 6px", boxSizing: "border-box" }}
+                      />
+                    </td>
                     <td>
                       <input
                         type="number"
