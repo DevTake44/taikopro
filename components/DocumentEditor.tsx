@@ -623,15 +623,15 @@ export default function DocumentEditor({
             <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
               <button
                 type="button"
+                className={`btn-sm${historyScope === "customer" ? " btn-primary" : ""}`}
                 onClick={() => setHistoryScope("customer")}
-                style={historyScope === "customer" ? { fontWeight: 700, textDecoration: "underline" } : undefined}
               >
                 この得意先のみ
               </button>
               <button
                 type="button"
+                className={`btn-sm${historyScope === "all" ? " btn-primary" : ""}`}
                 onClick={() => setHistoryScope("all")}
-                style={historyScope === "all" ? { fontWeight: 700, textDecoration: "underline" } : undefined}
               >
                 他の得意先も含める
               </button>
@@ -702,20 +702,21 @@ export default function DocumentEditor({
                     <td className="codecol">
                       <input
                         type="text"
+                        className="cell-input"
                         value={l.product_code ?? ""}
                         onChange={(e) => updateLine(i, { product_code: e.target.value || null })}
                         onBlur={(e) => refreshLineMeta(i, e.target.value)}
-                        style={{ width: "100%", padding: "4px 6px", boxSizing: "border-box" }}
+                        style={{ width: "100%", boxSizing: "border-box" }}
                       />
                     </td>
                     <td className="namecol" style={{ whiteSpace: "normal" }}>
                       <textarea
+                        className="cell-input"
                         value={l.product_name}
                         onChange={(e) => updateLine(i, { product_name: e.target.value })}
                         rows={2}
                         style={{
                           width: "100%",
-                          padding: "4px 6px",
                           resize: "vertical",
                           fontFamily: "inherit",
                           fontSize: "inherit",
@@ -727,22 +728,25 @@ export default function DocumentEditor({
                     <td>
                       <input
                         type="number"
+                        className="cell-input"
                         value={l.qty}
                         onChange={(e) => updateLine(i, { qty: Number(e.target.value) })}
-                        style={{ width: "100%", padding: "4px 6px", textAlign: "right", boxSizing: "border-box" }}
+                        style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
                       />
                     </td>
                     <td>
                       <input
                         type="number"
+                        className="cell-input"
                         value={l.unit_price}
                         onChange={(e) => updateUnitPrice(i, e.target.value)}
-                        style={{ width: "100%", padding: "4px 6px", textAlign: "right", boxSizing: "border-box" }}
+                        style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
                       />
                     </td>
                     <td>{yen(l.amount)}</td>
                     <td>
                       <select
+                        className="cell-input"
                         value={l.tax_type}
                         onChange={(e) => updateLine(i, { tax_type: e.target.value as TaxType })}
                         style={{ width: "100%" }}
@@ -755,43 +759,48 @@ export default function DocumentEditor({
                     <td style={{ whiteSpace: "normal" }}>
                       <input
                         type="text"
+                        className="cell-input"
                         value={l.note ?? ""}
                         onChange={(e) => updateLine(i, { note: e.target.value || null })}
-                        style={{ width: "100%", padding: "4px 6px", boxSizing: "border-box" }}
+                        style={{ width: "100%", boxSizing: "border-box" }}
                       />
                     </td>
                     <td>
                       <input
                         type="number"
+                        className="cell-input"
                         value={l.cost_price ?? ""}
                         onChange={(e) => updateLine(i, { cost_price: e.target.value === "" ? null : Number(e.target.value) })}
-                        style={{ width: "100%", padding: "4px 6px", textAlign: "right", boxSizing: "border-box" }}
+                        style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
                       />
                     </td>
                     <td style={{ whiteSpace: "normal" }}>
                       <input
                         type="text"
+                        className="cell-input"
                         value={l.cost_supplier_name ?? ""}
                         onChange={(e) => updateLine(i, { cost_supplier_name: e.target.value || null })}
-                        style={{ width: "100%", padding: "4px 6px", boxSizing: "border-box" }}
+                        style={{ width: "100%", boxSizing: "border-box" }}
                       />
                     </td>
                     <td>
                       <input
                         type="number"
+                        className="cell-input"
                         value={l.margin_pct ?? ""}
                         onChange={(e) => updateMargin(i, e.target.value)}
                         placeholder="%"
-                        style={{ width: "100%", padding: "4px 6px", textAlign: "right", boxSizing: "border-box" }}
+                        style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
                       />
                     </td>
                     <td style={{ whiteSpace: "normal" }}>
                       {options.length > 0 ? (
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                           <select
+                            className="cell-input"
                             value={selected?.customer_code ?? ""}
                             onChange={(e) => selectReferenceOption(i, e.target.value)}
-                            style={{ flex: 1, minWidth: 0, fontSize: 12, padding: "3px 4px" }}
+                            style={{ flex: 1, minWidth: 0, fontSize: 12 }}
                           >
                             {options.map((o) => (
                               <option key={o.customer_code} value={o.customer_code}>
@@ -799,7 +808,7 @@ export default function DocumentEditor({
                               </option>
                             ))}
                           </select>
-                          <button type="button" onClick={() => applyReferencePrice(i)} title="この価格を単価に反映">
+                          <button type="button" className="btn-sm" onClick={() => applyReferencePrice(i)} title="この価格を単価に反映">
                             →単価
                           </button>
                         </div>
@@ -808,7 +817,7 @@ export default function DocumentEditor({
                       )}
                     </td>
                     <td>
-                      <button type="button" onClick={() => removeLine(i)}>
+                      <button type="button" className="btn-icon btn-danger" onClick={() => removeLine(i)} title="この行を削除">
                         ×
                       </button>
                     </td>
@@ -851,14 +860,14 @@ export default function DocumentEditor({
         <textarea value={note ?? ""} onChange={(e) => setNote(e.target.value)} rows={3} style={{ width: "100%", padding: "6px 10px" }} />
       </div>
 
-      {error && <p style={{ color: "var(--direct)" }}>{error}</p>}
+      {error && <div className="alert alert-error">{error}</div>}
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <button type="button" className="btn-primary" onClick={() => save(true)} disabled={saving}>
+          確定して保存
+        </button>
         <button type="button" onClick={() => save(false)} disabled={saving}>
           {saving ? "保存中..." : "下書き保存"}
-        </button>
-        <button type="button" onClick={() => save(true)} disabled={saving}>
-          確定して保存
         </button>
         {doc && (
           <Link href={`/sales-app/${kind === "quote" ? "quotes" : "invoices"}/${doc.id}/print`} target="_blank" className="ghost-btn-inline">
@@ -871,7 +880,7 @@ export default function DocumentEditor({
           </button>
         )}
         {doc && (
-          <button type="button" onClick={remove} disabled={deleting} style={{ color: "var(--direct)" }}>
+          <button type="button" className="btn-danger" onClick={remove} disabled={deleting} style={{ marginLeft: "auto" }}>
             {deleting ? "削除中..." : "削除"}
           </button>
         )}

@@ -284,7 +284,7 @@ function UploadBox({
   }
 
   return (
-    <div className="card" style={{ marginBottom: 20 }}>
+    <div className="card">
       <div className="card-head">
         <h2>{title}</h2>
       </div>
@@ -296,17 +296,21 @@ function UploadBox({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           style={{
-            border: `2px dashed ${isDragging ? "#2563d9" : "#c3d6f8"}`,
-            borderRadius: 8,
-            padding: "20px 16px",
-            textAlign: "center",
-            background: isDragging ? "#eaf1fd" : "#f8fafd",
+            border: `1.5px dashed ${isDragging ? "var(--brand)" : "var(--line)"}`,
+            borderRadius: "var(--radius-sm)",
+            padding: "12px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            background: isDragging ? "#eaf1fd" : "#fafbfd",
+            transition: "background 0.15s ease, border-color 0.15s ease",
             opacity: status.running ? 0.6 : 1,
           }}
         >
-          <p style={{ fontSize: 13, color: isDragging ? "#2563d9" : "var(--ink-faint)", margin: "0 0 10px" }}>
-            {isDragging ? "ここにCSVファイルを離してください" : "ここにCSVファイルをドラッグ&ドロップ、または下のボタンで選択"}
-          </p>
+          <span style={{ fontSize: 12.5, color: isDragging ? "var(--brand)" : "var(--ink-faint)", fontWeight: isDragging ? 700 : 400, whiteSpace: "nowrap" }}>
+            {isDragging ? "ここで離してください" : "ドラッグ&ドロップ、または選択:"}
+          </span>
           <input
             type="file"
             accept=".csv"
@@ -317,7 +321,7 @@ function UploadBox({
               e.target.value = "";
             }}
           />
-          {file && <p style={{ fontSize: 13, color: "#2563d9", marginTop: 10, marginBottom: 0 }}>選択中のファイル: {file.name}</p>}
+          {file && <span style={{ fontSize: 12.5, color: "var(--brand)", fontWeight: 600 }}>{file.name}</span>}
         </div>
 
         {status.fileName && (

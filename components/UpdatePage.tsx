@@ -420,72 +420,50 @@ function UploadBoxShell({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           style={{
-            border: `2px dashed ${isDragging ? "#2563d9" : "#c3d6f8"}`,
-            borderRadius: 8,
-            padding: "20px 16px",
-            textAlign: "center",
-            background: isDragging ? "#eaf1fd" : "#f8fafd",
+            border: `1.5px dashed ${isDragging ? "var(--brand)" : "var(--line)"}`,
+            borderRadius: "var(--radius-sm)",
+            padding: "12px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            background: isDragging ? "#eaf1fd" : "#fafbfd",
             transition: "background 0.15s ease, border-color 0.15s ease",
             opacity: busy ? 0.6 : 1,
           }}
         >
-          <p style={{ fontSize: 13, color: isDragging ? "#2563d9" : "var(--ink-faint)", margin: "0 0 10px", fontWeight: isDragging ? 700 : 400 }}>
-            {isDragging ? "ここにCSVファイルを離してください" : "ここにCSVファイルをドラッグ&ドロップ、または下のボタンで選択"}
-          </p>
-          <input
-            type="file"
-            accept={accept}
-            disabled={busy}
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-          {file && (
-            <p style={{ fontSize: 13, color: "#2563d9", marginTop: 10, marginBottom: 0 }}>
-              選択中のファイル: {file.name}
-            </p>
-          )}
+          <span style={{ fontSize: 12.5, color: isDragging ? "var(--brand)" : "var(--ink-faint)", fontWeight: isDragging ? 700 : 400, whiteSpace: "nowrap" }}>
+            {isDragging ? "ここで離してください" : "ドラッグ&ドロップ、または選択:"}
+          </span>
+          <input type="file" accept={accept} disabled={busy} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          {file && <span style={{ fontSize: 12.5, color: "var(--brand)", fontWeight: 600 }}>{file.name}</span>}
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <button
-            disabled={!file || busy}
-            onClick={onUpload}
-            style={{
-              padding: "8px 20px",
-              borderRadius: 6,
-              border: "1px solid #2563d9",
-              background: !file || busy ? "#c3d6f8" : "#2563d9",
-              color: "#fff",
-              cursor: !file || busy ? "not-allowed" : "pointer",
-            }}
-          >
+          <button className="btn-primary" disabled={!file || busy} onClick={onUpload}>
             {busy && <span className="spinner" />}
             {statusText}
           </button>
         </div>
-        {result && (
-          <div style={{ marginTop: 16, fontSize: 13 }}>
-            {result.error ? (
-              <p style={{ color: "var(--neg)" }}>❌ {result.error}</p>
-            ) : (
+        {result &&
+          (result.error ? (
+            <div className="alert alert-error">❌ {result.error}</div>
+          ) : (
+            <div className="alert alert-success">
               <div>
-                <p style={{ color: "var(--pos)" }}>
-                  ✓ {result.rowCount?.toLocaleString()}件を反映しました
-                  {result.totalAmount !== undefined && `(合計 ${result.totalAmount.toLocaleString()}円)`}
-                </p>
-                {result.extraInfo && <p style={{ color: "var(--ink-faint)" }}>{result.extraInfo}</p>}
-                {!!result.skippedCount && (
-                  <p style={{ color: "var(--ink-faint)" }}>
-                    スキップされた行: {result.skippedCount}件
-                    {result.skippedSample && result.skippedSample.length > 0 && (
-                      <span> (例: {result.skippedSample[0]})</span>
-                    )}
-                  </p>
-                )}
-                <p style={{ color: "var(--ink-faint)" }}>画面を再読み込みすると最新の数字が確認できます。</p>
+                ✓ {result.rowCount?.toLocaleString()}件を反映しました
+                {result.totalAmount !== undefined && `(合計 ${result.totalAmount.toLocaleString()}円)`}
               </div>
-            )}
-          </div>
-        )}
+              {result.extraInfo && <div style={{ marginTop: 4 }}>{result.extraInfo}</div>}
+              {!!result.skippedCount && (
+                <div style={{ marginTop: 4 }}>
+                  スキップされた行: {result.skippedCount}件
+                  {result.skippedSample && result.skippedSample.length > 0 && <span> (例: {result.skippedSample[0]})</span>}
+                </div>
+              )}
+              <div style={{ marginTop: 4, opacity: 0.8 }}>画面を再読み込みすると最新の数字が確認できます。</div>
+            </div>
+          ))}
       </div>
     </div>
   );
@@ -518,18 +496,7 @@ function RefreshButton() {
           アップロード後にページを再読み込みしても数字が変わらない場合、ここを押してください。
           Supabaseの画面を開く必要はありません。
         </p>
-        <button
-          disabled={state === "loading"}
-          onClick={handleRefresh}
-          style={{
-            padding: "8px 20px",
-            borderRadius: 6,
-            border: "1px solid #2563d9",
-            background: state === "loading" ? "#c3d6f8" : "#2563d9",
-            color: "#fff",
-            cursor: state === "loading" ? "not-allowed" : "pointer",
-          }}
-        >
+        <button className="btn-primary" disabled={state === "loading"} onClick={handleRefresh}>
           {state === "loading" ? (
             <>
               <span className="spinner" />
@@ -539,12 +506,7 @@ function RefreshButton() {
             "今すぐ画面データを更新する"
           )}
         </button>
-        {message && (
-          <p style={{ marginTop: 12, fontSize: 13, color: state === "error" ? "var(--neg)" : "var(--pos)" }}>
-            {state === "error" ? "❌ " : "✓ "}
-            {message}
-          </p>
-        )}
+        {message && <div className={`alert ${state === "error" ? "alert-error" : "alert-success"}`}>{state === "error" ? "❌ " : "✓ "}{message}</div>}
       </div>
     </div>
   );
@@ -562,7 +524,7 @@ export default function UpdatePage({
   uploadLogError: string | null;
 }) {
   return (
-    <div className="wrap" style={{ maxWidth: 900 }}>
+    <div className="wrap" style={{ maxWidth: 1200 }}>
       <header className="top">
         <div className="title">
           <h1>データ更新</h1>
@@ -576,6 +538,9 @@ export default function UpdatePage({
         <RefreshButton />
         <DataStatusTable statuses={statuses} error={statusError} />
         <UploadLogTable logs={uploadLogs} error={uploadLogError} />
+      </div>
+      <h2 className="blk" style={{ margin: "24px 0 12px" }}>CSVアップロード</h2>
+      <div className="page active" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(440px, 1fr))", gap: 16 }}>
         <SalesUploadBox />
         <PurchasesUploadBox />
         <ProductMasterUploadBox />
