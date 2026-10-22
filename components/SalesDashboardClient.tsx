@@ -69,60 +69,59 @@ export default function SalesDashboardClient({
             今期 {S.CUR}年10月度〜(最新 {monL(data.latest_ym)}度まで)
             {isDetail && "・売上は明細(sales_lines)、原価は仕入・在庫出荷・運送会社の実費まで含めて集計"}
           </p>
-          <div style={{ marginTop: 8, fontSize: 12, color: "var(--ink-faint)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              表示基準月:
-              <select
-                value={selectedUntil ?? "latest"}
-                onChange={handleUntilChange}
-                disabled={switching}
-                style={{ fontSize: 12, padding: "3px 6px", borderRadius: 6, border: "1px solid #d7dbe2", color: "#333", background: "#fff" }}
-              >
-                <option value="latest">自動(最新月まで)</option>
-                {[...availableMonths].reverse().map((ym) => (
-                  <option key={ym} value={ym}>
-                    {monL(ym)}度まで
-                  </option>
-                ))}
-              </select>
-            </label>
-            {switching && <span>読み込み中…</span>}
-            {selectedUntil && (
-              <span>※ {monL(selectedUntil)}度までのデータで表示中です(それより後の月は含まれていません)</span>
-            )}
-            {isDetail ? (
-              <Link href="/sales" className="ghost-btn-inline">
-                → 売上ダッシュボード(集計版)
-              </Link>
-            ) : (
-              <Link href="/sales-detail" className="ghost-btn-inline">
-                → 売上ダッシュボード明細
-              </Link>
-            )}
-            <Link href="/sales/profit" className="ghost-btn-inline">
-              売上利益 →
-            </Link>
-            <Link href="/sales/profit-summary" className="ghost-btn-inline">
-              拠点・営業・得意先 利益 →
-            </Link>
-            <Link href="/menu" className="ghost-btn-inline">
-              ← メインメニュー
-            </Link>
-            <RefreshButton onRefresh={onRefresh} />
-          </div>
         </div>
-        <div className="maintabs">
-          <button className={mainTab === "report" ? "active" : ""} onClick={() => setMainTab("report")}>
-            経営レポート
-          </button>
-          <button className={mainTab === "matrix" ? "active" : ""} onClick={() => setMainTab("matrix")}>
-            月別マトリクス
-          </button>
-          <button className={mainTab === "stock" ? "active" : ""} onClick={() => setMainTab("stock")}>
-            在庫
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <RefreshButton onRefresh={onRefresh} />
+          <Link href="/menu" className="ghost-btn-inline">
+            ← メインメニュー
+          </Link>
         </div>
       </header>
+
+      <div className="toolbar">
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          表示基準月
+          <select value={selectedUntil ?? "latest"} onChange={handleUntilChange} disabled={switching}>
+            <option value="latest">自動(最新月まで)</option>
+            {[...availableMonths].reverse().map((ym) => (
+              <option key={ym} value={ym}>
+                {monL(ym)}度まで
+              </option>
+            ))}
+          </select>
+        </label>
+        {switching && <span>読み込み中…</span>}
+        {selectedUntil && <span>※ {monL(selectedUntil)}度までのデータで表示中です(それより後の月は含まれていません)</span>}
+        <div className="toolbar-links">
+          {isDetail ? (
+            <Link href="/sales" className="btn btn-sm">
+              売上ダッシュボード(集計版)
+            </Link>
+          ) : (
+            <Link href="/sales-detail" className="btn btn-sm">
+              売上ダッシュボード明細
+            </Link>
+          )}
+          <Link href="/sales/profit" className="btn btn-sm">
+            売上利益
+          </Link>
+          <Link href="/sales/profit-summary" className="btn btn-sm">
+            拠点・営業・得意先 利益
+          </Link>
+        </div>
+      </div>
+
+      <div className="maintabs" style={{ marginBottom: 14 }}>
+        <button className={mainTab === "report" ? "active" : ""} onClick={() => setMainTab("report")}>
+          経営レポート
+        </button>
+        <button className={mainTab === "matrix" ? "active" : ""} onClick={() => setMainTab("matrix")}>
+          月別マトリクス
+        </button>
+        <button className={mainTab === "stock" ? "active" : ""} onClick={() => setMainTab("stock")}>
+          在庫
+        </button>
+      </div>
 
       {mainTab === "report" && <ReportPage data={data} />}
       {mainTab === "matrix" && <MatrixPage data={data} />}

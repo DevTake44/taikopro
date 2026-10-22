@@ -78,16 +78,26 @@ html, body { padding: 0; margin: 0; }
    見た目(OS標準のボタン、ファイル選択欄など)のまま残っていたため、画面によって
    質感がバラバラで洗練されていない印象の主因になっていた。ここで一括して揃える。
    ========================================================================== */
-button{
+button,.btn{
   font-family:inherit;font-size:13px;font-weight:600;line-height:1.3;color:var(--ink);
   padding:7px 14px;border-radius:var(--radius-sm);border:1px solid var(--line);
-  background:var(--card);cursor:pointer;
+  background:var(--card);cursor:pointer;text-decoration:none;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
   transition:background .12s ease,border-color .12s ease,opacity .12s ease;
 }
-button:hover:not(:disabled){background:#f3f5f8;border-color:#d6dbe3}
-button:active:not(:disabled){background:#eceff3}
+button:hover:not(:disabled),.btn:hover{background:#f3f5f8;border-color:#d6dbe3}
+button:active:not(:disabled),.btn:active{background:#eceff3}
 button:disabled{opacity:.5;cursor:not-allowed}
-button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+button:focus-visible,.btn:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+
+/* ページ上部のツールバー。関連ページへのリンクなどを、文章の中に埋めず
+   見出しの下に並んだ「操作の列」として視覚的にまとめるための帯。 */
+.toolbar{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius-sm);
+  padding:10px 16px;margin-bottom:14px;font-size:12.5px;color:var(--ink-soft);
+}
+.toolbar-links{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
 
 .btn-primary{background:var(--brand);border-color:var(--brand);color:#fff}
 .btn-primary:hover:not(:disabled){background:#1e50b5;border-color:#1e50b5}

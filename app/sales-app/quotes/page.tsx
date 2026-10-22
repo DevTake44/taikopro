@@ -29,7 +29,7 @@ export default async function QuotesListPage() {
       <div className="card" style={{ padding: 0, marginBottom: 16 }}>
         <div className="card-head">
           <h2>一覧(新しい順・最大200件)</h2>
-          <Link href="/sales-app/quotes/new" className="ghost-btn-inline">
+          <Link href="/sales-app/quotes/new" className="btn btn-primary btn-sm">
             + 新規見積作成
           </Link>
         </div>
