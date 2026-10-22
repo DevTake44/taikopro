@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { yen } from "@/lib/format";
@@ -170,6 +170,21 @@ export default function DocumentEditor({
   const [supplierQuery, setSupplierQuery] = useState("");
   const [supplierResults, setSupplierResults] = useState<SupplierOption[] | null>(null);
   const [supplierSearching, setSupplierSearching] = useState(false);
+  const supplierInputRef = useRef<HTMLInputElement>(null);
+  // 検索欄の位置(画面基準)。明細テーブルはoverflow-x:autoで横スクロールする関係上、
+  // CSSの仕様で縦方向もクリップされてしまい、テーブル内に通常の重ね表示(absolute)で
+  // 候補一覧を出すと見えなくなることがある。position:fixedで画面に対して直接重ねることで
+  // これを避ける。
+  const [supplierDropdownPos, setSupplierDropdownPos] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (editingSupplierIndex === null || !supplierInputRef.current) {
+      setSupplierDropdownPos(null);
+      return;
+    }
+    const rect = supplierInputRef.current.getBoundingClientRect();
+    setSupplierDropdownPos({ top: rect.bottom, left: rect.left });
+  }, [editingSupplierIndex]);
 
   const totals = useMemo(() => calcTotals(lines), [lines]);
 
@@ -557,11 +572,7 @@ export default function DocumentEditor({
               <div className="card" style={{ marginTop: 4, maxHeight: 180, overflowY: "auto" }}>
                 {customerResults.length === 0 && <p className="cell-sub" style={{ padding: 8 }}>見つかりません。</p>}
                 {customerResults.map((c) => (
-                  <div
-                    key={c.customer_code}
-                    onClick={() => selectCustomer(c)}
-                    style={{ padding: "6px 10px", cursor: "pointer", fontSize: 13 }}
-                  >
+                  <div key={c.customer_code} className="search-item" onClick={() => selectCustomer(c)}>
                     {c.customer_code} {c.customer_name}
                   </div>
                 ))}
@@ -652,11 +663,7 @@ export default function DocumentEditor({
               <div className="card" style={{ marginTop: 4, maxHeight: 220, overflowY: "auto" }}>
                 {productResults.length === 0 && <p className="cell-sub" style={{ padding: 8 }}>見つかりません。</p>}
                 {productResults.map((p) => (
-                  <div
-                    key={p.product_code}
-                    onClick={() => addFromProduct(p)}
-                    style={{ padding: "6px 10px", cursor: "pointer", fontSize: 13 }}
-                  >
+                  <div key={p.product_code} className="search-item" onClick={() => addFromProduct(p)}>
                     {p.product_code} {p.product_name} {p.spec ? `(${p.spec})` : ""}
                   </div>
                 ))}
@@ -705,11 +712,7 @@ export default function DocumentEditor({
               <div className="card" style={{ marginTop: 4, maxHeight: 220, overflowY: "auto" }}>
                 {historyResults.length === 0 && <p className="cell-sub" style={{ padding: 8 }}>見つかりません。</p>}
                 {historyResults.map((h, i) => (
-                  <div
-                    key={`${h.product_code}_${i}`}
-                    onClick={() => addFromHistory(h)}
-                    style={{ padding: "6px 10px", cursor: "pointer", fontSize: 13 }}
-                  >
+                  <div key={`${h.product_code}_${i}`} className="search-item" onClick={() => addFromHistory(h)}>
                     {h.product_code} {h.product_name}
                     {historyScope === "all" && h.customer_name && (
                       <span className="cell-sub"> [{h.customer_name}]</span>
@@ -821,10 +824,11 @@ export default function DocumentEditor({
                         style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
                       />
                     </td>
-                    <td style={{ whiteSpace: "normal", position: "relative" }}>
+                    <td style={{ whiteSpace: "normal" }}>
                       {editingSupplierIndex === i ? (
                         <div>
                           <input
+                            ref={supplierInputRef}
                             type="text"
                             className="cell-input"
                             autoFocus
@@ -836,22 +840,26 @@ export default function DocumentEditor({
                             style={{ width: "100%", boxSizing: "border-box" }}
                           />
                           {supplierSearching && <div className="cell-sub">検索中…</div>}
-                          {supplierResults && (
+                          {supplierResults && supplierDropdownPos && (
                             <div
                               className="card"
-                              style={{ position: "absolute", zIndex: 5, left: 0, right: 0, maxHeight: 180, overflowY: "auto" }}
+                              style={{
+                                position: "fixed",
+                                zIndex: 50,
+                                top: supplierDropdownPos.top,
+                                left: supplierDropdownPos.left,
+                                width: 320,
+                                maxHeight: 260,
+                                overflowY: "auto",
+                              }}
                             >
                               {supplierResults.length === 0 && (
-                                <p className="cell-sub" style={{ padding: 6 }}>
+                                <p className="cell-sub" style={{ padding: 8 }}>
                                   見つかりません。
                                 </p>
                               )}
                               {supplierResults.map((s) => (
-                                <div
-                                  key={s.supplier_code}
-                                  onMouseDown={() => selectSupplier(i, s)}
-                                  style={{ padding: "4px 8px", cursor: "pointer", fontSize: 12 }}
-                                >
+                                <div key={s.supplier_code} className="search-item" onMouseDown={() => selectSupplier(i, s)}>
                                   <span style={{ color: "var(--ink-faint)", fontSize: 11 }}>{s.supplier_code}</span> {s.supplier_name}
                                 </div>
                               ))}

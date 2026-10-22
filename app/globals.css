@@ -146,6 +146,12 @@ input[type="file"]::file-selector-button:hover{background:#e3e6ec}
 .alert-info{background:#eef3fd;border:1px solid #c7d7f7;color:#1e4fa8}
 .alert-warning{background:#fff8ec;border:1px solid #f0ddb8;color:#7a5c1e}
 
+/* 検索結果の候補一覧(得意先・商品・仕入先など)。項目間に区切り線とホバー時の
+   背景色を付けて、どれを選ぼうとしているか分かりやすくする。 */
+.search-item{padding:7px 10px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--line)}
+.search-item:last-child{border-bottom:none}
+.search-item:hover{background:#eef3fd}
+
 /* ==========================================================================
    読み込み中であることを明示するための共通スピナー。特定のスコープ(.rk等)に
    依存せず、どのページ・どのボタンの中でも使えるようにcurrentColorベースにしている。
