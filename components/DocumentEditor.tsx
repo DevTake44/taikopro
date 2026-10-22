@@ -450,7 +450,7 @@ export default function DocumentEditor({
   }
 
   return (
-    <div className="wrap" style={{ maxWidth: 1100 }}>
+    <div className="wrap" style={{ maxWidth: 1800 }}>
       <header className="top" style={{ marginBottom: 20 }}>
         <div className="title">
           <h1>{title}</h1>
@@ -639,21 +639,21 @@ export default function DocumentEditor({
         )}
 
         <div className="matwrap">
-          <table className="mat">
+          <table className="mat doc-line-table">
             <thead>
               <tr>
-                <th className="codecol">商品コード</th>
-                <th className="namecol">商品名</th>
-                <th>数量</th>
-                <th>単価</th>
-                <th>金額</th>
-                <th>税区分</th>
-                <th>備考</th>
-                <th>仕入値</th>
-                <th>仕入先</th>
-                <th>利益率</th>
-                <th>参照売価(得意先選択可)</th>
-                <th></th>
+                <th className="codecol" style={{ width: 86 }}>商品コード</th>
+                <th className="namecol" style={{ width: "26%" }}>商品名</th>
+                <th style={{ width: 72 }}>数量</th>
+                <th style={{ width: 84 }}>単価</th>
+                <th style={{ width: 84 }}>金額</th>
+                <th style={{ width: 70 }}>税区分</th>
+                <th style={{ width: 120 }}>備考</th>
+                <th style={{ width: 80 }}>仕入値</th>
+                <th style={{ width: 120 }}>仕入先</th>
+                <th style={{ width: 64 }}>利益率</th>
+                <th style={{ width: 210 }}>参照売価(得意先選択可)</th>
+                <th style={{ width: 32 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -668,15 +668,23 @@ export default function DocumentEditor({
                         value={l.product_code ?? ""}
                         onChange={(e) => updateLine(i, { product_code: e.target.value || null })}
                         onBlur={(e) => refreshLineMeta(i, e.target.value)}
-                        style={{ width: 90, padding: "4px 6px" }}
+                        style={{ width: "100%", padding: "4px 6px", boxSizing: "border-box" }}
                       />
                     </td>
-                    <td className="namecol">
-                      <input
-                        type="text"
+                    <td className="namecol" style={{ whiteSpace: "normal" }}>
+                      <textarea
                         value={l.product_name}
                         onChange={(e) => updateLine(i, { product_name: e.target.value })}
-                        style={{ width: "100%", minWidth: 260, padding: "4px 6px" }}
+                        rows={2}
+                        style={{
+                          width: "100%",
+                          padding: "4px 6px",
+                          resize: "vertical",
+                          fontFamily: "inherit",
+                          fontSize: "inherit",
+                          fontWeight: 600,
+                          boxSizing: "border-box",
+                        }}
                       />
                     </td>
                     <td>
@@ -684,7 +692,7 @@ export default function DocumentEditor({
                         type="number"
                         value={l.qty}
                         onChange={(e) => updateLine(i, { qty: Number(e.target.value) })}
-                        style={{ width: 70, padding: "4px 6px", textAlign: "right" }}
+                        style={{ width: "100%", padding: "4px 6px", textAlign: "right", boxSizing: "border-box" }}
                       />
                     </td>
                     <td>
@@ -692,43 +700,47 @@ export default function DocumentEditor({
                         type="number"
                         value={l.unit_price}
                         onChange={(e) => updateUnitPrice(i, e.target.value)}
-                        style={{ width: 90, padding: "4px 6px", textAlign: "right" }}
+                        style={{ width: "100%", padding: "4px 6px", textAlign: "right", boxSizing: "border-box" }}
                       />
                     </td>
                     <td>{yen(l.amount)}</td>
                     <td>
-                      <select value={l.tax_type} onChange={(e) => updateLine(i, { tax_type: e.target.value as TaxType })}>
+                      <select
+                        value={l.tax_type}
+                        onChange={(e) => updateLine(i, { tax_type: e.target.value as TaxType })}
+                        style={{ width: "100%" }}
+                      >
                         <option value="10">10%</option>
                         <option value="8">8%(軽減)</option>
                         <option value="0">非課税</option>
                       </select>
                     </td>
-                    <td>
+                    <td style={{ whiteSpace: "normal" }}>
                       <input
                         type="text"
                         value={l.note ?? ""}
                         onChange={(e) => updateLine(i, { note: e.target.value || null })}
-                        style={{ width: 120, padding: "4px 6px" }}
+                        style={{ width: "100%", padding: "4px 6px", boxSizing: "border-box" }}
                       />
                     </td>
                     <td>{l.cost_price != null ? yen(l.cost_price) : "—"}</td>
-                    <td style={{ minWidth: 110 }}>{l.cost_supplier_name ?? "—"}</td>
+                    <td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{l.cost_supplier_name ?? "—"}</td>
                     <td>
                       <input
                         type="number"
                         value={l.margin_pct ?? ""}
                         onChange={(e) => updateMargin(i, e.target.value)}
                         placeholder="%"
-                        style={{ width: 60, padding: "4px 6px", textAlign: "right" }}
+                        style={{ width: "100%", padding: "4px 6px", textAlign: "right", boxSizing: "border-box" }}
                       />
                     </td>
-                    <td style={{ minWidth: 220 }}>
+                    <td style={{ whiteSpace: "normal" }}>
                       {options.length > 0 ? (
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                           <select
                             value={selected?.customer_code ?? ""}
                             onChange={(e) => selectReferenceOption(i, e.target.value)}
-                            style={{ flex: 1, fontSize: 12, padding: "3px 4px" }}
+                            style={{ flex: 1, minWidth: 0, fontSize: 12, padding: "3px 4px" }}
                           >
                             {options.map((o) => (
                               <option key={o.customer_code} value={o.customer_code}>
@@ -761,6 +773,17 @@ export default function DocumentEditor({
               )}
             </tbody>
           </table>
+          <style jsx>{`
+            .doc-line-table {
+              table-layout: fixed;
+              width: 100%;
+              min-width: 1180px;
+            }
+            .doc-line-table td,
+            .doc-line-table th {
+              vertical-align: top;
+            }
+          `}</style>
         </div>
 
         <div style={{ padding: "12px 20px", textAlign: "right", fontSize: 13 }}>
