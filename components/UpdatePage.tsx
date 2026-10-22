@@ -278,7 +278,7 @@ function SupplierMasterUploadBox() {
   return (
     <UploadBoxShell
       title="④ 仕入先マスタの更新"
-      description="仕入先マスタCSVを、そのままアップロードしてください。"
+      description="仕入先マスタCSVを、そのままアップロードしてください。仕入先コード・仕入先名上段/下段・削除フラグ・支払統括店コードの列を使用します(支払統括店コードは、見積書・請求書の仕入先検索で支払先専用のコードを除外するために使います)。"
       file={file}
       setFile={setFile}
       progress={progress}
