@@ -212,7 +212,10 @@ export default function DocumentEditor({
 
   function selectCustomer(c: CustomerOption) {
     setCustomerCode(c.customer_code);
-    setCustomerName(c.customer_name);
+    // 書類に印字される宛先名として、まず「会社名 御中」を初期値にする(そのまま手入力で
+    // 「○○部 ○○課 ○○様」のように書き換えられる。その場合は「御中」を「様」に
+    // 置き換える想定)。
+    setCustomerName(`${c.customer_name} 御中`);
     // 得意先マスタに住所があれば自動入力する(無ければ手入力のまま)。
     if (c.postal_code) setCustomerPostalCode(c.postal_code);
     if (c.address) setCustomerAddress(c.address);
@@ -578,8 +581,15 @@ export default function DocumentEditor({
                 ))}
               </div>
             )}
-            <div style={{ marginTop: 6, fontWeight: 600 }}>
-              {customerName ? `${customerName}${customerCode ? `(${customerCode})` : ""}` : "(未選択)"}
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="書類に印字する宛先名(未選択)"
+              style={{ width: "100%", padding: "6px 10px", marginTop: 6, fontWeight: 600, boxSizing: "border-box" }}
+            />
+            <div className="cell-sub" style={{ marginTop: 2 }}>
+              {customerCode ? `得意先コード: ${customerCode}` : "得意先未選択"}・実際に書類に載る宛先名です。「○○部 ○○課 ○○様」のように書き換えられます(その場合「御中」は「様」に直してください)。
             </div>
           </div>
 

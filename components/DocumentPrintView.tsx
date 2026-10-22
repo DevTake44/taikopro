@@ -34,7 +34,7 @@ export default function DocumentPrintView({
             {doc.customer_address && <div style={{ whiteSpace: "pre-wrap" }}>{doc.customer_address}</div>}
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, borderBottom: "1px solid #333", paddingBottom: 4, minWidth: 260 }}>
-            {doc.customer_name} 御中
+            {doc.customer_name}
           </div>
         </div>
         <div style={{ textAlign: "right", fontSize: 12 }}>
