@@ -536,7 +536,7 @@ export default function DocumentEditor({
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
           <div>
-            <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>得意先</label>
+            <label className="req" style={{ fontSize: 12, color: "var(--ink-faint)" }}>得意先</label>
             <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
               <select value={branchFilter} onChange={(e) => onBranchFilterChange(e.target.value)} style={{ flex: 1 }}>
                 <option value="">拠点(すべて)</option>
@@ -565,7 +565,7 @@ export default function DocumentEditor({
                 style={{ flex: 1, padding: "6px 10px" }}
               />
               <button type="button" onClick={searchCustomer} disabled={customerSearching}>
-                検索
+                {customerSearching ? "検索中…" : "検索"}
               </button>
             </div>
             {customerResults && (
@@ -656,7 +656,7 @@ export default function DocumentEditor({
                 style={{ flex: 1, padding: "6px 10px" }}
               />
               <button type="button" onClick={searchProduct} disabled={productSearching}>
-                検索
+                {productSearching ? "検索中…" : "検索"}
               </button>
             </div>
             {productResults && (
@@ -705,7 +705,7 @@ export default function DocumentEditor({
                 style={{ flex: 1, padding: "6px 10px" }}
               />
               <button type="button" onClick={searchHistory} disabled={historySearching}>
-                検索
+                {historySearching ? "検索中…" : "検索"}
               </button>
             </div>
             {historyResults && (
@@ -729,17 +729,33 @@ export default function DocumentEditor({
           <table className="mat doc-line-table">
             <thead>
               <tr>
-                <th className="codecol" style={{ width: 86 }}>商品コード</th>
-                <th className="namecol" style={{ width: "26%" }}>商品名</th>
+                <th colSpan={7} style={{ background: "var(--card)" }}></th>
+                <th
+                  colSpan={4}
+                  style={{
+                    borderLeft: "2px solid var(--line)",
+                    background: "#fbfcfe",
+                    textAlign: "center",
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                >
+                  単価を決めるための参考情報
+                </th>
+                <th style={{ background: "var(--card)" }}></th>
+              </tr>
+              <tr>
+                <th className="codecol" style={{ width: 100 }}>商品コード</th>
+                <th className="namecol" style={{ width: "25%" }}>商品名</th>
                 <th style={{ width: 72 }}>数量</th>
                 <th style={{ width: 84 }}>単価</th>
                 <th style={{ width: 84 }}>金額</th>
                 <th style={{ width: 70 }}>税区分</th>
                 <th style={{ width: 120 }}>備考</th>
-                <th style={{ width: 80 }}>仕入値</th>
+                <th style={{ width: 80, borderLeft: "2px solid var(--line)" }}>仕入値</th>
                 <th style={{ width: 120 }}>仕入先</th>
                 <th style={{ width: 64 }}>利益率</th>
-                <th style={{ width: 210 }}>参照売価(得意先選択可)</th>
+                <th style={{ width: 200 }}>参照売価(得意先選択可)</th>
                 <th style={{ width: 32 }}></th>
               </tr>
             </thead>
@@ -815,7 +831,7 @@ export default function DocumentEditor({
                         style={{ width: "100%", boxSizing: "border-box" }}
                       />
                     </td>
-                    <td>
+                    <td style={{ borderLeft: "2px solid var(--line)" }}>
                       <input
                         type="number"
                         className="cell-input"
@@ -870,13 +886,16 @@ export default function DocumentEditor({
                         <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                           {l.supplier_code && (
                             <span
+                              onClick={() => startEditSupplier(i, l.supplier_name)}
                               style={{
                                 border: "1px solid var(--line)",
                                 borderRadius: 4,
                                 padding: "1px 5px",
                                 fontSize: 11,
                                 color: "var(--ink-faint)",
+                                cursor: "pointer",
                               }}
+                              title="クリックして変更"
                             >
                               {l.supplier_code}
                             </span>

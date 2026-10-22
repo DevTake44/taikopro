@@ -152,6 +152,10 @@ input[type="file"]::file-selector-button:hover{background:#e3e6ec}
 .search-item:last-child{border-bottom:none}
 .search-item:hover{background:#eef3fd}
 
+/* フォームの必須項目ラベル用。保存時に初めてエラーで気づくのではなく、
+   入力前から必須だと分かるようにする。 */
+.req::after{content:"必須";color:var(--neg);font-size:10px;font-weight:700;margin-left:6px;vertical-align:middle}
+
 /* ==========================================================================
    読み込み中であることを明示するための共通スピナー。特定のスコープ(.rk等)に
    依存せず、どのページ・どのボタンの中でも使えるようにcurrentColorベースにしている。
