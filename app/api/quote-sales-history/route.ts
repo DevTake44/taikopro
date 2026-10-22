@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   const supabase = getSupabaseServerClient();
   let q = supabase
     .from("sales_lines")
-    .select("item_code, item_name, sell_price, assumed_cost, supplier_name, customer_code, customer_name, qty, delivery_date")
+    .select("item_code, item_name, sell_price, assumed_cost, supplier_code, supplier_name, customer_code, customer_name, qty, delivery_date")
     .order("delivery_date", { ascending: false })
     .limit(500);
 
@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
       product_name: string;
       unit_price: number | null;
       cost_price: number | null;
+      cost_supplier_code: string | null;
       cost_supplier_name: string | null;
       customer_name: string | null;
       qty: number | null;
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
         product_name: r.item_name as string,
         unit_price: r.sell_price as number | null,
         cost_price: r.assumed_cost as number | null,
+        cost_supplier_code: r.supplier_code as string | null,
         cost_supplier_name: r.supplier_name as string | null,
         customer_name: r.customer_name as string | null,
         qty: (r.qty as number | null) || null,

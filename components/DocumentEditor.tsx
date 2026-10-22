@@ -23,6 +23,7 @@ type SalesHistoryOption = {
   product_name: string;
   unit_price: number | null;
   cost_price: number | null;
+  cost_supplier_code: string | null;
   cost_supplier_name: string | null;
   customer_name: string | null;
   qty: number | null;
@@ -30,12 +31,14 @@ type SalesHistoryOption = {
 };
 
 type ReferenceOption = { customer_code: string; customer_name: string; unit_price: number; delivery_date: string };
+type SupplierOption = { supplier_code: string; supplier_name: string };
 
-// 仕入値・仕入先・利益率・参照売価は見積データとしては保存しない(単価を決めるための
-// 参考情報)。保存時は EditableLine から DocumentLine の項目だけを取り出して送る。
+// 仕入値・利益率・参照売価は見積データとしては保存しない(単価を決めるための参考情報)。
+// 仕入先(supplier_code/supplier_name)は、将来の販売管理・受注CSV取込との連動のため
+// DocumentLineの一部として保存する(品番・品名と同じ扱い)。
+// 保存時は EditableLine から DocumentLine の項目だけを取り出して送る。
 type EditableLine = DocumentLine & {
   cost_price?: number | null;
-  cost_supplier_name?: string | null;
   margin_pct?: number | null;
   // 参照売価: 販売実績のある得意先の中から選べるようにする(先頭=直近)。
   referenceOptions?: ReferenceOption[];
@@ -54,8 +57,9 @@ function emptyLine(source: DocumentLine["source"]): EditableLine {
     tax_type: "10",
     note: null,
     source,
+    supplier_code: null,
+    supplier_name: null,
     cost_price: null,
-    cost_supplier_name: null,
     margin_pct: null,
     referenceOptions: [],
     selectedReferenceCode: null,
@@ -75,6 +79,8 @@ function toSavedLines(lines: EditableLine[]): DocumentLine[] {
     tax_type: l.tax_type,
     note: l.note,
     source: l.source,
+    supplier_code: l.supplier_code,
+    supplier_name: l.supplier_name,
   }));
 }
 
@@ -159,6 +165,12 @@ export default function DocumentEditor({
   // 検索するか。
   const [historyScope, setHistoryScope] = useState<"customer" | "all">("customer");
 
+  // 仕入先検索(明細行ごと。クリックした行だけ検索ボックスに切り替える方式)
+  const [editingSupplierIndex, setEditingSupplierIndex] = useState<number | null>(null);
+  const [supplierQuery, setSupplierQuery] = useState("");
+  const [supplierResults, setSupplierResults] = useState<SupplierOption[] | null>(null);
+  const [supplierSearching, setSupplierSearching] = useState(false);
+
   const totals = useMemo(() => calcTotals(lines), [lines]);
 
   function onBranchFilterChange(v: string) {
@@ -215,7 +227,7 @@ export default function DocumentEditor({
   // 見積は作成中の画面であり、単価を決める材料として常に見えている必要があるため、
   // 品番が追加・変更されるたびに呼ぶ。
   // applyCost=falseの場合は参照売価のみ更新する(過去売上から追加した行は、その行自体に
-  // 記録済みの仕入値・仕入先(assumed_cost/supplier_name)の方が、品番だけを頼りにした
+  // 記録済みの仕入値・仕入先(assumed_cost/supplier_code)の方が、品番だけを頼りにした
   // purchases検索より正確なため上書きしない)。
   async function refreshLineMeta(index: number, productCode: string, applyCost = true) {
     if (!productCode.trim()) return;
@@ -232,7 +244,9 @@ export default function DocumentEditor({
           const margin = computeMarginPct(costPrice, l.unit_price);
           return {
             ...l,
-            ...(applyCost ? { cost_price: costPrice, cost_supplier_name: json.cost_supplier_name ?? null } : {}),
+            ...(applyCost
+              ? { cost_price: costPrice, supplier_code: json.cost_supplier_code ?? null, supplier_name: json.cost_supplier_name ?? null }
+              : {}),
             ...(margin !== null ? { margin_pct: margin } : {}),
             referenceOptions: options,
             selectedReferenceCode: options[0]?.customer_code ?? null,
@@ -262,6 +276,38 @@ export default function DocumentEditor({
         return next;
       })
     );
+  }
+
+  function startEditSupplier(index: number, currentName: string | null) {
+    setEditingSupplierIndex(index);
+    setSupplierQuery(currentName ?? "");
+    setSupplierResults(null);
+  }
+
+  async function searchSupplier() {
+    if (!supplierQuery.trim()) {
+      setSupplierResults([]);
+      return;
+    }
+    setSupplierSearching(true);
+    try {
+      const res = await fetch(`/api/supplier-search?query=${encodeURIComponent(supplierQuery.trim())}`);
+      const json = await res.json();
+      setSupplierResults(json.rows ?? []);
+    } finally {
+      setSupplierSearching(false);
+    }
+  }
+
+  function selectSupplier(index: number, s: SupplierOption) {
+    setLines((prev) => prev.map((l, i) => (i === index ? { ...l, supplier_code: s.supplier_code, supplier_name: s.supplier_name } : l)));
+    setEditingSupplierIndex(null);
+    setSupplierQuery("");
+    setSupplierResults(null);
+  }
+
+  function clearSupplier(index: number) {
+    setLines((prev) => prev.map((l, i) => (i === index ? { ...l, supplier_code: null, supplier_name: null } : l)));
   }
 
   function addFromProduct(p: ProductOption) {
@@ -310,7 +356,8 @@ export default function DocumentEditor({
       qty: h.qty ?? 1,
       unit_price: unitPrice,
       cost_price: h.cost_price,
-      cost_supplier_name: h.cost_supplier_name,
+      supplier_code: h.cost_supplier_code,
+      supplier_name: h.cost_supplier_name,
       margin_pct: computeMarginPct(h.cost_price, unitPrice),
     });
     // 仕入値・仕入先はこの行自体の実績値を使うので上書きしない。参照売価(他得意先)だけ取得する。
@@ -774,14 +821,74 @@ export default function DocumentEditor({
                         style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
                       />
                     </td>
-                    <td style={{ whiteSpace: "normal" }}>
-                      <input
-                        type="text"
-                        className="cell-input"
-                        value={l.cost_supplier_name ?? ""}
-                        onChange={(e) => updateLine(i, { cost_supplier_name: e.target.value || null })}
-                        style={{ width: "100%", boxSizing: "border-box" }}
-                      />
+                    <td style={{ whiteSpace: "normal", position: "relative" }}>
+                      {editingSupplierIndex === i ? (
+                        <div>
+                          <input
+                            type="text"
+                            className="cell-input"
+                            autoFocus
+                            value={supplierQuery}
+                            onChange={(e) => setSupplierQuery(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && searchSupplier()}
+                            onBlur={() => setTimeout(() => setEditingSupplierIndex((cur) => (cur === i ? null : cur)), 150)}
+                            placeholder="仕入先コード・名称で検索"
+                            style={{ width: "100%", boxSizing: "border-box" }}
+                          />
+                          {supplierSearching && <div className="cell-sub">検索中…</div>}
+                          {supplierResults && (
+                            <div
+                              className="card"
+                              style={{ position: "absolute", zIndex: 5, left: 0, right: 0, maxHeight: 180, overflowY: "auto" }}
+                            >
+                              {supplierResults.length === 0 && (
+                                <p className="cell-sub" style={{ padding: 6 }}>
+                                  見つかりません。
+                                </p>
+                              )}
+                              {supplierResults.map((s) => (
+                                <div
+                                  key={s.supplier_code}
+                                  onMouseDown={() => selectSupplier(i, s)}
+                                  style={{ padding: "4px 8px", cursor: "pointer", fontSize: 12 }}
+                                >
+                                  <span style={{ color: "var(--ink-faint)", fontSize: 11 }}>{s.supplier_code}</span> {s.supplier_name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : l.supplier_code || l.supplier_name ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                          {l.supplier_code && (
+                            <span
+                              style={{
+                                border: "1px solid var(--line)",
+                                borderRadius: 4,
+                                padding: "1px 5px",
+                                fontSize: 11,
+                                color: "var(--ink-faint)",
+                              }}
+                            >
+                              {l.supplier_code}
+                            </span>
+                          )}
+                          <span
+                            onClick={() => startEditSupplier(i, l.supplier_name)}
+                            style={{ cursor: "pointer" }}
+                            title="クリックして変更"
+                          >
+                            {l.supplier_name ?? "(名称なし)"}
+                          </span>
+                          <button type="button" className="btn-icon" onClick={() => clearSupplier(i)} title="仕入先をクリア">
+                            ×
+                          </button>
+                        </div>
+                      ) : (
+                        <button type="button" className="btn-sm" onClick={() => startEditSupplier(i, null)}>
+                          仕入先を検索
+                        </button>
+                      )}
                     </td>
                     <td>
                       <input

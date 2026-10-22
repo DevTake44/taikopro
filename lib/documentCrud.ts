@@ -129,6 +129,8 @@ function lineToRow(l: DocumentLine, index: number) {
     tax_type: l.tax_type,
     note: l.note,
     source: l.source,
+    supplier_code: l.supplier_code,
+    supplier_name: l.supplier_name,
   };
 }
 

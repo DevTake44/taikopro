@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
 
   const empty = {
     cost_price: null,
+    cost_supplier_code: null,
     cost_supplier_name: null,
     cost_date: null,
     reference_options: [] as { customer_code: string; customer_name: string; unit_price: number; delivery_date: string }[],
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
   const [costRes, refQuery] = await Promise.all([
     supabase
       .from("purchases")
-      .select("unit_price, supplier_name, purchase_date")
+      .select("unit_price, supplier_code, supplier_name, purchase_date")
       .eq("product_code", productCode)
       .order("purchase_date", { ascending: false })
       .limit(1),
@@ -55,6 +56,7 @@ export async function GET(req: NextRequest) {
   if (refQuery.error) return NextResponse.json({ error: refQuery.error.message }, { status: 500 });
 
   let costPrice: number | null = costRes.data?.[0]?.unit_price ?? null;
+  let costSupplierCode: string | null = costRes.data?.[0]?.supplier_code ?? null;
   let costSupplierName: string | null = costRes.data?.[0]?.supplier_name ?? null;
   let costDate: string | null = costRes.data?.[0]?.purchase_date ?? null;
 
@@ -68,6 +70,7 @@ export async function GET(req: NextRequest) {
       costPrice = master.primary_supplier_price;
       costDate = null;
       if (master.primary_supplier_code) {
+        costSupplierCode = master.primary_supplier_code;
         const { data: supplier } = await supabase
           .from("supplier_master")
           .select("supplier_name")
@@ -95,6 +98,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     cost_price: costPrice,
+    cost_supplier_code: costSupplierCode,
     cost_supplier_name: costSupplierName,
     cost_date: costDate,
     reference_options: referenceOptions,

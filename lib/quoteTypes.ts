@@ -16,6 +16,11 @@ export type DocumentLine = {
   tax_type: TaxType;
   note: string | null;
   source: "product" | "sales_history" | "manual";
+  // 仕入先マスタ(supplier_master)から選択した仕入先。将来、販売管理の受注CSV取込と
+  // 連動させる際に必要なため、品番・品名と同様に明細行へ保存する(表示のみのcost_price等とは違い、
+  // こちらは見積データの一部として保存する)。
+  supplier_code: string | null;
+  supplier_name: string | null;
 };
 
 export type DocumentStatus = "draft" | "confirmed" | "converted";
