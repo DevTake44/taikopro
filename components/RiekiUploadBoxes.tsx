@@ -335,13 +335,13 @@ function UploadBox({
               </div>
             )}
             {status.running && !status.refreshing && (
-              <div style={{ color: "#2563d9", marginTop: 4 }}>
+              <div style={{ color: "var(--brand)", marginTop: 4 }}>
                 <span className="spinner" />
                 {mode === "replace" ? "置き換え中…" : mode === "accumulate" ? "取り込み中…" : "アップロード中…"}
               </div>
             )}
             {status.refreshing && (
-              <div style={{ color: "#2563d9", marginTop: 4 }}>
+              <div style={{ color: "var(--brand)", marginTop: 4 }}>
                 <span className="spinner" />
                 値上げ検知・売上利益等の集計を更新中…(数十秒かかる場合があります)
               </div>
@@ -355,7 +355,7 @@ function UploadBox({
                   : `完了しました。${status.sentRows.toLocaleString("ja-JP")}件を反映しました。`}
                 {status.refreshed && " 値上げ検知・売上利益等の集計も更新済みです。"}
                 {mode === "replace" && status.duplicatesRemoved !== null && status.duplicatesRemoved > 0 && (
-                  <div style={{ color: "#2563d9" }}>
+                  <div style={{ color: "var(--brand)" }}>
                     うち、受注番号・受注行番号が重複していた{status.duplicatesRemoved.toLocaleString("ja-JP")}件は自動的に1件にまとめました。
                   </div>
                 )}
@@ -372,8 +372,8 @@ function UploadBox({
               </div>
             )}
             {kind === "salesLines" && status.finished && status.duplicateCandidateTotal > 0 && (
-              <div className="card" style={{ marginTop: 10, padding: "10px 12px", background: "rgba(220,180,40,0.08)" }}>
-                <b style={{ color: "#b8860b" }}>⚠ 二重登録の疑いあり</b>
+              <div className="alert alert-warning" style={{ marginTop: 10 }}>
+                <b>⚠ 二重登録の疑いあり</b>
                 <p style={{ marginTop: 4 }}>
                   受注番号・受注行番号・品番・数量・単価は同じなのに、納品書番号だけが違う行が
                   {status.duplicateCandidateTotal.toLocaleString("ja-JP")}件見つかりました。同じ出荷が納品書番号を変えて

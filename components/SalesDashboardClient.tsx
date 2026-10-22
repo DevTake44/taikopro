@@ -232,25 +232,25 @@ function ReportPage({ data }: { data: DashboardData }) {
               <tr>
                 <td className="namecol">売上</td>
                 <td><span className="cell-s">{yen(S.cur_sales)}</span></td>
-                <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{yen(S.prev_sales_same)}</span></td>
+                <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{yen(S.prev_sales_same)}</span></td>
                 <td><span className={`cell-s ${salesUp ? "val-pos" : "val-neg"}`}>{salesUp ? "+" : ""}{S.sales_yoy}%</span></td>
               </tr>
               <tr>
                 <td className="namecol">粗利額<span style={{ fontSize: 10, color: "var(--ink-faint)" }}>(確定{S.n_full}ヶ月)</span></td>
                 <td><span className="cell-s">{yen(S.cur_profit_full)}</span></td>
-                <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{yen(S.prev_profit_same)}</span></td>
+                <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{yen(S.prev_profit_same)}</span></td>
                 <td><span className={`cell-s ${profitDiff >= 0 ? "val-pos" : "val-neg"}`}>{profitDiff >= 0 ? "+" : ""}{yen(profitDiff)}</span></td>
               </tr>
               <tr>
                 <td className="namecol">粗利率</td>
                 <td><span className="cell-s">{S.cur_margin}%</span></td>
-                <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{S.prev_margin_same}%</span></td>
+                <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{S.prev_margin_same}%</span></td>
                 <td><span className={`cell-s ${marginUp ? "val-pos" : "val-neg"}`}>{marginUp ? "+" : ""}{marginDiff}pt</span></td>
               </tr>
               <tr>
                 <td className="namecol">在庫仕入(90・91)</td>
                 <td><span className="cell-s">{yen(st.cur_total)}</span></td>
-                <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{yen(st.prev_same)}</span></td>
+                <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{yen(st.prev_same)}</span></td>
                 <td><span className={`cell-s ${stockUp ? "val-neg" : "val-pos"}`}>{stockUp ? "+" : ""}{yen(stockDiff)}</span></td>
               </tr>
             </tbody>
@@ -284,8 +284,8 @@ function ReportPage({ data }: { data: DashboardData }) {
           <h2>月別推移:売上(今期 vs 前期)</h2>
         </div>
         <div className="legend">
-          <span><i className="dot" style={{ background: "#2563d9" }} />今期 売上</span>
-          <span><i className="dot" style={{ background: "#9aa3b2" }} />前期 売上</span>
+          <span><i className="dot" style={{ background: "var(--brand)" }} />今期 売上</span>
+          <span><i className="dot" style={{ background: "var(--ink-faint)" }} />前期 売上</span>
         </div>
         <div className="chart-box">
           <TrendChart config={trendConfig} />
@@ -297,8 +297,8 @@ function ReportPage({ data }: { data: DashboardData }) {
           <h2>月別推移:在庫仕入(今期 vs 前期)</h2>
         </div>
         <div className="legend">
-          <span><i className="dot" style={{ background: "#e08a1e" }} />今期 在庫仕入</span>
-          <span><i className="dot" style={{ background: "#9aa3b2" }} />前期 在庫仕入</span>
+          <span><i className="dot" style={{ background: "var(--amber)" }} />今期 在庫仕入</span>
+          <span><i className="dot" style={{ background: "var(--ink-faint)" }} />前期 在庫仕入</span>
         </div>
         <div className="chart-box">
           <TrendChart config={stockConfig} />
@@ -572,7 +572,7 @@ function MatrixPage({ data }: { data: DashboardData }) {
             <select
               value={baseYear}
               onChange={(e) => setBaseYear(Number(e.target.value))}
-              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+              style={{ fontSize: 12.5 }}
             >
               {[...years].reverse().map((y) => (
                 <option key={y} value={y}>
@@ -586,7 +586,7 @@ function MatrixPage({ data }: { data: DashboardData }) {
             <select
               value={compareYear}
               onChange={(e) => setCompareYear(e.target.value === "none" ? "none" : Number(e.target.value))}
-              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+              style={{ fontSize: 12.5 }}
             >
               <option value="none">対比なし</option>
               {[...years].reverse().map((y) => (
@@ -605,7 +605,7 @@ function MatrixPage({ data }: { data: DashboardData }) {
                 setSortKey(k);
                 setSortDir(d);
               }}
-              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+              style={{ fontSize: 12.5 }}
             >
               <option value="total_desc">トータル(表示中の指標・多い順)</option>
               <option value="total_asc">トータル(表示中の指標・少ない順)</option>
@@ -701,7 +701,7 @@ function MatrixCell({
     return (
       <td>
         <span className="cell-s" style={{ color: "#c8ccd4" }}>0</span>
-        <span className="cell-m" style={{ color: "#e08a1e" }}>仕{jpn(base.p)}</span>
+        <span className="cell-m" style={{ color: "var(--amber)" }}>仕{jpn(base.p)}</span>
       </td>
     );
   }

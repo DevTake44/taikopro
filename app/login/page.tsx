@@ -26,24 +26,20 @@ async function handleSubmit(e: FormEvent<HTMLFormElement>) {
   }
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "#f7f8fa" }}>
-      <form onSubmit={handleSubmit} style={{ background: "#fff", padding: 32, borderRadius: 12, boxShadow: "0 2px 12px rgba(0,0,0,0.08)", width: 320 }}>
+    <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", background: "var(--bg)" }}>
+      <form onSubmit={handleSubmit} className="card" style={{ padding: 32, width: 320 }}>
         <h1 style={{ fontSize: 18, marginBottom: 16 }}>太幸 統合版アプリ</h1>
-        <p style={{ fontSize: 13, color: "#666", marginBottom: 16 }}>合言葉を入力してください</p>
+        <p style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 16 }}>合言葉を入力してください</p>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="合言葉"
-          style={{ width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #ddd", borderRadius: 8, marginBottom: 12, boxSizing: "border-box" }}
+          style={{ width: "100%", padding: "10px 12px", fontSize: 14, marginBottom: 12, boxSizing: "border-box" }}
           autoFocus
         />
-        {error && <p style={{ color: "#c0392b", fontSize: 13, marginBottom: 12 }}>{error}</p>}
-        <button
-          type="submit"
-          disabled={loading}
-          style={{ width: "100%", padding: "10px 12px", fontSize: 14, background: "#2563d9", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}
-        >
+        {error && <p className="alert alert-error" style={{ marginTop: 0 }}>{error}</p>}
+        <button type="submit" className="btn-primary" disabled={loading} style={{ width: "100%", justifyContent: "center", padding: "10px 12px", fontSize: 14 }}>
           {loading ? (
             <>
               <span className="spinner" />

@@ -317,7 +317,7 @@ export default function OrderSupplierSummary() {
                     >
                       <td className="codecol">{r.code}</td>
                       <td className="namecol">
-                        <span style={{ color: "#2563d9" }}>{isOpen ? "▾ " : "▸ "}</span>
+                        <span style={{ color: "var(--brand)" }}>{isOpen ? "▾ " : "▸ "}</span>
                         {r.name || "(名称不明)"}
                       </td>
                       <td><span className="cell-s">{fmtYen(r.amount)}</span></td>

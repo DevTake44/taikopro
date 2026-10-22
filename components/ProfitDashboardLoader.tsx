@@ -249,7 +249,7 @@ export default function ProfitDashboardLoader() {
           </div>
           <div className="card">
             <p>データの取得に失敗しました。</p>
-            <pre style={{ whiteSpace: "pre-wrap", color: "#c0392b" }}>{initialError}</pre>
+            <pre style={{ whiteSpace: "pre-wrap", color: "var(--neg)" }}>{initialError}</pre>
             <button
               className="ghost-btn"
               style={{ marginTop: 12 }}
@@ -318,7 +318,7 @@ export default function ProfitDashboardLoader() {
         )}
       </button>
       {refreshError && (
-        <span style={{ color: "#c0392b", fontSize: 12.5 }}>更新に失敗しました: {refreshError}</span>
+        <span style={{ color: "var(--neg)", fontSize: 12.5 }}>更新に失敗しました: {refreshError}</span>
       )}
     </div>
   );

@@ -65,8 +65,8 @@ export function StockCheckContent({
             <h2>月別推移(今期 vs 前期)</h2>
           </div>
           <div className="legend">
-            <span><i className="dot" style={{ background: "#e08a1e" }} />今期 在庫仕入</span>
-            <span><i className="dot" style={{ background: "#9aa3b2" }} />前期 在庫仕入</span>
+            <span><i className="dot" style={{ background: "var(--amber)" }} />今期 在庫仕入</span>
+            <span><i className="dot" style={{ background: "var(--ink-faint)" }} />前期 在庫仕入</span>
           </div>
           <div className="chart-box">
             <TrendChart config={chartConfig} />
@@ -93,7 +93,7 @@ export function StockCheckContent({
                   return (
                     <tr key={m.ym}>
                       <td className="namecol">{monL(m.ym)}</td>
-                      <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{yen(m.prev)}</span></td>
+                      <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{yen(m.prev)}</span></td>
                       <td><span className="cell-s">{yen(m.cur)}</span></td>
                       <td>
                         {hasAny ? (
@@ -111,7 +111,7 @@ export function StockCheckContent({
               <tfoot className="mat-foot">
                 <tr>
                   <td className="namecol">合計</td>
-                  <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{yen(sd.prev_total)}</span></td>
+                  <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{yen(sd.prev_total)}</span></td>
                   <td><span className="cell-s">{yen(sd.cur_total)}</span></td>
                   <td>
                     <span className={`cell-s ${sd.diff_same >= 0 ? "val-neg" : "val-pos"}`}>
@@ -260,8 +260,8 @@ function StockMovementSection({
   return (
     <>
       {sm.dataStartDate && (
-        <div className="card" style={{ background: "#fff8ec", border: "1px solid #f0ddb8" }}>
-          <p style={{ fontSize: 13, color: "#7a5c1e", padding: "14px 20px", lineHeight: 1.9, margin: 0 }}>
+        <div className="alert alert-warning" style={{ padding: 0 }}>
+          <p style={{ fontSize: 13, padding: "14px 20px", lineHeight: 1.9, margin: 0 }}>
             この推定在庫金額は、出荷実績のデータが存在する{sm.dataStartDate}以降の仕入だけを対象に計算しています。
             <br />
             それより前に仕入れた分は、出荷実績と突き合わせる方法が無いため、この推定には含めていません(参考額:
@@ -276,11 +276,11 @@ function StockMovementSection({
       )}
 
       {sm.turnoverMonthsActive != null && (
-        <div className="card" style={{ background: "#eef4ff", border: "1px solid #cddcf7" }}>
-          <p style={{ fontSize: 14, color: "#1d3f77", padding: "14px 20px", lineHeight: 1.9, margin: 0, fontWeight: 600 }}>
+        <div className="alert alert-info" style={{ padding: 0 }}>
+          <p style={{ fontSize: 14, padding: "14px 20px", lineHeight: 1.9, margin: 0, fontWeight: 600 }}>
             今動いている在庫(流動在庫 {yen(sm.activeAmount)})は、直近の出荷ペースだと
             およそ<span style={{ fontSize: 17 }}>{sm.turnoverMonthsActive}ヶ月分</span>に相当します。
-            <span style={{ fontWeight: 400, fontSize: 12, color: "#4d6da8" }}>
+            <span style={{ fontWeight: 400, fontSize: 12 }}>
               (商品コードの有無などによる誤差はありますが、大まかな目安としてご覧ください)
             </span>
           </p>
@@ -384,10 +384,10 @@ function StockMovementRow({ item }: { item: StockMovementItem }) {
       <td className="namecol">{item.name}</td>
       <td><span className="cell-s">{jpn(item.qtyOnHand)}</span></td>
       <td><span className="cell-s">{yen(item.amountOnHand)}</span></td>
-      <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{item.oldestLotDate}</span></td>
+      <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{item.oldestLotDate}</span></td>
       <td><span className="cell-s val-neg">{jpn(item.ageDays)}日</span></td>
       <td>
-        <span className="cell-s" style={{ color: "#9aa3b2" }}>
+        <span className="cell-s" style={{ color: "var(--ink-faint)" }}>
           {item.lastShipmentDate ?? "出荷実績なし"}
         </span>
       </td>
@@ -437,10 +437,10 @@ function SupplierTable({ title, rows }: { title: string; rows: StockSupplierRow[
                     title="クリックでこの仕入先の商品一覧を表示"
                   >
                     <td className="namecol">
-                      <span style={{ color: "#2563d9" }}>{isOpen ? "▾ " : "▸ "}</span>
+                      <span style={{ color: "var(--brand)" }}>{isOpen ? "▾ " : "▸ "}</span>
                       {r.name}
                     </td>
-                    <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{yen(r.prev)}</span></td>
+                    <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{yen(r.prev)}</span></td>
                     <td><span className="cell-s">{yen(r.cur)}</span></td>
                     <td>
                       <span className={`cell-s ${r.diff >= 0 ? "val-neg" : "val-pos"}`}>
@@ -471,7 +471,7 @@ function SupplierTable({ title, rows }: { title: string; rows: StockSupplierRow[
                             {r.products.map((p) => (
                               <tr key={p.key}>
                                 <td className="namecol">{p.name}</td>
-                                <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{yen(p.prev)}</span></td>
+                                <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{yen(p.prev)}</span></td>
                                 <td><span className="cell-s">{yen(p.cur)}</span></td>
                                 <td>
                                   <span className={`cell-s ${p.diff >= 0 ? "val-neg" : "val-pos"}`}>
@@ -527,7 +527,7 @@ function ProductTable({ title, rows }: { title: string; rows: StockProductRow[] 
               rows.map((r) => (
                 <tr key={r.key}>
                   <td className="namecol">{r.name}</td>
-                  <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{yen(r.prev)}</span></td>
+                  <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{yen(r.prev)}</span></td>
                   <td><span className="cell-s">{yen(r.cur)}</span></td>
                   <td>
                     <span className={`cell-s ${r.diff >= 0 ? "val-neg" : "val-pos"}`}>

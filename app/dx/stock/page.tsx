@@ -27,7 +27,7 @@ export default async function StockCheckPage() {
         <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>
           データの読み込みでエラーが発生しました
         </h1>
-        <p style={{ fontSize: 14, color: "#555", lineHeight: 1.6 }}>{message}</p>
+        <p style={{ fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.6 }}>{message}</p>
         <p style={{ marginTop: 20 }}>
           <Link href="/dx" className="ghost-btn-inline">
             ← 社内DXメニュー

@@ -401,7 +401,7 @@ export default function ProfitSummary() {
           </div>
           <div className="card">
             <p>データの取得に失敗しました。</p>
-            <pre style={{ whiteSpace: "pre-wrap", color: "#c0392b" }}>{initialError}</pre>
+            <pre style={{ whiteSpace: "pre-wrap", color: "var(--neg)" }}>{initialError}</pre>
             <button className="ghost-btn" style={{ marginTop: 12 }} onClick={() => runLoad(false)}>
               もう一度読み込む
             </button>
@@ -468,7 +468,7 @@ export default function ProfitSummary() {
             "更新"
           )}
         </button>
-        {refreshError && <span style={{ color: "#c0392b", fontSize: 12.5 }}>更新に失敗しました: {refreshError}</span>}
+        {refreshError && <span style={{ color: "var(--neg)", fontSize: 12.5 }}>更新に失敗しました: {refreshError}</span>}
       </div>
 
       {rows.length === 0 ? (

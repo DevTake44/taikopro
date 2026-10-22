@@ -1275,14 +1275,7 @@ export default function FreightCheck({
             <button
               onClick={saveFreightAggregation}
               disabled={freightAggregation.rows.length === 0 || freightSaveState.saving}
-              style={{
-                padding: "8px 20px",
-                borderRadius: 6,
-                border: "1px solid var(--rk-direct)",
-                background: freightAggregation.rows.length === 0 || freightSaveState.saving ? "#c3d6f8" : "var(--rk-direct)",
-                color: "#fff",
-                cursor: freightAggregation.rows.length === 0 || freightSaveState.saving ? "not-allowed" : "pointer",
-              }}
+              style={{ padding: "8px 20px", border: "1px solid var(--rk-direct)", background: "var(--rk-direct)", color: "#fff" }}
             >
               {freightSaveState.saving ? (
                 <>
