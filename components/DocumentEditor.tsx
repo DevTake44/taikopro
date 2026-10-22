@@ -24,6 +24,7 @@ type SalesHistoryOption = {
   unit_price: number | null;
   cost_price: number | null;
   cost_supplier_name: string | null;
+  customer_name: string | null;
   qty: number | null;
   delivery_date: string;
 };
@@ -154,6 +155,9 @@ export default function DocumentEditor({
   const [historyResults, setHistoryResults] = useState<SalesHistoryOption[] | null>(null);
   const [historySearching, setHistorySearching] = useState(false);
   const [showHistorySearch, setShowHistorySearch] = useState(false);
+  // 見積の得意先のみ検索するか、諸口コード等で見つからない場合に他の得意先も含めて
+  // 検索するか。
+  const [historyScope, setHistoryScope] = useState<"customer" | "all">("customer");
 
   const totals = useMemo(() => calcTotals(lines), [lines]);
 
@@ -279,9 +283,15 @@ export default function DocumentEditor({
       setError("先に得意先を選択してください。");
       return;
     }
+    if (historyScope === "all" && !historyQuery.trim()) {
+      setError("他の得意先も含めて検索する場合は、検索キーワードを入力してください。");
+      return;
+    }
+    setError(null);
     setHistorySearching(true);
     try {
-      const params = new URLSearchParams({ customer_code: customerCode });
+      const params = new URLSearchParams();
+      if (historyScope === "customer") params.set("customer_code", customerCode);
       if (historyQuery.trim()) params.set("query", historyQuery.trim());
       const res = await fetch(`/api/quote-sales-history?${params.toString()}`);
       const json = await res.json();
@@ -608,10 +618,31 @@ export default function DocumentEditor({
 
         {showHistorySearch && (
           <div style={{ padding: "0 20px 12px" }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+              <button
+                type="button"
+                onClick={() => setHistoryScope("customer")}
+                style={historyScope === "customer" ? { fontWeight: 700, textDecoration: "underline" } : undefined}
+              >
+                この得意先のみ
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryScope("all")}
+                style={historyScope === "all" ? { fontWeight: 700, textDecoration: "underline" } : undefined}
+              >
+                他の得意先も含める
+              </button>
+              <span className="cell-sub" style={{ alignSelf: "center" }}>
+                {historyScope === "all" && "(諸口コード等で見つからない商品を探す場合。要キーワード)"}
+              </span>
+            </div>
             <div style={{ display: "flex", gap: 6 }}>
               <input
                 type="text"
-                placeholder="品名で絞り込み(空欄で全件、直近順)"
+                placeholder={
+                  historyScope === "all" ? "品名で検索(必須・全得意先が対象)" : "品名で絞り込み(空欄で全件、直近順)"
+                }
                 value={historyQuery}
                 onChange={(e) => setHistoryQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && searchHistory()}
@@ -630,7 +661,11 @@ export default function DocumentEditor({
                     onClick={() => addFromHistory(h)}
                     style={{ padding: "6px 10px", cursor: "pointer", fontSize: 13 }}
                   >
-                    {h.product_code} {h.product_name}(前回 {h.delivery_date} 数量{h.qty} 単価{h.unit_price ?? "—"})
+                    {h.product_code} {h.product_name}
+                    {historyScope === "all" && h.customer_name && (
+                      <span className="cell-sub"> [{h.customer_name}]</span>
+                    )}
+                    (前回 {h.delivery_date} 数量{h.qty} 単価{h.unit_price ?? "—"})
                   </div>
                 ))}
               </div>
