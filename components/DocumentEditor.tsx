@@ -590,6 +590,26 @@ export default function DocumentEditor({
     );
   }
 
+  // 仕入値を手入力したら、単価から利益率を再計算する(利益率⇄単価と同様、仕入値⇄利益率も連動させる)。
+  // 手入力した仕入値は候補由来ではなくなるため、時点ラベルもクリアする。
+  function updateCostPrice(index: number, priceStr: string) {
+    const price = priceStr === "" ? null : Number(priceStr);
+    setLines((prev) =>
+      prev.map((l, i) => {
+        if (i !== index) return l;
+        const next: EditableLine = {
+          ...l,
+          cost_price: price === null || Number.isNaN(price) ? null : price,
+          cost_date: null,
+          cost_source: null,
+        };
+        const margin = computeMarginPct(next.cost_price, next.unit_price);
+        next.margin_pct = margin;
+        return next;
+      })
+    );
+  }
+
   // 納品日・取引年月日は明細行ごとに持つが(1枚の請求書に複数回の納品分をまとめる
   // ことがあるため)、実際は全行同じ日付になることが多いので、一括入力の補助を用意する。
   const [bulkTransactionDate, setBulkTransactionDate] = useState("");
@@ -1238,14 +1258,7 @@ export default function DocumentEditor({
                         type="number"
                         className="cell-input"
                         value={l.cost_price ?? ""}
-                        onChange={(e) =>
-                          updateLine(i, {
-                            cost_price: e.target.value === "" ? null : Number(e.target.value),
-                            // 手入力で上書きしたら、どの候補由来かの表示は消す(手入力値のため)。
-                            cost_date: null,
-                            cost_source: null,
-                          })
-                        }
+                        onChange={(e) => updateCostPrice(i, e.target.value)}
                         style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
                       />
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, marginTop: 2 }}>
