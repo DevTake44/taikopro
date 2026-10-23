@@ -120,6 +120,10 @@ export default function DocumentEditor({
   const [note, setNote] = useState(doc?.note ?? "");
   const [lines, setLines] = useState<EditableLine[]>(doc?.lines ?? []);
 
+  // 単価を決めるための参考情報(仕入値・仕入先・利益率・参照売価、保存されない)は、
+  // 常時表示すると列が多すぎて商品名・備考等が窮屈になるため、既定では折りたたんでおく。
+  const [showRefInfo, setShowRefInfo] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [converting, setConverting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -653,6 +657,9 @@ export default function DocumentEditor({
             <button type="button" onClick={addManualLine}>
               +自由入力で追加
             </button>
+            <button type="button" className={showRefInfo ? "btn-primary" : ""} onClick={() => setShowRefInfo((s) => !s)}>
+              {showRefInfo ? "参考情報を隠す" : "参考情報を表示(仕入値・仕入先など)"}
+            </button>
           </div>
         </div>
 
@@ -740,35 +747,45 @@ export default function DocumentEditor({
         <div className="matwrap">
           <table className="mat doc-line-table">
             <thead>
+              {showRefInfo && (
+                <tr>
+                  <th colSpan={8} style={{ background: "var(--card)" }}></th>
+                  <th
+                    colSpan={4}
+                    style={{
+                      borderLeft: "2px solid var(--line)",
+                      background: "#fbfcfe",
+                      textAlign: "center",
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  >
+                    単価を決めるための参考情報
+                  </th>
+                  <th style={{ background: "var(--card)" }}></th>
+                </tr>
+              )}
               <tr>
-                <th colSpan={8} style={{ background: "var(--card)" }}></th>
-                <th
-                  colSpan={4}
-                  style={{
-                    borderLeft: "2px solid var(--line)",
-                    background: "#fbfcfe",
-                    textAlign: "center",
-                    fontSize: 11,
-                    fontWeight: 600,
-                  }}
-                >
-                  単価を決めるための参考情報
-                </th>
-                <th style={{ background: "var(--card)" }}></th>
-              </tr>
-              <tr>
-                <th className="codecol" style={{ width: 100 }}>商品コード</th>
-                <th className="namecol" style={{ width: "25%" }}>商品名</th>
-                <th style={{ width: 72 }}>数量</th>
-                <th style={{ width: 84 }}>単価</th>
-                <th style={{ width: 84 }}>金額</th>
-                <th style={{ width: 70 }}>税区分</th>
-                <th style={{ width: 120 }}>備考</th>
-                <th style={{ width: 110 }}>部門(物件用印刷)</th>
-                <th style={{ width: 80, borderLeft: "2px solid var(--line)" }}>仕入値</th>
-                <th style={{ width: 120 }}>仕入先</th>
-                <th style={{ width: 64 }}>利益率</th>
-                <th style={{ width: 200 }}>参照売価(得意先選択可)</th>
+                {/* 各列の目安幅は想定される最大文字数に合わせている:
+                    商品コード=最大15桁程度、数量=最大5桁(99,999)、単価・金額=最大9桁(¥999,999,999)、
+                    税区分=選択式で最大6文字(「8%(軽減)」)固定。参考情報を隠すとその分、
+                    商品名・備考・部門に幅を回せる。 */}
+                <th className="codecol" style={{ width: 130 }}>商品コード</th>
+                <th className="namecol" style={{ width: showRefInfo ? "22%" : "34%" }}>商品名</th>
+                <th style={{ width: 60 }}>数量</th>
+                <th style={{ width: 92 }}>単価</th>
+                <th style={{ width: 100 }}>金額</th>
+                <th style={{ width: 68 }}>税区分</th>
+                <th style={{ width: showRefInfo ? 120 : 160 }}>備考</th>
+                <th style={{ width: showRefInfo ? 110 : 130 }}>部門(物件用印刷)</th>
+                {showRefInfo && (
+                  <>
+                    <th style={{ width: 80, borderLeft: "2px solid var(--line)" }}>仕入値</th>
+                    <th style={{ width: 120 }}>仕入先</th>
+                    <th style={{ width: 64 }}>利益率</th>
+                    <th style={{ width: 200 }}>参照売価(得意先選択可)</th>
+                  </>
+                )}
                 <th style={{ width: 32 }}></th>
               </tr>
             </thead>
@@ -854,6 +871,7 @@ export default function DocumentEditor({
                         style={{ width: "100%", boxSizing: "border-box" }}
                       />
                     </td>
+                    {showRefInfo && (
                     <td style={{ borderLeft: "2px solid var(--line)" }}>
                       <input
                         type="number"
@@ -863,6 +881,8 @@ export default function DocumentEditor({
                         style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
                       />
                     </td>
+                    )}
+                    {showRefInfo && (
                     <td style={{ whiteSpace: "normal" }}>
                       {editingSupplierIndex === i ? (
                         <div>
@@ -940,6 +960,8 @@ export default function DocumentEditor({
                         </button>
                       )}
                     </td>
+                    )}
+                    {showRefInfo && (
                     <td>
                       <input
                         type="number"
@@ -950,6 +972,8 @@ export default function DocumentEditor({
                         style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
                       />
                     </td>
+                    )}
+                    {showRefInfo && (
                     <td style={{ whiteSpace: "normal" }}>
                       {options.length > 0 ? (
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -973,6 +997,7 @@ export default function DocumentEditor({
                         "—"
                       )}
                     </td>
+                    )}
                     <td>
                       <button type="button" className="btn-icon btn-danger" onClick={() => removeLine(i)} title="この行を削除">
                         ×
@@ -983,7 +1008,7 @@ export default function DocumentEditor({
               })}
               {lines.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="cell-sub" style={{ padding: 16 }}>
+                  <td colSpan={showRefInfo ? 13 : 9} className="cell-sub" style={{ padding: 16 }}>
                     明細がありません。上のボタンから追加してください。
                   </td>
                 </tr>
@@ -994,7 +1019,7 @@ export default function DocumentEditor({
             .doc-line-table {
               table-layout: fixed;
               width: 100%;
-              min-width: 1290px;
+              min-width: ${showRefInfo ? 1260 : 780}px;
             }
             .doc-line-table td,
             .doc-line-table th {
