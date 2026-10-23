@@ -746,6 +746,37 @@ export default function DocumentEditor({
 
         <div className="matwrap">
           <table className="mat doc-line-table">
+            {/* table-layout:fixedでの列幅は<colgroup>の<col>で確定させる(ヘッダー2行目の
+                th style={width}は、1行目がcolSpanのグループ見出し行になっていると
+                ブラウザに無視されるため)。幅は実データ(sales_lines/purchases)の実績値を
+                根拠にしている:
+                - 数量: 99.9%ile=3,000(4桁)、過去実績の最大=68,400(5桁)
+                - 単価: 99.9%ile=¥232,025(6桁)、過去実績の最大=¥549万(7桁)
+                - 金額: 99.9%ile=¥703,200、過去実績の最大=¥2,605万(表示11文字)
+                - 税区分: 選択式で最大ラベル「8%(軽減)」6文字固定
+                - 商品コード: 商品マスタの実績最大14文字
+                - 商品名: 実績は中央値13文字・90%ile19文字(2行textareaの折返しで足りる)
+                極端な外れ値(1%未満)は、入力欄内で横スクロール/テキストの折返しで吸収し、
+                そのために大多数の行の見やすさを犠牲にしない。 */}
+            <colgroup>
+              <col style={{ width: 120 }} />
+              <col />
+              <col style={{ width: 56 }} />
+              <col style={{ width: 76 }} />
+              <col style={{ width: 92 }} />
+              <col style={{ width: 56 }} />
+              <col style={{ width: showRefInfo ? 140 : 170 }} />
+              <col style={{ width: showRefInfo ? 100 : 120 }} />
+              {showRefInfo && (
+                <>
+                  <col style={{ width: 76 }} />
+                  <col style={{ width: 150 }} />
+                  <col style={{ width: 48 }} />
+                  <col style={{ width: 190 }} />
+                </>
+              )}
+              <col style={{ width: 32 }} />
+            </colgroup>
             <thead>
               {showRefInfo && (
                 <tr>
@@ -766,27 +797,23 @@ export default function DocumentEditor({
                 </tr>
               )}
               <tr>
-                {/* 各列の目安幅は想定される最大文字数に合わせている:
-                    商品コード=最大15桁程度、数量=最大5桁(99,999)、単価・金額=最大9桁(¥999,999,999)、
-                    税区分=選択式で最大6文字(「8%(軽減)」)固定。参考情報を隠すとその分、
-                    商品名・備考・部門に幅を回せる。 */}
-                <th className="codecol" style={{ width: 130 }}>商品コード</th>
-                <th className="namecol" style={{ width: showRefInfo ? "22%" : "34%" }}>商品名</th>
-                <th style={{ width: 60 }}>数量</th>
-                <th style={{ width: 92 }}>単価</th>
-                <th style={{ width: 100 }}>金額</th>
-                <th style={{ width: 68 }}>税区分</th>
-                <th style={{ width: showRefInfo ? 120 : 160 }}>備考</th>
-                <th style={{ width: showRefInfo ? 110 : 130 }}>部門(物件用印刷)</th>
+                <th className="codecol">商品コード</th>
+                <th className="namecol">商品名</th>
+                <th>数量</th>
+                <th>単価</th>
+                <th>金額</th>
+                <th>税区分</th>
+                <th>備考</th>
+                <th title="物件用印刷で部門ごとにシートを分けるための項目です">部門</th>
                 {showRefInfo && (
                   <>
-                    <th style={{ width: 80, borderLeft: "2px solid var(--line)" }}>仕入値</th>
-                    <th style={{ width: 120 }}>仕入先</th>
-                    <th style={{ width: 64 }}>利益率</th>
-                    <th style={{ width: 200 }}>参照売価(得意先選択可)</th>
+                    <th style={{ borderLeft: "2px solid var(--line)" }}>仕入値</th>
+                    <th>仕入先</th>
+                    <th>利益率</th>
+                    <th>参照売価</th>
                   </>
                 )}
-                <th style={{ width: 32 }}></th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -945,8 +972,14 @@ export default function DocumentEditor({
                           )}
                           <span
                             onClick={() => startEditSupplier(i, l.supplier_name)}
-                            style={{ cursor: "pointer" }}
-                            title="クリックして変更"
+                            style={{
+                              cursor: "pointer",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              maxWidth: 90,
+                            }}
+                            title={`${l.supplier_name ?? "(名称なし)"}(クリックして変更)`}
                           >
                             {l.supplier_name ?? "(名称なし)"}
                           </span>
@@ -1019,11 +1052,20 @@ export default function DocumentEditor({
             .doc-line-table {
               table-layout: fixed;
               width: 100%;
-              min-width: ${showRefInfo ? 1260 : 780}px;
+              min-width: ${showRefInfo ? 1340 : 920}px;
             }
             .doc-line-table td,
             .doc-line-table th {
               vertical-align: top;
+            }
+            /* 数量・単価・仕入値の上下スピナーは幅を取る割に実用性が低いため非表示にする */
+            .doc-line-table input[type="number"] {
+              -moz-appearance: textfield;
+            }
+            .doc-line-table input[type="number"]::-webkit-outer-spin-button,
+            .doc-line-table input[type="number"]::-webkit-inner-spin-button {
+              -webkit-appearance: none;
+              margin: 0;
             }
           `}</style>
         </div>
