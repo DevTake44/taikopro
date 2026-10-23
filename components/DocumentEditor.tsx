@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { yen } from "@/lib/format";
-import { calcTotals, type DocumentLine, type DocumentWithLines, type TaxType } from "@/lib/quoteTypes";
+import { calcTotals, TAX_ROUNDING_LABEL, type DocumentLine, type DocumentWithLines, type TaxRounding, type TaxType } from "@/lib/quoteTypes";
 import { BRANCH_NAMES } from "@/lib/branch-names";
 import { REP_NAMES } from "@/lib/rep-names";
 import type { BranchRepPair } from "@/app/api/quote-customer-branch-reps/route";
@@ -118,6 +118,7 @@ export default function DocumentEditor({
   );
   const [staffName, setStaffName] = useState(doc?.staff_name ?? "");
   const [note, setNote] = useState(doc?.note ?? "");
+  const [taxRounding, setTaxRounding] = useState<TaxRounding>(doc?.tax_rounding ?? "floor");
   const [lines, setLines] = useState<EditableLine[]>(doc?.lines ?? []);
 
   // 単価を決めるための参考情報(仕入値・仕入先・利益率・参照売価、保存されない)は、
@@ -192,7 +193,7 @@ export default function DocumentEditor({
     setSupplierDropdownPos({ top: rect.bottom, left: rect.left });
   }, [editingSupplierIndex]);
 
-  const totals = useMemo(() => calcTotals(lines), [lines]);
+  const totals = useMemo(() => calcTotals(lines, taxRounding), [lines, taxRounding]);
 
   function onBranchFilterChange(v: string) {
     setBranchFilter(v);
@@ -214,6 +215,19 @@ export default function DocumentEditor({
     } finally {
       setCustomerSearching(false);
     }
+  }
+
+  // 得意先名の最終行の末尾を「御中」または「様」に付け替える(既に付いている
+  // 御中・様は置き換える)。得意先名は住所と同様2行入力に対応しており、
+  // 「○○部 ○○課\n○○様」のように最終行が個人名の場合にも使える。
+  function applyHonorific(honorific: "御中" | "様") {
+    setCustomerName((prev) => {
+      const lines = prev.split("\n");
+      const lastIndex = lines.length - 1;
+      const stripped = (lines[lastIndex] ?? "").replace(/\s*(御中|様)\s*$/, "").trimEnd();
+      lines[lastIndex] = stripped ? `${stripped} ${honorific}` : honorific;
+      return lines.join("\n");
+    });
   }
 
   function selectCustomer(c: CustomerOption) {
@@ -468,6 +482,7 @@ export default function DocumentEditor({
       due_or_valid_date: dueOrValidDate || null,
       staff_name: staffName || null,
       note: note || null,
+      tax_rounding: taxRounding,
     };
     try {
       if (doc === null) {
@@ -587,15 +602,32 @@ export default function DocumentEditor({
                 ))}
               </div>
             )}
-            <input
-              type="text"
+            <textarea
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               placeholder="書類に印字する宛先名(未選択)"
-              style={{ width: "100%", padding: "6px 10px", marginTop: 6, fontWeight: 600, boxSizing: "border-box" }}
+              rows={2}
+              style={{
+                width: "100%",
+                padding: "6px 10px",
+                marginTop: 6,
+                fontWeight: 600,
+                fontFamily: "inherit",
+                fontSize: "inherit",
+                resize: "vertical",
+                boxSizing: "border-box",
+              }}
             />
+            <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+              <button type="button" className="btn-sm" onClick={() => applyHonorific("御中")}>
+                御中
+              </button>
+              <button type="button" className="btn-sm" onClick={() => applyHonorific("様")}>
+                様
+              </button>
+            </div>
             <div className="cell-sub" style={{ marginTop: 2 }}>
-              {customerCode ? `得意先コード: ${customerCode}` : "得意先未選択"}・実際に書類に載る宛先名です。「○○部 ○○課 ○○様」のように書き換えられます(その場合「御中」は「様」に直してください)。
+              {customerCode ? `得意先コード: ${customerCode}` : "得意先未選択"}・実際に書類に載る宛先名です。住所と同様2行まで入力できます。「○○部 ○○課」「○○様」のように分けたい場合は改行し、末尾は上のボタンで「御中」「様」を付け替えられます。
             </div>
           </div>
 
@@ -1071,6 +1103,16 @@ export default function DocumentEditor({
         </div>
 
         <div style={{ padding: "12px 20px", textAlign: "right", fontSize: 13 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <label style={{ color: "var(--ink-faint)" }}>消費税の端数処理</label>
+            <select value={taxRounding} onChange={(e) => setTaxRounding(e.target.value as TaxRounding)} style={{ padding: "4px 8px" }}>
+              {(Object.entries(TAX_ROUNDING_LABEL) as [TaxRounding, string][]).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
           <div>小計: {yen(totals.subtotal)}</div>
           <div>消費税(10%対象分): {yen(totals.tax_10)}</div>
           <div>消費税(8%軽減対象分): {yen(totals.tax_8)}</div>

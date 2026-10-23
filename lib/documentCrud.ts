@@ -2,7 +2,7 @@
 // kind("quote"|"invoice")で共通化する。カラム名が一部違う(quote_no/invoice_no、
 // quote_date/invoice_date、valid_until/due_date)ので、その対応だけここで吸収する。
 import { getSupabaseServerClient } from "./supabaseServer";
-import { calcTotals, type DocumentHeader, type DocumentLine, type DocumentWithLines } from "./quoteTypes";
+import { calcTotals, type DocumentHeader, type DocumentLine, type DocumentWithLines, type TaxRounding } from "./quoteTypes";
 
 export type Kind = "quote" | "invoice";
 
@@ -34,6 +34,7 @@ function rowToHeader(kind: Kind, row: Record<string, unknown>): DocumentHeader {
     tax_exempt_amount: Number(row.tax_exempt_amount),
     total: Number(row.total),
     note: row.note as string | null,
+    tax_rounding: (row.tax_rounding as DocumentHeader["tax_rounding"]) ?? "floor",
   };
 }
 
@@ -47,6 +48,7 @@ export type HeaderInput = {
   due_or_valid_date: string | null;
   staff_name: string | null;
   note: string | null;
+  tax_rounding: TaxRounding;
 };
 
 // 画面側の共通フィールド名から、DB保存用(kindごとの列名)へ変換。
@@ -61,6 +63,7 @@ function headerInputToRow(kind: Kind, input: HeaderInput, totals: ReturnType<typ
     [DUE_COL[kind]]: input.due_or_valid_date,
     staff_name: input.staff_name,
     note: input.note,
+    tax_rounding: input.tax_rounding,
     ...totals,
   };
 }
@@ -98,7 +101,7 @@ export async function getDocument(kind: Kind, id: number): Promise<DocumentWithL
 
 export async function createDocument(kind: Kind, header: HeaderInput, lines: DocumentLine[]) {
   const supabase = getSupabaseServerClient();
-  const totals = calcTotals(lines);
+  const totals = calcTotals(lines, header.tax_rounding);
 
   const { data: inserted, error: insertError } = await supabase
     .from(TABLE[kind])
@@ -139,7 +142,7 @@ function lineToRow(l: DocumentLine, index: number) {
 // (行の並び替え・削除が多い編集画面のため、差分更新より単純で確実)。
 export async function updateDocument(kind: Kind, id: number, header: HeaderInput, lines: DocumentLine[]) {
   const supabase = getSupabaseServerClient();
-  const totals = calcTotals(lines);
+  const totals = calcTotals(lines, header.tax_rounding);
 
   const { error: updateError } = await supabase
     .from(TABLE[kind])
@@ -184,7 +187,7 @@ export async function convertQuoteToInvoice(quoteId: number) {
   due.setDate(due.getDate() + 30);
 
   const supabase = getSupabaseServerClient();
-  const totals = calcTotals(quote.lines);
+  const totals = calcTotals(quote.lines, quote.tax_rounding);
   const { data: inserted, error: insertError } = await supabase
     .from("invoices")
     .insert({
@@ -198,6 +201,7 @@ export async function convertQuoteToInvoice(quoteId: number) {
       due_date: due.toISOString().slice(0, 10),
       staff_name: quote.staff_name,
       note: quote.note,
+      tax_rounding: quote.tax_rounding,
       ...totals,
     })
     .select("*")

@@ -113,7 +113,7 @@ export default function DocumentPrintView({
           {doc.customer_postal_code && <div>〒{doc.customer_postal_code}</div>}
           {doc.customer_address && <div style={{ whiteSpace: "pre-wrap" }}>{doc.customer_address}</div>}
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, borderBottom: "1px solid #333", paddingBottom: 4, minWidth: 260 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, borderBottom: "1px solid #333", paddingBottom: 4, minWidth: 260, whiteSpace: "pre-wrap" }}>
           {doc.customer_name}
         </div>
       </div>
@@ -229,22 +229,39 @@ export default function DocumentPrintView({
             </div>
           </div>
 
-          {/* 部門ごとの明細シート(1部門=1ページ) */}
+          {/* 部門ごとの明細シート(1部門=1ページ)。
+              消費税はインボイス制度上、税率ごとに1回だけ計算する必要があるため、
+              部門シート単位では計算・表示しない(税率ごとの端数処理が部門ごとに
+              独立して発生すると、各部門の消費税の合計と表紙の消費税額がずれる
+              おそれがある)。消費税・合計は表紙でのみ計算・表示し、ここでは
+              税抜の金額小計のみを示す。 */}
           {departmentGroups.map((g) => {
-            const groupTotals = calcTotals(g.lines);
+            const subtotal = g.lines.reduce((sum, l) => sum + l.amount, 0);
             return (
               <div className="print-page property-sheet" key={g.department}>
                 <h1 style={{ textAlign: "center", letterSpacing: 4, fontSize: 18, margin: "0 0 4px" }}>{docTitle}(部門明細)</h1>
                 <div style={{ textAlign: "center", fontSize: 16, fontWeight: 700, margin: "0 0 20px" }}>{g.department}</div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, fontSize: 12 }}>
-                  <div>{doc.customer_name}</div>
+                  <div style={{ whiteSpace: "pre-wrap" }}>{doc.customer_name}</div>
                   <div>
                     {kind === "quote" ? "見積番号" : "請求番号"}: {doc.doc_no}
                     {doc.subject && <span style={{ marginLeft: 12 }}>件名: {doc.subject}</span>}
                   </div>
                 </div>
                 <LineItemsTable lines={g.lines} />
-                <TotalsTable totals={groupTotals} />
+                <div className="totals-block" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+                  <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 220 }}>
+                    <tbody>
+                      <tr style={{ borderTop: "2px solid #333" }}>
+                        <td style={{ padding: "6px 10px", fontWeight: 700 }}>小計(税抜)</td>
+                        <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 700 }}>{yen(subtotal)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="footer-block" style={{ fontSize: 11, color: "#666" }}>
+                  ※消費税は表紙にまとめて記載しています。
+                </div>
               </div>
             );
           })}

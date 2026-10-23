@@ -4,6 +4,14 @@
 
 export type TaxType = "10" | "8" | "0";
 
+export type TaxRounding = "floor" | "ceil" | "round";
+
+export const TAX_ROUNDING_LABEL: Record<TaxRounding, string> = {
+  floor: "切り捨て",
+  ceil: "切上げ",
+  round: "四捨五入",
+};
+
 export type DocumentLine = {
   id?: number;
   line_no: number;
@@ -50,6 +58,10 @@ export type DocumentHeader = {
   tax_exempt_amount: number;
   total: number;
   note: string | null;
+  // 消費税額の端数処理方式。書類ごとに選べる(既定は切り捨て)。インボイス制度では
+  // 税率ごとに1回だけ端数処理する必要があるため、物件用印刷の部門別シートなど
+  // 明細の一部だけを対象にした消費税計算は行わない(表紙の合計でのみ計算する)。
+  tax_rounding: TaxRounding;
 };
 
 export type DocumentWithLines = DocumentHeader & { lines: DocumentLine[] };
@@ -65,16 +77,25 @@ export type CompanyInfo = {
   invoice_registration_no: string | null;
 };
 
+const ROUND_FN: Record<TaxRounding, (n: number) => number> = {
+  floor: Math.floor,
+  ceil: Math.ceil,
+  round: Math.round,
+};
+
 // 明細行から、税区分ごとの小計・消費税・合計を計算する。
 // 端数処理は行ごとの金額(qty*unit_price)はそのまま、税額だけ税区分合計に対して
-// 1円未満切り捨てにする(御請求書サンプルと同じ、税区分ごとに1回だけ計算する方式)。
-export function calcTotals(lines: DocumentLine[]) {
+// 1円未満の端数処理をする(税区分ごとに1回だけ計算する方式。インボイス制度の
+// 「税率ごとに1回」の原則に合わせている)。端数処理方式(切り捨て/切上げ/四捨五入)は
+// 書類ごとに選べ、既定は切り捨て。
+export function calcTotals(lines: DocumentLine[], rounding: TaxRounding = "floor") {
+  const round = ROUND_FN[rounding];
   const byTax: Record<TaxType, number> = { "10": 0, "8": 0, "0": 0 };
   for (const l of lines) {
     byTax[l.tax_type] += l.amount;
   }
-  const tax10 = Math.floor(byTax["10"] * 0.1);
-  const tax8 = Math.floor(byTax["8"] * 0.08);
+  const tax10 = round(byTax["10"] * 0.1);
+  const tax8 = round(byTax["8"] * 0.08);
   const subtotal = byTax["10"] + byTax["8"] + byTax["0"];
   const total = subtotal + tax10 + tax8;
   return {
