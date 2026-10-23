@@ -530,6 +530,16 @@ export default function DocumentEditor({
     setLines((prev) => prev.filter((_, i) => i !== index).map((l, i) => ({ ...l, line_no: i + 1 })));
   }
 
+  // 行を複製してすぐ下に挿入する(似た内容の行を素早く増やせるように)。
+  // idは外して新規行として扱う(保存時に新しい行として挿入される)。
+  function duplicateLine(index: number) {
+    setLines((prev) => {
+      const copy: EditableLine = { ...prev[index], id: undefined };
+      const next = [...prev.slice(0, index + 1), copy, ...prev.slice(index + 1)];
+      return next.map((l, i) => ({ ...l, line_no: i + 1 }));
+    });
+  }
+
   async function save(confirm: boolean) {
     if (!branchCode) {
       setError("発行拠点は必須です。");
@@ -958,7 +968,7 @@ export default function DocumentEditor({
                   <col style={{ width: 150 }} />
                 </>
               )}
-              <col style={{ width: 40 }} />
+              <col style={{ width: 110 }} />
             </colgroup>
             <thead>
               {showRefInfo && (
@@ -1214,10 +1224,15 @@ export default function DocumentEditor({
                       )}
                     </td>
                     )}
-                    <td>
-                      <button type="button" className="btn-icon btn-danger" onClick={() => removeLine(i)} title="この行を削除">
-                        ×
-                      </button>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button type="button" className="btn-icon" onClick={() => duplicateLine(i)} title="この行を複製">
+                          複製
+                        </button>
+                        <button type="button" className="btn-icon btn-danger" onClick={() => removeLine(i)} title="この行を削除">
+                          ×
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1235,7 +1250,7 @@ export default function DocumentEditor({
             .doc-line-table {
               table-layout: fixed;
               width: 100%;
-              min-width: ${showRefInfo ? 1406 : 1006}px;
+              min-width: ${showRefInfo ? 1476 : 1076}px;
             }
             .doc-line-table td,
             .doc-line-table th {
