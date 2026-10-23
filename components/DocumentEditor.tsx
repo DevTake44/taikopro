@@ -761,17 +761,17 @@ export default function DocumentEditor({
             <colgroup>
               <col style={{ width: 120 }} />
               <col />
-              <col style={{ width: 56 }} />
-              <col style={{ width: 76 }} />
+              <col style={{ width: 88 }} />
+              <col style={{ width: 100 }} />
               <col style={{ width: 92 }} />
-              <col style={{ width: 56 }} />
+              <col style={{ width: 118 }} />
               <col style={{ width: showRefInfo ? 140 : 170 }} />
               <col style={{ width: showRefInfo ? 100 : 120 }} />
               {showRefInfo && (
                 <>
-                  <col style={{ width: 64 }} />
+                  <col style={{ width: 100 }} />
                   <col style={{ width: 120 }} />
-                  <col style={{ width: 44 }} />
+                  <col style={{ width: 80 }} />
                   <col style={{ width: 150 }} />
                 </>
               )}
@@ -1052,7 +1052,7 @@ export default function DocumentEditor({
             .doc-line-table {
               table-layout: fixed;
               width: 100%;
-              min-width: ${showRefInfo ? 1200 : 928}px;
+              min-width: ${showRefInfo ? 1406 : 1006}px;
             }
             .doc-line-table td,
             .doc-line-table th {
