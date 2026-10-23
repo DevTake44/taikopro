@@ -678,39 +678,38 @@ export default function DocumentEditor({
               </div>
             </div>
 
-            <div>
-              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>件名</label>
-              <input type="text" value={subject ?? ""} onChange={(e) => setSubject(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
-            </div>
+            {/* 見積日(請求日)と有効期限(支払期限)は対になる日付なので、間に他の項目を挟まず
+                横に並べて1セットだとわかるようにする。 */}
+            <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "見積日" : "請求日"}</label>
+                <input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
+              </div>
 
-            <div>
-              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "見積日" : "請求日"}</label>
-              <input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
-            </div>
-
-            <div>
-              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "有効期限" : "支払期限"}</label>
-              <input
-                type="date"
-                value={dueOrValidDate ?? ""}
-                onChange={(e) => setDueOrValidDate(e.target.value)}
-                style={{ width: "100%", padding: "6px 10px" }}
-              />
-              {kind === "quote" && (
-                <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
-                  {[1, 2, 3, 4, 5, 6].map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className={`btn-sm${dueOrValidDate === addMonths(docDate, m) ? " btn-primary" : ""}`}
-                      onClick={() => setDueOrValidDate(addMonths(docDate, m))}
-                      title={`見積日(${docDate})から${m}ヶ月後`}
-                    >
-                      {m}ヶ月
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "有効期限" : "支払期限"}</label>
+                <input
+                  type="date"
+                  value={dueOrValidDate ?? ""}
+                  onChange={(e) => setDueOrValidDate(e.target.value)}
+                  style={{ width: "100%", padding: "6px 10px" }}
+                />
+                {kind === "quote" && (
+                  <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                    {[1, 2, 3, 4, 5, 6].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        className={`btn-sm${dueOrValidDate === addMonths(docDate, m) ? " btn-primary" : ""}`}
+                        onClick={() => setDueOrValidDate(addMonths(docDate, m))}
+                        title={`見積日(${docDate})から${m}ヶ月後`}
+                      >
+                        {m}ヶ月
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
@@ -792,22 +791,31 @@ export default function DocumentEditor({
               </div>
             </div>
 
-            <div>
-              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>郵便番号・住所</label>
-              <input
-                type="text"
-                placeholder="郵便番号"
-                value={customerPostalCode ?? ""}
-                onChange={(e) => setCustomerPostalCode(e.target.value)}
-                style={{ width: "100%", padding: "6px 10px", marginBottom: 4 }}
-              />
-              <textarea
-                placeholder="住所(マスタと異なる届け先・請求先の場合は書き換えてください。2行目以降はEnterで改行できます)"
-                value={customerAddress ?? ""}
-                onChange={(e) => setCustomerAddress(e.target.value)}
-                rows={2}
-                style={{ width: "100%", padding: "6px 10px", resize: "vertical", fontFamily: "inherit" }}
-              />
+            {/* 郵便番号・住所は得意先欄より短く済み、下に空白ができやすいので、
+                同じ列の下に件名を続けて置き、その空白を使う。 */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>郵便番号・住所</label>
+                <input
+                  type="text"
+                  placeholder="郵便番号"
+                  value={customerPostalCode ?? ""}
+                  onChange={(e) => setCustomerPostalCode(e.target.value)}
+                  style={{ width: "100%", padding: "6px 10px", marginBottom: 4 }}
+                />
+                <textarea
+                  placeholder="住所(マスタと異なる届け先・請求先の場合は書き換えてください。2行目以降はEnterで改行できます)"
+                  value={customerAddress ?? ""}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  rows={2}
+                  style={{ width: "100%", padding: "6px 10px", resize: "vertical", fontFamily: "inherit" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>件名</label>
+                <input type="text" value={subject ?? ""} onChange={(e) => setSubject(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
+              </div>
             </div>
           </div>
         </div>
