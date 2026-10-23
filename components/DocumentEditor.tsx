@@ -694,7 +694,9 @@ export default function DocumentEditor({
                 style={{ width: "100%", padding: "6px 10px" }}
               />
               {kind === "quote" && (
-                <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                // 幅が狭く1行に6個は収まらないため、5+1で最後の「6ヶ月」だけ孤立してはみ出す
+                // ことがないよう、3列×2行のグリッドで揃える。
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, marginTop: 4 }}>
                   {[1, 2, 3, 4, 5, 6].map((m) => (
                     <button
                       key={m}
