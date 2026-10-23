@@ -652,161 +652,163 @@ export default function DocumentEditor({
         </Link>
       </header>
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        {/* 得意先・住所は検索結果や宛先名のテキストエリアで縦に伸びやすく、件名・日付・担当のような
-            1行入力の項目と同じ行に並べると、短い項目側に大きな空白ができてバランスが悪くなる。
-            伸びやすい項目と1行で済む項目をグループ分けし、行ごとの高さが揃うようにする。 */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
-          <div>
-            <label className="req" style={{ fontSize: 12, color: "var(--ink-faint)" }}>発行拠点</label>
-            <select
-              value={branchCode}
-              onChange={(e) => setBranchCode(e.target.value)}
-              style={{ width: "100%", padding: "6px 10px" }}
-            >
-              <option value="" disabled>
-                選択してください
-              </option>
-              {ISSUING_BRANCH_CODES.map((code) => (
-                <option key={code} value={code}>
-                  {BRANCH_NAMES[code] ?? code}
+        {/* 発行拠点・件名・日付・担当は1行入力で済み高さが揃うため、左側に縦積みでまとめる。
+            得意先・住所は検索結果や宛先名のテキストエリアで縦に伸びやすいため、右側にまとめて
+            左の縦積みブロックとおおよそ高さが揃うようにする。 */}
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 280px) 1fr", gap: 20 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div>
+              <label className="req" style={{ fontSize: 12, color: "var(--ink-faint)" }}>発行拠点</label>
+              <select
+                value={branchCode}
+                onChange={(e) => setBranchCode(e.target.value)}
+                style={{ width: "100%", padding: "6px 10px" }}
+              >
+                <option value="" disabled>
+                  選択してください
                 </option>
-              ))}
-            </select>
-            <div className="cell-sub" style={{ marginTop: 2 }}>
-              書類に載る自社の住所・連絡先は、ここで選んだ拠点のものが使われます。
-            </div>
-          </div>
-
-          <div>
-            <label className="req" style={{ fontSize: 12, color: "var(--ink-faint)" }}>得意先</label>
-            <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-              <select value={branchFilter} onChange={(e) => onBranchFilterChange(e.target.value)} style={{ flex: 1 }}>
-                <option value="">拠点(すべて)</option>
                 {ISSUING_BRANCH_CODES.map((code) => (
                   <option key={code} value={code}>
                     {BRANCH_NAMES[code] ?? code}
                   </option>
                 ))}
               </select>
-              <select value={repFilter} onChange={(e) => setRepFilter(e.target.value)} style={{ flex: 1 }}>
-                <option value="">担当(すべて)</option>
-                {repCodesForBranch.map((code) => (
-                  <option key={code} value={code}>
-                    {REP_NAMES[code] ?? code}
-                  </option>
-                ))}
-              </select>
+              <div className="cell-sub" style={{ marginTop: 2 }}>
+                書類に載る自社の住所・連絡先は、ここで選んだ拠点のものが使われます。
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
+
+            <div>
+              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>件名</label>
+              <input type="text" value={subject ?? ""} onChange={(e) => setSubject(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
+            </div>
+
+            <div>
+              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "見積日" : "請求日"}</label>
+              <input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
+            </div>
+
+            <div>
+              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "有効期限" : "支払期限"}</label>
+              <input
+                type="date"
+                value={dueOrValidDate ?? ""}
+                onChange={(e) => setDueOrValidDate(e.target.value)}
+                style={{ width: "100%", padding: "6px 10px" }}
+              />
+              {kind === "quote" && (
+                <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                  {[1, 2, 3, 4, 5, 6].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`btn-sm${dueOrValidDate === addMonths(docDate, m) ? " btn-primary" : ""}`}
+                      onClick={() => setDueOrValidDate(addMonths(docDate, m))}
+                      title={`見積日(${docDate})から${m}ヶ月後`}
+                    >
+                      {m}ヶ月
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>担当</label>
+              <input type="text" value={staffName ?? ""} onChange={(e) => setStaffName(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
+            <div>
+              <label className="req" style={{ fontSize: 12, color: "var(--ink-faint)" }}>得意先</label>
+              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <select value={branchFilter} onChange={(e) => onBranchFilterChange(e.target.value)} style={{ flex: 1 }}>
+                  <option value="">拠点(すべて)</option>
+                  {ISSUING_BRANCH_CODES.map((code) => (
+                    <option key={code} value={code}>
+                      {BRANCH_NAMES[code] ?? code}
+                    </option>
+                  ))}
+                </select>
+                <select value={repFilter} onChange={(e) => setRepFilter(e.target.value)} style={{ flex: 1 }}>
+                  <option value="">担当(すべて)</option>
+                  {repCodesForBranch.map((code) => (
+                    <option key={code} value={code}>
+                      {REP_NAMES[code] ?? code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  type="text"
+                  placeholder="得意先コード・得意先名で検索(拠点/担当のみでも一覧表示できます)"
+                  value={customerQuery}
+                  onChange={(e) => setCustomerQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && searchCustomer()}
+                  style={{ flex: 1, padding: "6px 10px" }}
+                />
+                <button type="button" onClick={searchCustomer} disabled={customerSearching}>
+                  {customerSearching ? "検索中…" : "検索"}
+                </button>
+              </div>
+              {customerResults && (
+                <div className="card" style={{ marginTop: 4, maxHeight: 180, overflowY: "auto" }}>
+                  {customerResults.length === 0 && <p className="cell-sub" style={{ padding: 8 }}>見つかりません。</p>}
+                  {customerResults.map((c) => (
+                    <div key={c.customer_code} className="search-item" onClick={() => selectCustomer(c)}>
+                      {c.customer_code} {c.customer_name}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <textarea
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="書類に印字する宛先名(未選択)"
+                rows={2}
+                style={{
+                  width: "100%",
+                  padding: "6px 10px",
+                  marginTop: 6,
+                  fontWeight: 600,
+                  fontFamily: "inherit",
+                  fontSize: "inherit",
+                  resize: "vertical",
+                  boxSizing: "border-box",
+                }}
+              />
+              <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                <button type="button" className="btn-sm" onClick={() => applyHonorific("御中")}>
+                  御中
+                </button>
+                <button type="button" className="btn-sm" onClick={() => applyHonorific("様")}>
+                  様
+                </button>
+              </div>
+              <div className="cell-sub" style={{ marginTop: 2 }}>
+                {customerCode ? `得意先コード: ${customerCode}` : "得意先未選択"}・実際に書類に載る宛先名は変更できます。住所と同様2行まで入力できます。
+              </div>
+            </div>
+
+            <div>
+              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>郵便番号・住所</label>
               <input
                 type="text"
-                placeholder="得意先コード・得意先名で検索(拠点/担当のみでも一覧表示できます)"
-                value={customerQuery}
-                onChange={(e) => setCustomerQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && searchCustomer()}
-                style={{ flex: 1, padding: "6px 10px" }}
+                placeholder="郵便番号"
+                value={customerPostalCode ?? ""}
+                onChange={(e) => setCustomerPostalCode(e.target.value)}
+                style={{ width: "100%", padding: "6px 10px", marginBottom: 4 }}
               />
-              <button type="button" onClick={searchCustomer} disabled={customerSearching}>
-                {customerSearching ? "検索中…" : "検索"}
-              </button>
+              <textarea
+                placeholder="住所(マスタと異なる届け先・請求先の場合は書き換えてください。2行目以降はEnterで改行できます)"
+                value={customerAddress ?? ""}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+                rows={2}
+                style={{ width: "100%", padding: "6px 10px", resize: "vertical", fontFamily: "inherit" }}
+              />
             </div>
-            {customerResults && (
-              <div className="card" style={{ marginTop: 4, maxHeight: 180, overflowY: "auto" }}>
-                {customerResults.length === 0 && <p className="cell-sub" style={{ padding: 8 }}>見つかりません。</p>}
-                {customerResults.map((c) => (
-                  <div key={c.customer_code} className="search-item" onClick={() => selectCustomer(c)}>
-                    {c.customer_code} {c.customer_name}
-                  </div>
-                ))}
-              </div>
-            )}
-            <textarea
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="書類に印字する宛先名(未選択)"
-              rows={2}
-              style={{
-                width: "100%",
-                padding: "6px 10px",
-                marginTop: 6,
-                fontWeight: 600,
-                fontFamily: "inherit",
-                fontSize: "inherit",
-                resize: "vertical",
-                boxSizing: "border-box",
-              }}
-            />
-            <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-              <button type="button" className="btn-sm" onClick={() => applyHonorific("御中")}>
-                御中
-              </button>
-              <button type="button" className="btn-sm" onClick={() => applyHonorific("様")}>
-                様
-              </button>
-            </div>
-            <div className="cell-sub" style={{ marginTop: 2 }}>
-              {customerCode ? `得意先コード: ${customerCode}` : "得意先未選択"}・実際に書類に載る宛先名です。住所と同様2行まで入力できます。「○○部 ○○課」「○○様」のように分けたい場合は改行し、末尾は上のボタンで「御中」「様」を付け替えられます。
-            </div>
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>郵便番号・住所</label>
-            <input
-              type="text"
-              placeholder="郵便番号"
-              value={customerPostalCode ?? ""}
-              onChange={(e) => setCustomerPostalCode(e.target.value)}
-              style={{ width: "100%", padding: "6px 10px", marginBottom: 4 }}
-            />
-            <textarea
-              placeholder="住所(マスタと異なる届け先・請求先の場合は書き換えてください。2行目以降はEnterで改行できます)"
-              value={customerAddress ?? ""}
-              onChange={(e) => setCustomerAddress(e.target.value)}
-              rows={2}
-              style={{ width: "100%", padding: "6px 10px", resize: "vertical", fontFamily: "inherit" }}
-            />
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginTop: 14 }}>
-          <div>
-            <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>件名</label>
-            <input type="text" value={subject ?? ""} onChange={(e) => setSubject(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "見積日" : "請求日"}</label>
-            <input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "有効期限" : "支払期限"}</label>
-            <input
-              type="date"
-              value={dueOrValidDate ?? ""}
-              onChange={(e) => setDueOrValidDate(e.target.value)}
-              style={{ width: "100%", padding: "6px 10px" }}
-            />
-            {kind === "quote" && (
-              <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
-                {[1, 2, 3, 4, 5, 6].map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className={`btn-sm${dueOrValidDate === addMonths(docDate, m) ? " btn-primary" : ""}`}
-                    onClick={() => setDueOrValidDate(addMonths(docDate, m))}
-                    title={`見積日(${docDate})から${m}ヶ月後`}
-                  >
-                    {m}ヶ月
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>担当</label>
-            <input type="text" value={staffName ?? ""} onChange={(e) => setStaffName(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
           </div>
         </div>
       </div>
