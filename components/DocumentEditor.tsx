@@ -73,6 +73,7 @@ function emptyLine(source: DocumentLine["source"]): EditableLine {
     supplier_code: null,
     supplier_name: null,
     department: null,
+    transaction_date: null,
     cost_price: null,
     margin_pct: null,
     referenceOptions: [],
@@ -96,6 +97,7 @@ function toSavedLines(lines: EditableLine[]): DocumentLine[] {
     supplier_code: l.supplier_code,
     supplier_name: l.supplier_name,
     department: l.department,
+    transaction_date: l.transaction_date,
   }));
 }
 
@@ -131,8 +133,6 @@ export default function DocumentEditor({
   const [subject, setSubject] = useState(doc?.subject ?? "");
   const [docDate, setDocDate] = useState(doc?.doc_date ?? today);
   const [dueOrValidDate, setDueOrValidDate] = useState(doc?.due_or_valid_date ?? defaultDue);
-  // 納品日・取引年月日。インボイス制度上、請求書(適格請求書)には必須の項目。
-  const [transactionDate, setTransactionDate] = useState(doc?.transaction_date ?? "");
   const [staffName, setStaffName] = useState(doc?.staff_name ?? "");
   const [note, setNote] = useState(doc?.note ?? "");
   const [taxRounding, setTaxRounding] = useState<TaxRounding>(doc?.tax_rounding ?? "floor");
@@ -522,6 +522,14 @@ export default function DocumentEditor({
     );
   }
 
+  // 納品日・取引年月日は明細行ごとに持つが(1枚の請求書に複数回の納品分をまとめる
+  // ことがあるため)、実際は全行同じ日付になることが多いので、一括入力の補助を用意する。
+  const [bulkTransactionDate, setBulkTransactionDate] = useState("");
+  function applyBulkTransactionDate() {
+    if (!bulkTransactionDate) return;
+    setLines((prev) => prev.map((l) => ({ ...l, transaction_date: bulkTransactionDate })));
+  }
+
   function removeLine(index: number) {
     setLines((prev) => prev.filter((_, i) => i !== index).map((l, i) => ({ ...l, line_no: i + 1 })));
   }
@@ -566,7 +574,6 @@ export default function DocumentEditor({
       subject: subject || null,
       doc_date: docDate,
       due_or_valid_date: dueOrValidDate || null,
-      transaction_date: transactionDate || null,
       staff_name: staffName || null,
       note: note || null,
       tax_rounding: taxRounding,
@@ -792,21 +799,6 @@ export default function DocumentEditor({
             )}
           </div>
 
-          {kind === "invoice" && (
-            <div>
-              <label className="req" style={{ fontSize: 12, color: "var(--ink-faint)" }}>納品日・取引年月日</label>
-              <input
-                type="date"
-                value={transactionDate ?? ""}
-                onChange={(e) => setTransactionDate(e.target.value)}
-                style={{ width: "100%", padding: "6px 10px" }}
-              />
-              <div className="cell-sub" style={{ marginTop: 2 }}>
-                インボイス制度(適格請求書)上、請求書には必須の項目です。
-              </div>
-            </div>
-          )}
-
           <div>
             <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>担当</label>
             <input type="text" value={staffName ?? ""} onChange={(e) => setStaffName(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
@@ -833,6 +825,20 @@ export default function DocumentEditor({
             <button type="button" className={showRefInfo ? "btn-primary" : ""} onClick={() => setShowRefInfo((s) => !s)}>
               {showRefInfo ? "参考情報を隠す" : "参考情報を表示(仕入値・仕入先など)"}
             </button>
+            {kind === "invoice" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="date"
+                  value={bulkTransactionDate}
+                  onChange={(e) => setBulkTransactionDate(e.target.value)}
+                  style={{ padding: "6px 8px" }}
+                  title="納品日・取引年月日(インボイス制度上の必須項目。明細行ごとに設定できます)"
+                />
+                <button type="button" onClick={applyBulkTransactionDate} disabled={!bulkTransactionDate}>
+                  納品日を全行に適用
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -981,6 +987,7 @@ export default function DocumentEditor({
               <col style={{ width: 118 }} />
               <col style={{ width: showRefInfo ? 140 : 170 }} />
               <col style={{ width: showRefInfo ? 100 : 120 }} />
+              {kind === "invoice" && <col style={{ width: 130 }} />}
               {showRefInfo && (
                 <>
                   <col style={{ width: 100 }} />
@@ -994,7 +1001,7 @@ export default function DocumentEditor({
             <thead>
               {showRefInfo && (
                 <tr>
-                  <th colSpan={8} style={{ background: "var(--card)" }}></th>
+                  <th colSpan={kind === "invoice" ? 9 : 8} style={{ background: "var(--card)" }}></th>
                   <th
                     colSpan={4}
                     style={{
@@ -1019,6 +1026,9 @@ export default function DocumentEditor({
                 <th>税区分</th>
                 <th>備考</th>
                 <th title="物件用印刷で部門ごとにシートを分けるための項目です">部門</th>
+                {kind === "invoice" && (
+                  <th title="インボイス制度(適格請求書)上の必須項目。行ごとに設定できます">納品日・取引日</th>
+                )}
                 {showRefInfo && (
                   <>
                     <th style={{ borderLeft: "2px solid var(--line)" }}>仕入値</th>
@@ -1112,6 +1122,17 @@ export default function DocumentEditor({
                         style={{ width: "100%", boxSizing: "border-box" }}
                       />
                     </td>
+                    {kind === "invoice" && (
+                      <td>
+                        <input
+                          type="date"
+                          className="cell-input"
+                          value={l.transaction_date ?? ""}
+                          onChange={(e) => updateLine(i, { transaction_date: e.target.value || null })}
+                          style={{ width: "100%", boxSizing: "border-box" }}
+                        />
+                      </td>
+                    )}
                     {showRefInfo && (
                     <td style={{ borderLeft: "2px solid var(--line)" }}>
                       <input
@@ -1263,7 +1284,7 @@ export default function DocumentEditor({
               })}
               {lines.length === 0 && (
                 <tr>
-                  <td colSpan={showRefInfo ? 13 : 9} className="cell-sub" style={{ padding: 16 }}>
+                  <td colSpan={(showRefInfo ? 13 : 9) + (kind === "invoice" ? 1 : 0)} className="cell-sub" style={{ padding: 16 }}>
                     明細がありません。上のボタンから追加してください。
                   </td>
                 </tr>
@@ -1274,7 +1295,7 @@ export default function DocumentEditor({
             .doc-line-table {
               table-layout: fixed;
               width: 100%;
-              min-width: ${showRefInfo ? 1536 : 1136}px;
+              min-width: ${(showRefInfo ? 1536 : 1136) + (kind === "invoice" ? 130 : 0)}px;
             }
             .doc-line-table td,
             .doc-line-table th {

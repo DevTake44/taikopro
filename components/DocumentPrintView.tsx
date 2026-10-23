@@ -29,12 +29,18 @@ function groupByDepartment(lines: DocumentLine[]) {
   return order.map((department) => ({ department, lines: map.get(department)! }));
 }
 
-function LineItemsTable({ lines }: { lines: DocumentLine[] }) {
+// showTransactionDateは請求書のみtrue。インボイス制度上、納品日・取引年月日は
+// 明細行ごとに異なり得るため(1枚の請求書に複数回の納品分をまとめることがある)、
+// 書類全体で1つの日付ではなく行ごとの列として表示する。
+function LineItemsTable({ lines, showTransactionDate }: { lines: DocumentLine[]; showTransactionDate?: boolean }) {
+  const headers = showTransactionDate
+    ? ["品番/品名", "数量", "単価", "金額", "税区分", "納品日・取引日", "備考"]
+    : ["品番/品名", "数量", "単価", "金額", "税区分", "備考"];
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
       <thead>
         <tr>
-          {["品番/品名", "数量", "単価", "金額", "税区分", "備考"].map((h) => (
+          {headers.map((h) => (
             <th key={h} style={{ border: "1px solid #999", padding: "6px 8px", fontSize: 12, background: "#f3f4f6" }}>
               {h}
             </th>
@@ -52,6 +58,9 @@ function LineItemsTable({ lines }: { lines: DocumentLine[] }) {
             <td style={{ border: "1px solid #ccc", padding: "6px 8px", fontSize: 12, textAlign: "right" }}>{yen(l.unit_price)}</td>
             <td style={{ border: "1px solid #ccc", padding: "6px 8px", fontSize: 12, textAlign: "right" }}>{yen(l.amount)}</td>
             <td style={{ border: "1px solid #ccc", padding: "6px 8px", fontSize: 12, textAlign: "center" }}>{TAX_LABEL[l.tax_type]}</td>
+            {showTransactionDate && (
+              <td style={{ border: "1px solid #ccc", padding: "6px 8px", fontSize: 12, textAlign: "center" }}>{l.transaction_date ?? ""}</td>
+            )}
             <td style={{ border: "1px solid #ccc", padding: "6px 8px", fontSize: 11 }}>{l.note}</td>
           </tr>
         ))}
@@ -127,7 +136,6 @@ export default function DocumentPrintView({
       <div style={{ textAlign: "right", fontSize: 12 }}>
         <div>{kind === "quote" ? "見積番号" : "請求番号"}: {doc.doc_no}</div>
         <div>{kind === "quote" ? "見積日" : "請求日"}: {doc.doc_date}</div>
-        {kind === "invoice" && doc.transaction_date && <div>納品日・取引年月日: {doc.transaction_date}</div>}
         {doc.due_or_valid_date && <div>{dueLabel}: {doc.due_or_valid_date}</div>}
       </div>
     </div>
@@ -202,7 +210,7 @@ export default function DocumentPrintView({
           <div style={{ textAlign: "center", fontSize: 20, fontWeight: 700, margin: "16px 0" }}>
             {kind === "quote" ? "御見積金額" : "御請求金額"}: {yen(doc.total)}
           </div>
-          <LineItemsTable lines={doc.lines} />
+          <LineItemsTable lines={doc.lines} showTransactionDate={kind === "invoice"} />
           <TotalsTable totals={doc} />
           <div className="footer-block">
             {doc.note && (
@@ -283,7 +291,7 @@ export default function DocumentPrintView({
                     {doc.subject && <span style={{ marginLeft: 12 }}>件名: {doc.subject}</span>}
                   </div>
                 </div>
-                <LineItemsTable lines={g.lines} />
+                <LineItemsTable lines={g.lines} showTransactionDate={kind === "invoice"} />
                 <div className="totals-block" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
                   <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 220 }}>
                     <tbody>

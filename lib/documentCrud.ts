@@ -27,7 +27,6 @@ function rowToHeader(kind: Kind, row: Record<string, unknown>): DocumentHeader {
     subject: row.subject as string | null,
     doc_date: row[DATE_COL[kind]] as string,
     due_or_valid_date: row[DUE_COL[kind]] as string | null,
-    transaction_date: row.transaction_date as string | null,
     staff_name: row.staff_name as string | null,
     status: row.status as DocumentHeader["status"],
     subtotal: Number(row.subtotal),
@@ -49,7 +48,6 @@ export type HeaderInput = {
   subject: string | null;
   doc_date: string;
   due_or_valid_date: string | null;
-  transaction_date: string | null;
   staff_name: string | null;
   note: string | null;
   tax_rounding: TaxRounding;
@@ -66,7 +64,6 @@ function headerInputToRow(kind: Kind, input: HeaderInput, totals: ReturnType<typ
     subject: input.subject,
     [DATE_COL[kind]]: input.doc_date,
     [DUE_COL[kind]]: input.due_or_valid_date,
-    transaction_date: input.transaction_date,
     staff_name: input.staff_name,
     note: input.note,
     tax_rounding: input.tax_rounding,
@@ -147,6 +144,7 @@ function lineToRow(l: DocumentLine, index: number) {
     supplier_code: l.supplier_code,
     supplier_name: l.supplier_name,
     department: l.department,
+    transaction_date: l.transaction_date,
   };
 }
 
@@ -210,7 +208,6 @@ export async function convertQuoteToInvoice(quoteId: number) {
       subject: quote.subject,
       invoice_date: today,
       due_date: null,
-      transaction_date: quote.transaction_date,
       staff_name: quote.staff_name,
       note: quote.note,
       tax_rounding: quote.tax_rounding,
@@ -248,7 +245,6 @@ export async function duplicateDocument(kind: Kind, id: number) {
     subject: original.subject,
     doc_date: today,
     due_or_valid_date: original.due_or_valid_date,
-    transaction_date: original.transaction_date,
     staff_name: original.staff_name,
     note: original.note,
     tax_rounding: original.tax_rounding,

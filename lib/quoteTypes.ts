@@ -32,6 +32,10 @@ export type DocumentLine = {
   // 物件用印刷(表紙=合計、部門ごとに1シート)で明細をグループ分けするための部門名。
   // 自由入力(マスタ化はしない)。未入力の行は「部門未設定」としてまとめて扱う。
   department: string | null;
+  // 納品日・取引年月日。インボイス制度上、請求書(適格請求書)には必須の項目。
+  // 1枚の請求書に複数回の納品分をまとめて記載することがあるため、書類全体で1つではなく
+  // 明細行ごとに持つ(同じ請求書内でも行によって日付が異なり得る)。
+  transaction_date: string | null;
 };
 
 export type DocumentStatus = "draft" | "confirmed" | "converted";
@@ -52,8 +56,6 @@ export type DocumentHeader = {
   doc_date: string;
   // quoteは valid_until、invoiceは due_date
   due_or_valid_date: string | null;
-  // 納品日・取引年月日。インボイス制度上、請求書(適格請求書)には必須の項目。
-  transaction_date: string | null;
   staff_name: string | null;
   status: DocumentStatus;
   subtotal: number;
@@ -83,11 +85,13 @@ export function checkInvoiceCompliance(doc: DocumentWithLines, company: CompanyI
   if (!doc.customer_name?.trim()) {
     errors.push("得意先名(書類の宛先)が入力されていません。");
   }
-  if (!doc.transaction_date?.trim()) {
-    errors.push("納品日・取引年月日が入力されていません。");
-  }
   if (doc.lines.length === 0) {
     errors.push("明細が1行もありません。");
+  } else {
+    const missing = doc.lines.filter((l) => !l.transaction_date?.trim()).length;
+    if (missing > 0) {
+      errors.push(`納品日・取引年月日が入力されていない明細行があります(${missing}行)。`);
+    }
   }
   return errors;
 }
