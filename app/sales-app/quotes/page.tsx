@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { listDocuments } from "@/lib/documentCrud";
 import { yen } from "@/lib/format";
-import { BRANCH_NAMES, branchNameOnly } from "@/lib/branch-names";
+import { branchNameOnly } from "@/lib/branch-names";
 import DocumentListFilters from "@/components/DocumentListFilters";
 import DuplicateButton from "@/components/DuplicateButton";
 
@@ -42,11 +42,7 @@ export default async function QuotesListPage({
             + 新規見積作成
           </Link>
         </div>
-        <DocumentListFilters
-          branchCodes={Object.keys(BRANCH_NAMES).sort()}
-          defaultBranch={branchCode ?? ""}
-          defaultCustomer={customerQuery ?? ""}
-        />
+        <DocumentListFilters defaultBranch={branchCode ?? ""} defaultCustomer={customerQuery ?? ""} />
         <div className="matwrap">
           <table className="mat">
             <thead>

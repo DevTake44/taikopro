@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { yen } from "@/lib/format";
 import { calcTotals, TAX_ROUNDING_LABEL, type DocumentLine, type DocumentWithLines, type TaxRounding, type TaxType } from "@/lib/quoteTypes";
-import { BRANCH_NAMES } from "@/lib/branch-names";
+import { BRANCH_NAMES, ISSUING_BRANCH_CODES } from "@/lib/branch-names";
 import { REP_NAMES } from "@/lib/rep-names";
 import type { BranchRepPair } from "@/app/api/quote-customer-branch-reps/route";
 
@@ -166,10 +166,9 @@ export default function DocumentEditor({
       .catch(() => {});
   }, []);
 
-  const branchCodes = useMemo(
-    () => Array.from(new Set(branchRepPairs.map((p) => p.branch_code))).sort(),
-    [branchRepPairs]
-  );
+  // 拠点の選択肢は、見積・請求書を発行する17拠点(ISSUING_BRANCH_CODES)に固定する。
+  // 得意先マスタの実績ベース(branchRepPairs)にすると、経理・在庫・物流など発行主体に
+  // ならない拠点まで混ざって選びにくくなるため使わない。
   const repCodesForBranch = useMemo(() => {
     const codes = branchRepPairs
       .filter((p) => (branchFilter ? p.branch_code === branchFilter : true))
@@ -641,7 +640,7 @@ export default function DocumentEditor({
               <option value="" disabled>
                 選択してください
               </option>
-              {branchCodes.map((code) => (
+              {ISSUING_BRANCH_CODES.map((code) => (
                 <option key={code} value={code}>
                   {BRANCH_NAMES[code] ?? code}
                 </option>
@@ -657,7 +656,7 @@ export default function DocumentEditor({
             <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
               <select value={branchFilter} onChange={(e) => onBranchFilterChange(e.target.value)} style={{ flex: 1 }}>
                 <option value="">拠点(すべて)</option>
-                {branchCodes.map((code) => (
+                {ISSUING_BRANCH_CODES.map((code) => (
                   <option key={code} value={code}>
                     {BRANCH_NAMES[code] ?? code}
                   </option>
