@@ -52,6 +52,8 @@ export type DocumentHeader = {
   doc_date: string;
   // quoteは valid_until、invoiceは due_date
   due_or_valid_date: string | null;
+  // 納品日・取引年月日。インボイス制度上、請求書(適格請求書)には必須の項目。
+  transaction_date: string | null;
   staff_name: string | null;
   status: DocumentStatus;
   subtotal: number;
@@ -67,6 +69,28 @@ export type DocumentHeader = {
 };
 
 export type DocumentWithLines = DocumentHeader & { lines: DocumentLine[] };
+
+// インボイス制度(適格請求書等保存方式)で請求書に必須とされる項目が揃っているかを
+// チェックする。見積書は適格請求書ではないため対象外(呼び出し側でkind==="invoice"の
+// 時だけ使う)。不足項目があれば、その説明文の配列を返す(空配列=問題なし)。
+export function checkInvoiceCompliance(doc: DocumentWithLines, company: CompanyInfo | null): string[] {
+  const errors: string[] = [];
+  if (!company) {
+    errors.push("発行拠点の自社情報(会社名・住所等)が登録されていません。");
+  } else if (!company.invoice_registration_no?.trim()) {
+    errors.push("発行拠点の適格請求書発行事業者登録番号が登録されていません。");
+  }
+  if (!doc.customer_name?.trim()) {
+    errors.push("得意先名(書類の宛先)が入力されていません。");
+  }
+  if (!doc.transaction_date?.trim()) {
+    errors.push("納品日・取引年月日が入力されていません。");
+  }
+  if (doc.lines.length === 0) {
+    errors.push("明細が1行もありません。");
+  }
+  return errors;
+}
 
 export type CompanyInfo = {
   name: string;

@@ -115,17 +115,13 @@ export default function DocumentEditor({
   const router = useRouter();
   const today = new Date().toISOString().slice(0, 10);
   // 見積の有効期限は「見積日からNヶ月後」で素早く設定できるようにする(標準3ヶ月)。
-  // 請求書の支払期限は従来通り30日後を初期値にする(今回の変更対象外)。
+  // 請求書の支払期限は、案件ごとに決まる(取引先の支払いサイト次第)ため標準はブランクにする。
   const addMonths = (dateStr: string, months: number) => {
     const d = new Date(dateStr);
     d.setMonth(d.getMonth() + months);
     return d.toISOString().slice(0, 10);
   };
-  const defaultDue = kind === "quote" ? addMonths(today, 3) : (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    return d.toISOString().slice(0, 10);
-  })();
+  const defaultDue = kind === "quote" ? addMonths(today, 3) : "";
 
   const [branchCode, setBranchCode] = useState(doc?.branch_code ?? "");
   const [customerCode, setCustomerCode] = useState(doc?.customer_code ?? "");
@@ -134,9 +130,9 @@ export default function DocumentEditor({
   const [customerAddress, setCustomerAddress] = useState(doc?.customer_address ?? "");
   const [subject, setSubject] = useState(doc?.subject ?? "");
   const [docDate, setDocDate] = useState(doc?.doc_date ?? today);
-  const [dueOrValidDate, setDueOrValidDate] = useState(
-    doc?.due_or_valid_date ?? (kind === "quote" ? defaultDue : defaultDue)
-  );
+  const [dueOrValidDate, setDueOrValidDate] = useState(doc?.due_or_valid_date ?? defaultDue);
+  // 納品日・取引年月日。インボイス制度上、請求書(適格請求書)には必須の項目。
+  const [transactionDate, setTransactionDate] = useState(doc?.transaction_date ?? "");
   const [staffName, setStaffName] = useState(doc?.staff_name ?? "");
   const [note, setNote] = useState(doc?.note ?? "");
   const [taxRounding, setTaxRounding] = useState<TaxRounding>(doc?.tax_rounding ?? "floor");
@@ -570,6 +566,7 @@ export default function DocumentEditor({
       subject: subject || null,
       doc_date: docDate,
       due_or_valid_date: dueOrValidDate || null,
+      transaction_date: transactionDate || null,
       staff_name: staffName || null,
       note: note || null,
       tax_rounding: taxRounding,
@@ -794,6 +791,21 @@ export default function DocumentEditor({
               </div>
             )}
           </div>
+
+          {kind === "invoice" && (
+            <div>
+              <label className="req" style={{ fontSize: 12, color: "var(--ink-faint)" }}>納品日・取引年月日</label>
+              <input
+                type="date"
+                value={transactionDate ?? ""}
+                onChange={(e) => setTransactionDate(e.target.value)}
+                style={{ width: "100%", padding: "6px 10px" }}
+              />
+              <div className="cell-sub" style={{ marginTop: 2 }}>
+                インボイス制度(適格請求書)上、請求書には必須の項目です。
+              </div>
+            </div>
+          )}
 
           <div>
             <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>担当</label>

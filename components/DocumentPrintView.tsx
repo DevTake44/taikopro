@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { yen, jpn } from "@/lib/format";
-import { calcTotals, type CompanyInfo, type DocumentLine, type DocumentWithLines } from "@/lib/quoteTypes";
+import { calcTotals, checkInvoiceCompliance, type CompanyInfo, type DocumentLine, type DocumentWithLines } from "@/lib/quoteTypes";
 
 const TAX_LABEL: Record<string, string> = { "10": "10%", "8": "8%(軽減)", "0": "非課税" };
 const NO_DEPARTMENT_LABEL = "部門未設定";
@@ -101,10 +101,17 @@ export default function DocumentPrintView({
   company: CompanyInfo | null;
 }) {
   const [propertyMode, setPropertyMode] = useState(false);
-  const docTitle = kind === "quote" ? "見　積　書" : "御　請　求　書";
+  // 納品書は請求書の内容そのまま、タイトルだけ変えて発行する(保存はしない・印刷時のみの切り替え)。
+  const [deliveryNoteMode, setDeliveryNoteMode] = useState(false);
+  const docTitle = deliveryNoteMode ? "納　品　書" : kind === "quote" ? "見　積　書" : "御　請　求　書";
   const dueLabel = kind === "quote" ? "有効期限" : "お支払期限";
 
   const departmentGroups = useMemo(() => groupByDepartment(doc.lines), [doc.lines]);
+
+  // インボイス制度(適格請求書等保存方式)上、請求書に必須の項目が揃っているかを確認する。
+  // 見積書・納品書は対象外(納品書は請求書の名称だけを変えた印刷物のため、内容面の
+  // 適格請求書要件は元の請求書側でチェック済みという扱い)。
+  const complianceErrors = kind === "invoice" ? checkInvoiceCompliance(doc, company) : [];
 
   const docInfoBlock = (
     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
@@ -120,6 +127,7 @@ export default function DocumentPrintView({
       <div style={{ textAlign: "right", fontSize: 12 }}>
         <div>{kind === "quote" ? "見積番号" : "請求番号"}: {doc.doc_no}</div>
         <div>{kind === "quote" ? "見積日" : "請求日"}: {doc.doc_date}</div>
+        {kind === "invoice" && doc.transaction_date && <div>納品日・取引年月日: {doc.transaction_date}</div>}
         {doc.due_or_valid_date && <div>{dueLabel}: {doc.due_or_valid_date}</div>}
       </div>
     </div>
@@ -152,13 +160,40 @@ export default function DocumentPrintView({
           <button type="button" className={propertyMode ? "btn-primary" : ""} onClick={() => setPropertyMode(true)}>
             物件用(部門ごとにシート分け)
           </button>
+          {kind === "invoice" && (
+            <>
+              <span style={{ borderLeft: "1px solid var(--line)", margin: "0 4px" }} />
+              <button type="button" className={deliveryNoteMode ? "" : "btn-primary"} onClick={() => setDeliveryNoteMode(false)}>
+                請求書
+              </button>
+              <button type="button" className={deliveryNoteMode ? "btn-primary" : ""} onClick={() => setDeliveryNoteMode(true)}>
+                納品書
+              </button>
+            </>
+          )}
         </div>
         <button type="button" onClick={() => window.print()}>
           印刷 / PDF保存
         </button>
       </div>
 
-      {!propertyMode && (
+      {complianceErrors.length > 0 && (
+        <div className="print-page" style={{ border: "2px solid #c0392b" }}>
+          <h1 style={{ color: "#c0392b", fontSize: 18, marginTop: 0 }}>
+            インボイス制度(適格請求書)の必須項目が不足しています
+          </h1>
+          <p style={{ fontSize: 13 }}>
+            以下の項目が未入力のため、適格請求書として印刷できません。編集画面に戻って入力してください。
+          </p>
+          <ul style={{ fontSize: 13 }}>
+            {complianceErrors.map((msg) => (
+              <li key={msg}>{msg}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {complianceErrors.length === 0 && !propertyMode && (
         <div className="print-page">
           <h1 style={{ textAlign: "center", letterSpacing: 8, fontSize: 22, margin: "0 0 20px" }}>{docTitle}</h1>
           {docInfoBlock}
@@ -181,7 +216,7 @@ export default function DocumentPrintView({
         </div>
       )}
 
-      {propertyMode && (
+      {complianceErrors.length === 0 && propertyMode && (
         <>
           {/* 表紙: 部門ごとの金額一覧+合計 */}
           <div className="print-page">
