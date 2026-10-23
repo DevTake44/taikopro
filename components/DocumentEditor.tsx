@@ -679,42 +679,35 @@ export default function DocumentEditor({
             </div>
 
             {/* 見積日(請求日)と有効期限(支払期限)は対になる日付なので、間に他の項目を挟まず
-                横に並べて1セットだとわかるようにする。 */}
-            <div style={{ display: "flex", gap: 10 }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "見積日" : "請求日"}</label>
-                <input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
-              </div>
-
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "有効期限" : "支払期限"}</label>
-                <input
-                  type="date"
-                  value={dueOrValidDate ?? ""}
-                  onChange={(e) => setDueOrValidDate(e.target.value)}
-                  style={{ width: "100%", padding: "6px 10px" }}
-                />
-                {kind === "quote" && (
-                  <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
-                    {[1, 2, 3, 4, 5, 6].map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        className={`btn-sm${dueOrValidDate === addMonths(docDate, m) ? " btn-primary" : ""}`}
-                        onClick={() => setDueOrValidDate(addMonths(docDate, m))}
-                        title={`見積日(${docDate})から${m}ヶ月後`}
-                      >
-                        {m}ヶ月
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                続けて縦に並べ1セットだとわかるようにする。 */}
+            <div>
+              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "見積日" : "請求日"}</label>
+              <input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
             </div>
 
             <div>
-              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>担当</label>
-              <input type="text" value={staffName ?? ""} onChange={(e) => setStaffName(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
+              <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{kind === "quote" ? "有効期限" : "支払期限"}</label>
+              <input
+                type="date"
+                value={dueOrValidDate ?? ""}
+                onChange={(e) => setDueOrValidDate(e.target.value)}
+                style={{ width: "100%", padding: "6px 10px" }}
+              />
+              {kind === "quote" && (
+                <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                  {[1, 2, 3, 4, 5, 6].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`btn-sm${dueOrValidDate === addMonths(docDate, m) ? " btn-primary" : ""}`}
+                      onClick={() => setDueOrValidDate(addMonths(docDate, m))}
+                      title={`見積日(${docDate})から${m}ヶ月後`}
+                    >
+                      {m}ヶ月
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -815,6 +808,11 @@ export default function DocumentEditor({
               <div>
                 <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>件名</label>
                 <input type="text" value={subject ?? ""} onChange={(e) => setSubject(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>担当</label>
+                <input type="text" value={staffName ?? ""} onChange={(e) => setStaffName(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
               </div>
             </div>
           </div>
