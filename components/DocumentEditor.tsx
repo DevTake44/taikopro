@@ -744,175 +744,109 @@ export default function DocumentEditor({
           </div>
         )}
 
-        <div className="matwrap">
-          <table className="mat doc-line-table">
-            {/* table-layout:fixedでの列幅は<colgroup>の<col>で確定させる(ヘッダー2行目の
-                th style={width}は、1行目がcolSpanのグループ見出し行になっていると
-                ブラウザに無視されるため)。幅は実データ(sales_lines/purchases)の実績値を
-                根拠にしている:
-                - 数量: 99.9%ile=3,000(4桁)、過去実績の最大=68,400(5桁)
-                - 単価: 99.9%ile=¥232,025(6桁)、過去実績の最大=¥549万(7桁)
-                - 金額: 99.9%ile=¥703,200、過去実績の最大=¥2,605万(表示11文字)
-                - 税区分: 選択式で最大ラベル「8%(軽減)」6文字固定
-                - 商品コード: 商品マスタの実績最大14文字
-                - 商品名: 実績は中央値13文字・90%ile19文字(2行textareaの折返しで足りる)
-                極端な外れ値(1%未満)は、入力欄内で横スクロール/テキストの折返しで吸収し、
-                そのために大多数の行の見やすさを犠牲にしない。 */}
-            <colgroup>
-              <col style={{ width: 120 }} />
-              <col />
-              <col style={{ width: 56 }} />
-              <col style={{ width: 76 }} />
-              <col style={{ width: 92 }} />
-              <col style={{ width: 56 }} />
-              <col style={{ width: showRefInfo ? 140 : 170 }} />
-              <col style={{ width: showRefInfo ? 100 : 120 }} />
-              {showRefInfo && (
-                <>
-                  <col style={{ width: 64 }} />
-                  <col style={{ width: 120 }} />
-                  <col style={{ width: 44 }} />
-                  <col style={{ width: 150 }} />
-                </>
-              )}
-              <col style={{ width: 40 }} />
-            </colgroup>
-            <thead>
-              {showRefInfo && (
-                <tr>
-                  <th colSpan={8} style={{ background: "var(--card)" }}></th>
-                  <th
-                    colSpan={4}
-                    style={{
-                      borderLeft: "2px solid var(--line)",
-                      background: "#fbfcfe",
-                      textAlign: "center",
-                      fontSize: 11,
-                      fontWeight: 600,
-                    }}
+        <div className="line-list">
+          {/* 「商品コード・商品名・数量・単価・金額・税区分」(常用フィールド)と
+              「備考・部門」「参考情報(仕入値・仕入先・利益率・参照売価)」を同じ行に
+              横並びさせず、行の中で縦に分けている。1行に詰め込む列数を減らすことで、
+              ノートPC幅(1280px前後)でも横スクロールなしに、常用フィールドに十分な幅を
+              確保できる。 */}
+          <div className="line-head">
+            <span className="lf-code">商品コード</span>
+            <span className="lf-name">商品名</span>
+            <span className="lf-qty">数量</span>
+            <span className="lf-price">単価</span>
+            <span className="lf-amount">金額</span>
+            <span className="lf-tax">税区分</span>
+            <span className="lf-del"></span>
+          </div>
+          {lines.map((l, i) => {
+            const options = l.referenceOptions ?? [];
+            const selected = options.find((o) => o.customer_code === l.selectedReferenceCode) ?? options[0];
+            return (
+              <div className="line-card" key={i}>
+                <div className="line-row line-row-main">
+                  <input
+                    type="text"
+                    className="cell-input lf-code"
+                    value={l.product_code ?? ""}
+                    onChange={(e) => updateLine(i, { product_code: e.target.value || null })}
+                    onBlur={(e) => refreshLineMeta(i, e.target.value)}
+                  />
+                  <textarea
+                    className="cell-input lf-name"
+                    value={l.product_name}
+                    onChange={(e) => updateLine(i, { product_name: e.target.value })}
+                    rows={2}
+                    style={{ fontFamily: "inherit", fontSize: "inherit", fontWeight: 600 }}
+                  />
+                  <input
+                    type="number"
+                    className="cell-input lf-qty"
+                    value={l.qty}
+                    onChange={(e) => updateLine(i, { qty: Number(e.target.value) })}
+                    style={{ textAlign: "right" }}
+                  />
+                  <input
+                    type="number"
+                    className="cell-input lf-price"
+                    value={l.unit_price}
+                    onChange={(e) => updateUnitPrice(i, e.target.value)}
+                    style={{ textAlign: "right" }}
+                  />
+                  <div className="lf-amount">{yen(l.amount)}</div>
+                  <select
+                    className="cell-input lf-tax"
+                    value={l.tax_type}
+                    onChange={(e) => updateLine(i, { tax_type: e.target.value as TaxType })}
                   >
-                    単価を決めるための参考情報
-                  </th>
-                  <th style={{ background: "var(--card)" }}></th>
-                </tr>
-              )}
-              <tr>
-                <th className="codecol">商品コード</th>
-                <th className="namecol">商品名</th>
-                <th>数量</th>
-                <th>単価</th>
-                <th>金額</th>
-                <th>税区分</th>
-                <th>備考</th>
-                <th title="物件用印刷で部門ごとにシートを分けるための項目です">部門</th>
+                    <option value="10">10%</option>
+                    <option value="8">8%(軽減)</option>
+                    <option value="0">非課税</option>
+                  </select>
+                  <button type="button" className="btn-icon btn-danger lf-del" onClick={() => removeLine(i)} title="この行を削除">
+                    ×
+                  </button>
+                </div>
+
+                <div className="line-row line-row-sub">
+                  <label>
+                    備考
+                    <input
+                      type="text"
+                      className="cell-input"
+                      value={l.note ?? ""}
+                      onChange={(e) => updateLine(i, { note: e.target.value || null })}
+                    />
+                  </label>
+                  <label>
+                    部門
+                    <input
+                      type="text"
+                      className="cell-input"
+                      value={l.department ?? ""}
+                      onChange={(e) => updateLine(i, { department: e.target.value || null })}
+                      placeholder="例: 水産厨房(物件用印刷のシート分けに使用)"
+                    />
+                  </label>
+                </div>
+
                 {showRefInfo && (
-                  <>
-                    <th style={{ borderLeft: "2px solid var(--line)" }}>仕入値</th>
-                    <th>仕入先</th>
-                    <th>利益率</th>
-                    <th>参照売価</th>
-                  </>
-                )}
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l, i) => {
-                const options = l.referenceOptions ?? [];
-                const selected = options.find((o) => o.customer_code === l.selectedReferenceCode) ?? options[0];
-                return (
-                  <tr key={i}>
-                    <td className="codecol">
-                      <input
-                        type="text"
-                        className="cell-input"
-                        value={l.product_code ?? ""}
-                        onChange={(e) => updateLine(i, { product_code: e.target.value || null })}
-                        onBlur={(e) => refreshLineMeta(i, e.target.value)}
-                        style={{ width: "100%", boxSizing: "border-box" }}
-                      />
-                    </td>
-                    <td className="namecol" style={{ whiteSpace: "normal" }}>
-                      <textarea
-                        className="cell-input"
-                        value={l.product_name}
-                        onChange={(e) => updateLine(i, { product_name: e.target.value })}
-                        rows={2}
-                        style={{
-                          width: "100%",
-                          resize: "vertical",
-                          fontFamily: "inherit",
-                          fontSize: "inherit",
-                          fontWeight: 600,
-                          boxSizing: "border-box",
-                        }}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        className="cell-input"
-                        value={l.qty}
-                        onChange={(e) => updateLine(i, { qty: Number(e.target.value) })}
-                        style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        className="cell-input"
-                        value={l.unit_price}
-                        onChange={(e) => updateUnitPrice(i, e.target.value)}
-                        style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
-                      />
-                    </td>
-                    <td>{yen(l.amount)}</td>
-                    <td>
-                      <select
-                        className="cell-input"
-                        value={l.tax_type}
-                        onChange={(e) => updateLine(i, { tax_type: e.target.value as TaxType })}
-                        style={{ width: "100%" }}
-                      >
-                        <option value="10">10%</option>
-                        <option value="8">8%(軽減)</option>
-                        <option value="0">非課税</option>
-                      </select>
-                    </td>
-                    <td style={{ whiteSpace: "normal" }}>
-                      <input
-                        type="text"
-                        className="cell-input"
-                        value={l.note ?? ""}
-                        onChange={(e) => updateLine(i, { note: e.target.value || null })}
-                        style={{ width: "100%", boxSizing: "border-box" }}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        className="cell-input"
-                        value={l.department ?? ""}
-                        onChange={(e) => updateLine(i, { department: e.target.value || null })}
-                        placeholder="例: 水産厨房"
-                        style={{ width: "100%", boxSizing: "border-box" }}
-                      />
-                    </td>
-                    {showRefInfo && (
-                    <td style={{ borderLeft: "2px solid var(--line)" }}>
+                  <div className="line-row line-row-ref">
+                    <span className="ref-title">単価を決めるための参考情報(保存されません)</span>
+                    <label>
+                      仕入値
                       <input
                         type="number"
                         className="cell-input"
                         value={l.cost_price ?? ""}
                         onChange={(e) => updateLine(i, { cost_price: e.target.value === "" ? null : Number(e.target.value) })}
-                        style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
+                        style={{ textAlign: "right" }}
                       />
-                    </td>
-                    )}
-                    {showRefInfo && (
-                    <td style={{ whiteSpace: "normal" }}>
+                    </label>
+                    <label>
+                      仕入先
                       {editingSupplierIndex === i ? (
-                        <div>
+                        <div style={{ position: "relative" }}>
                           <input
                             ref={supplierInputRef}
                             type="text"
@@ -923,7 +857,6 @@ export default function DocumentEditor({
                             onKeyDown={(e) => e.key === "Enter" && searchSupplier()}
                             onBlur={() => setTimeout(() => setEditingSupplierIndex((cur) => (cur === i ? null : cur)), 150)}
                             placeholder="仕入先コード・名称で検索"
-                            style={{ width: "100%", boxSizing: "border-box" }}
                           />
                           {supplierSearching && <div className="cell-sub">検索中…</div>}
                           {supplierResults && supplierDropdownPos && (
@@ -972,14 +905,8 @@ export default function DocumentEditor({
                           )}
                           <span
                             onClick={() => startEditSupplier(i, l.supplier_name)}
-                            style={{
-                              cursor: "pointer",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              maxWidth: 95,
-                            }}
-                            title={`${l.supplier_name ?? "(名称なし)"}(クリックして変更)`}
+                            style={{ cursor: "pointer" }}
+                            title="クリックして変更"
                           >
                             {l.supplier_name ?? "(名称なし)"}
                           </span>
@@ -992,22 +919,20 @@ export default function DocumentEditor({
                           仕入先を検索
                         </button>
                       )}
-                    </td>
-                    )}
-                    {showRefInfo && (
-                    <td>
+                    </label>
+                    <label>
+                      利益率
                       <input
                         type="number"
                         className="cell-input"
                         value={l.margin_pct ?? ""}
                         onChange={(e) => updateMargin(i, e.target.value)}
                         placeholder="%"
-                        style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
+                        style={{ textAlign: "right" }}
                       />
-                    </td>
-                    )}
-                    {showRefInfo && (
-                    <td style={{ whiteSpace: "normal" }}>
+                    </label>
+                    <label className="ref-grow">
+                      参照売価(得意先選択可)
                       {options.length > 0 ? (
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                           <select
@@ -1027,43 +952,134 @@ export default function DocumentEditor({
                           </button>
                         </div>
                       ) : (
-                        "—"
+                        <span className="cell-sub">参照できる実績がありません</span>
                       )}
-                    </td>
-                    )}
-                    <td>
-                      <button type="button" className="btn-icon btn-danger" onClick={() => removeLine(i)} title="この行を削除">
-                        ×
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {lines.length === 0 && (
-                <tr>
-                  <td colSpan={showRefInfo ? 13 : 9} className="cell-sub" style={{ padding: 16 }}>
-                    明細がありません。上のボタンから追加してください。
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    </label>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {lines.length === 0 && (
+            <p className="cell-sub" style={{ padding: 16 }}>
+              明細がありません。上のボタンから追加してください。
+            </p>
+          )}
           <style jsx>{`
-            .doc-line-table {
-              table-layout: fixed;
-              width: 100%;
-              min-width: ${showRefInfo ? 1200 : 928}px;
+            .line-list {
+              border-top: 1px solid var(--line);
             }
-            .doc-line-table td,
-            .doc-line-table th {
-              vertical-align: top;
+            .line-head {
+              display: flex;
+              gap: 10px;
+              padding: 6px 20px;
+              font-size: 11px;
+              color: var(--ink-faint);
+              font-weight: 600;
+              border-bottom: 1px solid var(--line);
+              background: var(--card);
+            }
+            .line-card {
+              padding: 10px 20px;
+              border-bottom: 1px solid #f4f6f8;
+            }
+            .line-card:hover {
+              background: #fafbfc;
+            }
+            .line-row {
+              display: flex;
+              gap: 10px;
+              align-items: flex-start;
+            }
+            .line-row-main {
+              align-items: center;
+            }
+            .line-row-sub {
+              margin-top: 6px;
+              font-size: 12px;
+              flex-wrap: wrap;
+            }
+            .line-row-sub label {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              color: var(--ink-faint);
+            }
+            .line-row-sub label:first-child {
+              flex: 1 1 260px;
+              min-width: 200px;
+            }
+            .line-row-sub label:first-child input {
+              flex: 1;
+              min-width: 0;
+            }
+            .line-row-sub label:last-child input {
+              width: 200px;
+            }
+            .line-row-ref {
+              margin-top: 8px;
+              padding-top: 8px;
+              border-top: 1px dashed var(--line);
+              font-size: 12px;
+              flex-wrap: wrap;
+              row-gap: 6px;
+            }
+            .line-row-ref .ref-title {
+              flex-basis: 100%;
+              font-size: 11px;
+              color: var(--ink-faint);
+            }
+            .line-row-ref label {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              color: var(--ink-faint);
+            }
+            .line-row-ref label input {
+              width: 110px;
+            }
+            .line-row-ref .ref-grow {
+              flex: 1 1 320px;
+              min-width: 260px;
+            }
+            .lf-code {
+              width: 130px;
+              flex-shrink: 0;
+            }
+            .lf-name {
+              flex: 1 1 260px;
+              min-width: 180px;
+              resize: vertical;
+            }
+            .lf-qty {
+              width: 70px;
+              flex-shrink: 0;
+            }
+            .lf-price {
+              width: 100px;
+              flex-shrink: 0;
+            }
+            .lf-amount {
+              width: 110px;
+              flex-shrink: 0;
+              text-align: right;
+              font-weight: 600;
+              padding: 5px 7px;
+            }
+            .lf-tax {
+              width: 100px;
+              flex-shrink: 0;
+            }
+            .lf-del {
+              width: 28px;
+              flex-shrink: 0;
             }
             /* 数量・単価・仕入値の上下スピナーは幅を取る割に実用性が低いため非表示にする */
-            .doc-line-table input[type="number"] {
+            .line-list input[type="number"] {
               -moz-appearance: textfield;
             }
-            .doc-line-table input[type="number"]::-webkit-outer-spin-button,
-            .doc-line-table input[type="number"]::-webkit-inner-spin-button {
+            .line-list input[type="number"]::-webkit-outer-spin-button,
+            .line-list input[type="number"]::-webkit-inner-spin-button {
               -webkit-appearance: none;
               margin: 0;
             }
