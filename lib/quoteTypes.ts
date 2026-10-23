@@ -41,6 +41,8 @@ export type DocumentHeader = {
   // quoteは quote_no、invoiceは invoice_no
   doc_no: string;
   quote_id?: number | null; // invoiceのみ、元になった見積
+  // 発行拠点。必須(書類の住所等は、この拠点のcompany_info行を使う)。
+  branch_code: string;
   customer_code: string | null;
   customer_name: string;
   customer_postal_code: string | null;

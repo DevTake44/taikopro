@@ -11,7 +11,7 @@ export default async function QuotePrintPage({ params }: { params: { id: string 
 
   const doc = await getDocument("quote", id);
   if (!doc) notFound();
-  const company = await getCompanyInfo();
+  const company = await getCompanyInfo(doc.branch_code);
 
   return <DocumentPrintView kind="quote" doc={doc} company={company} />;
 }

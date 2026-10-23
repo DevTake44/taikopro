@@ -11,7 +11,7 @@ export default async function InvoicePrintPage({ params }: { params: { id: strin
 
   const doc = await getDocument("invoice", id);
   if (!doc) notFound();
-  const company = await getCompanyInfo();
+  const company = await getCompanyInfo(doc.branch_code);
 
   return <DocumentPrintView kind="invoice" doc={doc} company={company} />;
 }

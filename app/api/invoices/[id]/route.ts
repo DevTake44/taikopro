@@ -30,6 +30,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   if (!body.header || !body.header.customer_name?.trim()) {
     return NextResponse.json({ error: "得意先名は必須です。" }, { status: 400 });
   }
+  if (!body.header.branch_code) {
+    return NextResponse.json({ error: "発行拠点は必須です。" }, { status: 400 });
+  }
 
   try {
     await updateDocument("invoice", id, body.header, body.lines ?? []);

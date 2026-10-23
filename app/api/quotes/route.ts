@@ -7,8 +7,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const customerQuery = searchParams.get("customer")?.trim() || null;
+  const branchCode = searchParams.get("branch")?.trim() || null;
   try {
-    const rows = await listDocuments("quote", customerQuery);
+    const rows = await listDocuments("quote", { customerQuery, branchCode });
     return NextResponse.json({ rows });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
@@ -24,6 +25,9 @@ export async function POST(req: NextRequest) {
   }
   if (!body.header || !body.header.customer_name?.trim()) {
     return NextResponse.json({ error: "得意先名は必須です。" }, { status: 400 });
+  }
+  if (!body.header.branch_code) {
+    return NextResponse.json({ error: "発行拠点は必須です。" }, { status: 400 });
   }
 
   try {

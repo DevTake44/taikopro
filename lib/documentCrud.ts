@@ -19,6 +19,7 @@ function rowToHeader(kind: Kind, row: Record<string, unknown>): DocumentHeader {
     id: row.id as number,
     doc_no: row[NO_COL[kind]] as string,
     quote_id: kind === "invoice" ? ((row.quote_id as number | null) ?? null) : undefined,
+    branch_code: row.branch_code as string,
     customer_code: row.customer_code as string | null,
     customer_name: row.customer_name as string,
     customer_postal_code: row.customer_postal_code as string | null,
@@ -39,6 +40,7 @@ function rowToHeader(kind: Kind, row: Record<string, unknown>): DocumentHeader {
 }
 
 export type HeaderInput = {
+  branch_code: string;
   customer_code: string | null;
   customer_name: string;
   customer_postal_code: string | null;
@@ -54,6 +56,7 @@ export type HeaderInput = {
 // 画面側の共通フィールド名から、DB保存用(kindごとの列名)へ変換。
 function headerInputToRow(kind: Kind, input: HeaderInput, totals: ReturnType<typeof calcTotals>) {
   return {
+    branch_code: input.branch_code,
     customer_code: input.customer_code,
     customer_name: input.customer_name,
     customer_postal_code: input.customer_postal_code,
@@ -68,15 +71,21 @@ function headerInputToRow(kind: Kind, input: HeaderInput, totals: ReturnType<typ
   };
 }
 
-export async function listDocuments(kind: Kind, customerQuery: string | null) {
+export async function listDocuments(
+  kind: Kind,
+  filters: { customerQuery?: string | null; branchCode?: string | null } = {}
+) {
   const supabase = getSupabaseServerClient();
   let q = supabase
     .from(TABLE[kind])
     .select("*")
     .order("id", { ascending: false })
     .limit(200);
-  if (customerQuery) {
-    q = q.ilike("customer_name", `%${customerQuery}%`);
+  if (filters.customerQuery) {
+    q = q.ilike("customer_name", `%${filters.customerQuery}%`);
+  }
+  if (filters.branchCode) {
+    q = q.eq("branch_code", filters.branchCode);
   }
   const { data, error } = await q;
   if (error) throw new Error(error.message);
@@ -192,6 +201,7 @@ export async function convertQuoteToInvoice(quoteId: number) {
     .from("invoices")
     .insert({
       quote_id: quoteId,
+      branch_code: quote.branch_code,
       customer_code: quote.customer_code,
       customer_name: quote.customer_name,
       customer_postal_code: quote.customer_postal_code,
@@ -218,4 +228,28 @@ export async function convertQuoteToInvoice(quoteId: number) {
   await setDocumentStatus("quote", quoteId, "converted");
 
   return rowToHeader("invoice", inserted);
+}
+
+// 過去の見積・請求書を複製して、新しい下書きを作成する(一覧画面の「複製」用)。
+// 発行日=今日、状態=下書きにリセットする。書類番号はDBトリガーが新規採番する。
+export async function duplicateDocument(kind: Kind, id: number) {
+  const original = await getDocument(kind, id);
+  if (!original) throw new Error("複製元の書類が見つかりません。");
+
+  const today = new Date().toISOString().slice(0, 10);
+  const header: HeaderInput = {
+    branch_code: original.branch_code,
+    customer_code: original.customer_code,
+    customer_name: original.customer_name,
+    customer_postal_code: original.customer_postal_code,
+    customer_address: original.customer_address,
+    subject: original.subject,
+    doc_date: today,
+    due_or_valid_date: original.due_or_valid_date,
+    staff_name: original.staff_name,
+    note: original.note,
+    tax_rounding: original.tax_rounding,
+  };
+  const lines = original.lines.map((l) => ({ ...l, id: undefined }));
+  return createDocument(kind, header, lines);
 }

@@ -30,6 +30,19 @@ type SalesHistoryOption = {
   delivery_date: string;
 };
 
+type OrderLineOption = {
+  product_code: string | null;
+  product_name: string;
+  qty: number;
+  unit_price: number;
+  cost_price: number | null;
+  supplier_code: string | null;
+  supplier_name: string | null;
+  customer_name: string | null;
+  customer_code: string | null;
+  delivery_date: string | null;
+};
+
 type ReferenceOption = { customer_code: string; customer_name: string; unit_price: number; delivery_date: string };
 type SupplierOption = { supplier_code: string; supplier_name: string };
 
@@ -101,12 +114,20 @@ export default function DocumentEditor({
 }) {
   const router = useRouter();
   const today = new Date().toISOString().slice(0, 10);
-  const defaultDue = (() => {
+  // 見積の有効期限は「見積日からNヶ月後」で素早く設定できるようにする(標準3ヶ月)。
+  // 請求書の支払期限は従来通り30日後を初期値にする(今回の変更対象外)。
+  const addMonths = (dateStr: string, months: number) => {
+    const d = new Date(dateStr);
+    d.setMonth(d.getMonth() + months);
+    return d.toISOString().slice(0, 10);
+  };
+  const defaultDue = kind === "quote" ? addMonths(today, 3) : (() => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
     return d.toISOString().slice(0, 10);
   })();
 
+  const [branchCode, setBranchCode] = useState(doc?.branch_code ?? "");
   const [customerCode, setCustomerCode] = useState(doc?.customer_code ?? "");
   const [customerName, setCustomerName] = useState(doc?.customer_name ?? "");
   const [customerPostalCode, setCustomerPostalCode] = useState(doc?.customer_postal_code ?? "");
@@ -171,6 +192,13 @@ export default function DocumentEditor({
   // 見積の得意先のみ検索するか、諸口コード等で見つからない場合に他の得意先も含めて
   // 検索するか。
   const [historyScope, setHistoryScope] = useState<"customer" | "all">("customer");
+
+  // 受注番号から一括追加(明細追加)。1件ずつ探す「過去売上から追加」と違い、
+  // 同じ受注の明細を丸ごと転記したい場合に使う。
+  const [orderNoQuery, setOrderNoQuery] = useState("");
+  const [orderLineResults, setOrderLineResults] = useState<OrderLineOption[] | null>(null);
+  const [orderLineSearching, setOrderLineSearching] = useState(false);
+  const [showOrderLineSearch, setShowOrderLineSearch] = useState(false);
 
   // 仕入先検索(明細行ごと。クリックした行だけ検索ボックスに切り替える方式)
   const [editingSupplierIndex, setEditingSupplierIndex] = useState<number | null>(null);
@@ -405,6 +433,45 @@ export default function DocumentEditor({
     setHistoryResults(null);
   }
 
+  async function searchOrderLines() {
+    if (!orderNoQuery.trim()) return;
+    setError(null);
+    setOrderLineSearching(true);
+    try {
+      const res = await fetch(`/api/quote-order-lines?order_no=${encodeURIComponent(orderNoQuery.trim())}`);
+      const json = await res.json();
+      if (json.error) {
+        setError(json.error);
+        setOrderLineResults(null);
+        return;
+      }
+      setOrderLineResults(json.rows ?? []);
+    } finally {
+      setOrderLineSearching(false);
+    }
+  }
+
+  // 受注番号で見つかった明細を全行まとめて追加する。
+  function addAllOrderLines() {
+    if (!orderLineResults || orderLineResults.length === 0) return;
+    for (const r of orderLineResults) {
+      addLine({
+        ...emptyLine("sales_history"),
+        product_code: r.product_code,
+        product_name: r.product_name,
+        qty: r.qty,
+        unit_price: r.unit_price,
+        cost_price: r.cost_price,
+        supplier_code: r.supplier_code,
+        supplier_name: r.supplier_name,
+        margin_pct: computeMarginPct(r.cost_price, r.unit_price),
+      });
+    }
+    setShowOrderLineSearch(false);
+    setOrderNoQuery("");
+    setOrderLineResults(null);
+  }
+
   function addManualLine() {
     // 自由入力は諸口(通常税率)扱いが多いため、商品コードは77700を初期値にしておく
     // (仕入実績が無い前提のため、仕入値・仕入先は手入力で埋める)。
@@ -465,6 +532,10 @@ export default function DocumentEditor({
   }
 
   async function save(confirm: boolean) {
+    if (!branchCode) {
+      setError("発行拠点は必須です。");
+      return;
+    }
     if (!customerName.trim()) {
       setError("得意先名は必須です。");
       return;
@@ -473,6 +544,7 @@ export default function DocumentEditor({
     setError(null);
     const savedLines = toSavedLines(lines);
     const header = {
+      branch_code: branchCode,
       customer_code: customerCode || null,
       customer_name: customerName.trim(),
       customer_postal_code: customerPostalCode || null,
@@ -559,6 +631,27 @@ export default function DocumentEditor({
       </header>
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
+          <div>
+            <label className="req" style={{ fontSize: 12, color: "var(--ink-faint)" }}>発行拠点</label>
+            <select
+              value={branchCode}
+              onChange={(e) => setBranchCode(e.target.value)}
+              style={{ width: "100%", padding: "6px 10px" }}
+            >
+              <option value="" disabled>
+                選択してください
+              </option>
+              {branchCodes.map((code) => (
+                <option key={code} value={code}>
+                  {BRANCH_NAMES[code] ?? code}
+                </option>
+              ))}
+            </select>
+            <div className="cell-sub" style={{ marginTop: 2 }}>
+              書類に載る自社の住所・連絡先は、ここで選んだ拠点のものが使われます。
+            </div>
+          </div>
+
           <div>
             <label className="req" style={{ fontSize: 12, color: "var(--ink-faint)" }}>得意先</label>
             <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
@@ -667,6 +760,21 @@ export default function DocumentEditor({
               onChange={(e) => setDueOrValidDate(e.target.value)}
               style={{ width: "100%", padding: "6px 10px" }}
             />
+            {kind === "quote" && (
+              <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                {[1, 2, 3, 4, 5, 6].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`btn-sm${dueOrValidDate === addMonths(docDate, m) ? " btn-primary" : ""}`}
+                    onClick={() => setDueOrValidDate(addMonths(docDate, m))}
+                    title={`見積日(${docDate})から${m}ヶ月後`}
+                  >
+                    {m}ヶ月
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -685,6 +793,9 @@ export default function DocumentEditor({
             </button>
             <button type="button" onClick={() => setShowHistorySearch((s) => !s)}>
               +過去売上から追加
+            </button>
+            <button type="button" onClick={() => setShowOrderLineSearch((s) => !s)}>
+              +受注番号から一括追加
             </button>
             <button type="button" onClick={addManualLine}>
               +自由入力で追加
@@ -771,6 +882,47 @@ export default function DocumentEditor({
                     (前回 {h.delivery_date} 数量{h.qty} 単価{h.unit_price ?? "—"})
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showOrderLineSearch && (
+          <div style={{ padding: "0 20px 12px" }}>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                type="text"
+                placeholder="受注番号を入力(その受注の明細を全行まとめて追加します)"
+                value={orderNoQuery}
+                onChange={(e) => setOrderNoQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && searchOrderLines()}
+                style={{ flex: 1, padding: "6px 10px" }}
+              />
+              <button type="button" onClick={searchOrderLines} disabled={orderLineSearching}>
+                {orderLineSearching ? "検索中…" : "検索"}
+              </button>
+            </div>
+            {orderLineResults && (
+              <div className="card" style={{ marginTop: 4, padding: 10 }}>
+                {orderLineResults.length === 0 ? (
+                  <p className="cell-sub">見つかりません。</p>
+                ) : (
+                  <>
+                    <div className="cell-sub" style={{ marginBottom: 6 }}>
+                      {orderLineResults[0].customer_name ?? ""}・{orderLineResults.length}行見つかりました。
+                    </div>
+                    <div style={{ maxHeight: 200, overflowY: "auto", marginBottom: 8 }}>
+                      {orderLineResults.map((r, i) => (
+                        <div key={i} className="cell-sub">
+                          {r.product_code} {r.product_name}(数量{r.qty} 単価{r.unit_price}・{r.delivery_date})
+                        </div>
+                      ))}
+                    </div>
+                    <button type="button" className="btn-primary btn-sm" onClick={addAllOrderLines}>
+                      この{orderLineResults.length}行をすべて追加
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
