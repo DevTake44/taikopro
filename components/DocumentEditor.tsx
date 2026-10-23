@@ -45,6 +45,14 @@ type OrderLineOption = {
 
 type ReferenceOption = { customer_code: string; customer_name: string; unit_price: number; delivery_date: string };
 type SupplierOption = { supplier_code: string; supplier_name: string };
+// 仕入値の候補(直近の仕入実績で金額が異なるもの・商品マスタ登録値)。
+type CostOption = {
+  source: "purchase" | "master";
+  unit_price: number;
+  supplier_code: string | null;
+  supplier_name: string | null;
+  date: string | null;
+};
 
 // 仕入値・利益率・参照売価は見積データとしては保存しない(単価を決めるための参考情報)。
 // 仕入先(supplier_code/supplier_name)は、将来の販売管理・受注CSV取込との連動のため
@@ -53,6 +61,13 @@ type SupplierOption = { supplier_code: string; supplier_name: string };
 type EditableLine = DocumentLine & {
   cost_price?: number | null;
   margin_pct?: number | null;
+  // 仕入値がいつ時点の値か(直近仕入実績の日付、またはマスタの同期日)。古い仕入実績を
+  // そのまま使ってしまっていないか、営業担当が一目で判断できるようにするため保持する。
+  cost_date?: string | null;
+  cost_source?: "purchase" | "master" | null;
+  // 仕入値の候補一覧(直近の仕入実績で金額が異なるもの+マスタ登録値)。ボタンから
+  // 候補パネルを開いて選び直せるようにする。
+  costOptions?: CostOption[];
   // 参照売価: 販売実績のある得意先の中から選べるようにする(先頭=直近)。
   referenceOptions?: ReferenceOption[];
   selectedReferenceCode?: string | null;
@@ -76,6 +91,9 @@ function emptyLine(source: DocumentLine["source"]): EditableLine {
     transaction_date: null,
     cost_price: null,
     margin_pct: null,
+    cost_date: null,
+    cost_source: null,
+    costOptions: [],
     referenceOptions: [],
     selectedReferenceCode: null,
   };
@@ -216,6 +234,48 @@ export default function DocumentEditor({
     setSupplierDropdownPos({ top: rect.bottom, left: rect.left });
   }, [editingSupplierIndex]);
 
+  // 仕入値の候補パネル(直近の仕入実績で金額が異なるもの+マスタ登録値から選び直す)。
+  // 仕入先検索と同様、position:fixedで画面に対して直接重ねる。
+  const [editingCostIndex, setEditingCostIndex] = useState<number | null>(null);
+  const [costPanelPos, setCostPanelPos] = useState<{ top: number; left: number } | null>(null);
+
+  function openCostOptions(index: number, e: React.MouseEvent<HTMLButtonElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setCostPanelPos({ top: rect.bottom, left: rect.left });
+    setEditingCostIndex((cur) => (cur === index ? null : index));
+  }
+
+  // 候補から仕入値を選び直す(利益率も連動して再計算)。
+  function applyCostOption(index: number, option: CostOption) {
+    setLines((prev) =>
+      prev.map((l, i) => {
+        if (i !== index) return l;
+        const next: EditableLine = {
+          ...l,
+          cost_price: option.unit_price,
+          supplier_code: option.supplier_code,
+          supplier_name: option.supplier_name,
+          cost_date: option.date,
+          cost_source: option.source,
+        };
+        const margin = computeMarginPct(next.cost_price, next.unit_price);
+        if (margin !== null) next.margin_pct = margin;
+        return next;
+      })
+    );
+    setEditingCostIndex(null);
+  }
+
+  // 仕入値の時点表示用(例: 「(24/09時点)」「(マスタ・26/09)」)。列幅が狭いため
+  // 年は下2桁にして収める。
+  function costDateLabel(l: EditableLine): string | null {
+    if (l.cost_price == null) return null;
+    const ym = l.cost_date ? l.cost_date.slice(2, 7).replace("-", "/") : null;
+    if (l.cost_source === "master") return ym ? `(マスタ・${ym})` : "(マスタ値)";
+    if (l.cost_source === "purchase") return ym ? `(${ym}時点)` : null;
+    return null;
+  }
+
   const totals = useMemo(() => calcTotals(lines, taxRounding), [lines, taxRounding]);
 
   function onBranchFilterChange(v: string) {
@@ -298,6 +358,7 @@ export default function DocumentEditor({
       const res = await fetch(`/api/quote-product-cost?${params.toString()}`);
       const json = await res.json();
       const options: ReferenceOption[] = json.reference_options ?? [];
+      const costOptions: CostOption[] = json.cost_options ?? [];
       setLines((prev) =>
         prev.map((l, i) => {
           if (i !== index) return l;
@@ -306,9 +367,16 @@ export default function DocumentEditor({
           return {
             ...l,
             ...(applyCost
-              ? { cost_price: costPrice, supplier_code: json.cost_supplier_code ?? null, supplier_name: json.cost_supplier_name ?? null }
+              ? {
+                  cost_price: costPrice,
+                  supplier_code: json.cost_supplier_code ?? null,
+                  supplier_name: json.cost_supplier_name ?? null,
+                  cost_date: json.cost_date ?? null,
+                  cost_source: json.cost_source ?? null,
+                }
               : {}),
             ...(margin !== null ? { margin_pct: margin } : {}),
+            costOptions,
             referenceOptions: options,
             selectedReferenceCode: options[0]?.customer_code ?? null,
           };
@@ -1021,7 +1089,7 @@ export default function DocumentEditor({
               {kind === "invoice" && <col style={{ width: 130 }} />}
               {showRefInfo && (
                 <>
-                  <col style={{ width: 100 }} />
+                  <col style={{ width: 150 }} />
                   <col style={{ width: 120 }} />
                   <col style={{ width: 80 }} />
                   <col style={{ width: 150 }} />
@@ -1170,9 +1238,77 @@ export default function DocumentEditor({
                         type="number"
                         className="cell-input"
                         value={l.cost_price ?? ""}
-                        onChange={(e) => updateLine(i, { cost_price: e.target.value === "" ? null : Number(e.target.value) })}
+                        onChange={(e) =>
+                          updateLine(i, {
+                            cost_price: e.target.value === "" ? null : Number(e.target.value),
+                            // 手入力で上書きしたら、どの候補由来かの表示は消す(手入力値のため)。
+                            cost_date: null,
+                            cost_source: null,
+                          })
+                        }
                         style={{ width: "100%", textAlign: "right", boxSizing: "border-box" }}
                       />
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, marginTop: 2 }}>
+                        <span className="cell-sub" style={{ fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {costDateLabel(l)}
+                        </span>
+                        {(l.costOptions?.length ?? 0) > 0 && (
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            style={{ flexShrink: 0 }}
+                            onClick={(e) => openCostOptions(i, e)}
+                            title="他の仕入値候補(直近の仕入実績・マスタ登録値)から選ぶ"
+                          >
+                            候補
+                          </button>
+                        )}
+                      </div>
+                      {editingCostIndex === i && costPanelPos && (
+                        <div
+                          className="card"
+                          style={{
+                            position: "fixed",
+                            zIndex: 50,
+                            top: costPanelPos.top,
+                            left: costPanelPos.left,
+                            width: 300,
+                            maxHeight: 280,
+                            overflowY: "auto",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              padding: "6px 10px",
+                              borderBottom: "1px solid var(--line)",
+                            }}
+                          >
+                            <span className="cell-sub">仕入値の候補</span>
+                            <button type="button" className="btn-icon" onClick={() => setEditingCostIndex(null)}>
+                              ×
+                            </button>
+                          </div>
+                          {(l.costOptions ?? []).map((o, oi) => (
+                            <div
+                              key={oi}
+                              className="search-item"
+                              onClick={() => applyCostOption(i, o)}
+                              style={{ display: "flex", justifyContent: "space-between", gap: 8 }}
+                            >
+                              <span>
+                                {yen(o.unit_price)}
+                                {o.supplier_name && <span className="cell-sub"> ・{o.supplier_name}</span>}
+                              </span>
+                              <span className="cell-sub" style={{ whiteSpace: "nowrap" }}>
+                                {o.source === "master" ? "マスタ" : o.date ?? ""}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     )}
                     {showRefInfo && (
@@ -1326,7 +1462,7 @@ export default function DocumentEditor({
             .doc-line-table {
               table-layout: fixed;
               width: 100%;
-              min-width: ${(showRefInfo ? 1536 : 1136) + (kind === "invoice" ? 130 : 0)}px;
+              min-width: ${(showRefInfo ? 1586 : 1136) + (kind === "invoice" ? 130 : 0)}px;
             }
             .doc-line-table td,
             .doc-line-table th {
