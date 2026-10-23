@@ -652,6 +652,9 @@ export default function DocumentEditor({
         </Link>
       </header>
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        {/* 得意先・住所は検索結果や宛先名のテキストエリアで縦に伸びやすく、件名・日付・担当のような
+            1行入力の項目と同じ行に並べると、短い項目側に大きな空白ができてバランスが悪くなる。
+            伸びやすい項目と1行で済む項目をグループ分けし、行ごとの高さが揃うようにする。 */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
           <div>
             <label className="req" style={{ fontSize: 12, color: "var(--ink-faint)" }}>発行拠点</label>
@@ -763,7 +766,9 @@ export default function DocumentEditor({
               style={{ width: "100%", padding: "6px 10px", resize: "vertical", fontFamily: "inherit" }}
             />
           </div>
+        </div>
 
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginTop: 14 }}>
           <div>
             <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>件名</label>
             <input type="text" value={subject ?? ""} onChange={(e) => setSubject(e.target.value)} style={{ width: "100%", padding: "6px 10px" }} />
