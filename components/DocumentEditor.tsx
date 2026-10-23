@@ -769,13 +769,13 @@ export default function DocumentEditor({
               <col style={{ width: showRefInfo ? 100 : 120 }} />
               {showRefInfo && (
                 <>
-                  <col style={{ width: 76 }} />
+                  <col style={{ width: 64 }} />
+                  <col style={{ width: 120 }} />
+                  <col style={{ width: 44 }} />
                   <col style={{ width: 150 }} />
-                  <col style={{ width: 48 }} />
-                  <col style={{ width: 190 }} />
                 </>
               )}
-              <col style={{ width: 32 }} />
+              <col style={{ width: 40 }} />
             </colgroup>
             <thead>
               {showRefInfo && (
@@ -977,7 +977,7 @@ export default function DocumentEditor({
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
-                              maxWidth: 90,
+                              maxWidth: 95,
                             }}
                             title={`${l.supplier_name ?? "(名称なし)"}(クリックして変更)`}
                           >
@@ -1052,7 +1052,7 @@ export default function DocumentEditor({
             .doc-line-table {
               table-layout: fixed;
               width: 100%;
-              min-width: ${showRefInfo ? 1340 : 920}px;
+              min-width: ${showRefInfo ? 1200 : 928}px;
             }
             .doc-line-table td,
             .doc-line-table th {
