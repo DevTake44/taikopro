@@ -540,6 +540,15 @@ export default function DocumentEditor({
     });
   }
 
+  // 空の行をすぐ下に挿入する(末尾への追加だけでなく、任意の位置に行を増やせるように)。
+  function insertLineAfter(index: number) {
+    setLines((prev) => {
+      const blank: EditableLine = { ...emptyLine("manual"), product_code: "77700" };
+      const next = [...prev.slice(0, index + 1), blank, ...prev.slice(index + 1)];
+      return next.map((l, i) => ({ ...l, line_no: i + 1 }));
+    });
+  }
+
   async function save(confirm: boolean) {
     if (!branchCode) {
       setError("発行拠点は必須です。");
@@ -968,7 +977,7 @@ export default function DocumentEditor({
                   <col style={{ width: 150 }} />
                 </>
               )}
-              <col style={{ width: 110 }} />
+              <col style={{ width: 170 }} />
             </colgroup>
             <thead>
               {showRefInfo && (
@@ -1226,6 +1235,9 @@ export default function DocumentEditor({
                     )}
                     <td style={{ whiteSpace: "nowrap" }}>
                       <div style={{ display: "flex", gap: 4 }}>
+                        <button type="button" className="btn-icon" onClick={() => insertLineAfter(i)} title="この下に空の行を挿入">
+                          挿入
+                        </button>
                         <button type="button" className="btn-icon" onClick={() => duplicateLine(i)} title="この行を複製">
                           複製
                         </button>
@@ -1250,7 +1262,7 @@ export default function DocumentEditor({
             .doc-line-table {
               table-layout: fixed;
               width: 100%;
-              min-width: ${showRefInfo ? 1476 : 1076}px;
+              min-width: ${showRefInfo ? 1536 : 1136}px;
             }
             .doc-line-table td,
             .doc-line-table th {
