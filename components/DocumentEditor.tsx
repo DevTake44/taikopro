@@ -59,6 +59,7 @@ function emptyLine(source: DocumentLine["source"]): EditableLine {
     source,
     supplier_code: null,
     supplier_name: null,
+    department: null,
     cost_price: null,
     margin_pct: null,
     referenceOptions: [],
@@ -81,6 +82,7 @@ function toSavedLines(lines: EditableLine[]): DocumentLine[] {
     source: l.source,
     supplier_code: l.supplier_code,
     supplier_name: l.supplier_name,
+    department: l.department,
   }));
 }
 
@@ -739,7 +741,7 @@ export default function DocumentEditor({
           <table className="mat doc-line-table">
             <thead>
               <tr>
-                <th colSpan={7} style={{ background: "var(--card)" }}></th>
+                <th colSpan={8} style={{ background: "var(--card)" }}></th>
                 <th
                   colSpan={4}
                   style={{
@@ -762,6 +764,7 @@ export default function DocumentEditor({
                 <th style={{ width: 84 }}>金額</th>
                 <th style={{ width: 70 }}>税区分</th>
                 <th style={{ width: 120 }}>備考</th>
+                <th style={{ width: 110 }}>部門(物件用印刷)</th>
                 <th style={{ width: 80, borderLeft: "2px solid var(--line)" }}>仕入値</th>
                 <th style={{ width: 120 }}>仕入先</th>
                 <th style={{ width: 64 }}>利益率</th>
@@ -838,6 +841,16 @@ export default function DocumentEditor({
                         className="cell-input"
                         value={l.note ?? ""}
                         onChange={(e) => updateLine(i, { note: e.target.value || null })}
+                        style={{ width: "100%", boxSizing: "border-box" }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        className="cell-input"
+                        value={l.department ?? ""}
+                        onChange={(e) => updateLine(i, { department: e.target.value || null })}
+                        placeholder="例: 水産厨房"
                         style={{ width: "100%", boxSizing: "border-box" }}
                       />
                     </td>
@@ -970,7 +983,7 @@ export default function DocumentEditor({
               })}
               {lines.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="cell-sub" style={{ padding: 16 }}>
+                  <td colSpan={13} className="cell-sub" style={{ padding: 16 }}>
                     明細がありません。上のボタンから追加してください。
                   </td>
                 </tr>
@@ -981,7 +994,7 @@ export default function DocumentEditor({
             .doc-line-table {
               table-layout: fixed;
               width: 100%;
-              min-width: 1180px;
+              min-width: 1290px;
             }
             .doc-line-table td,
             .doc-line-table th {

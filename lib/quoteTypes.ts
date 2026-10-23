@@ -21,6 +21,9 @@ export type DocumentLine = {
   // こちらは見積データの一部として保存する)。
   supplier_code: string | null;
   supplier_name: string | null;
+  // 物件用印刷(表紙=合計、部門ごとに1シート)で明細をグループ分けするための部門名。
+  // 自由入力(マスタ化はしない)。未入力の行は「部門未設定」としてまとめて扱う。
+  department: string | null;
 };
 
 export type DocumentStatus = "draft" | "confirmed" | "converted";

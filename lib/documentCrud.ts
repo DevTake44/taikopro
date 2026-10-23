@@ -131,6 +131,7 @@ function lineToRow(l: DocumentLine, index: number) {
     source: l.source,
     supplier_code: l.supplier_code,
     supplier_name: l.supplier_name,
+    department: l.department,
   };
 }
 
