@@ -823,9 +823,11 @@ export default function DocumentEditor({
 
       <div className="card" style={{ padding: 0, marginBottom: 16 }}>
         {/* 行が増えるとこの見出し・追加ボタンが画面外にスクロールしてしまい、行を追加する
-            たびに上に戻る必要があって不便だったため、画面上端に追従(sticky)させる。 */}
+            たびに上に戻る必要があって不便だったため、画面上端に追従(sticky)させる。
+            商品検索などの検索パネルも、見出し・ボタンだけでなくこの枠に含めて一緒に
+            追従させる(見出しだけ追従させると、スクロールした状態でボタンを押したときに
+            検索パネルが画面外の元の位置に開いてしまい、何も起きていないように見えるため)。 */}
         <div
-          className="card-head"
           style={{
             position: "sticky",
             top: 0,
@@ -835,6 +837,7 @@ export default function DocumentEditor({
             borderRadius: "10px 10px 0 0",
           }}
         >
+        <div className="card-head">
           <h2>明細</h2>
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" onClick={() => setShowProductSearch((s) => !s)}>
@@ -990,6 +993,7 @@ export default function DocumentEditor({
             )}
           </div>
         )}
+        </div>
 
         <div className="matwrap">
           <table className="mat doc-line-table">
