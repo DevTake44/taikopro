@@ -822,7 +822,19 @@ export default function DocumentEditor({
       </div>
 
       <div className="card" style={{ padding: 0, marginBottom: 16 }}>
-        <div className="card-head">
+        {/* 行が増えるとこの見出し・追加ボタンが画面外にスクロールしてしまい、行を追加する
+            たびに上に戻る必要があって不便だったため、画面上端に追従(sticky)させる。 */}
+        <div
+          className="card-head"
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 5,
+            background: "var(--card)",
+            borderBottom: "1px solid var(--line)",
+            borderRadius: "10px 10px 0 0",
+          }}
+        >
           <h2>明細</h2>
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" onClick={() => setShowProductSearch((s) => !s)}>
