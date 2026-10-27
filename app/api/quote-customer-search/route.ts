@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { fetchAllPagesConcurrent } from "@/lib/fetchPaged";
+import { toFullWidthForSearch, toHalfWidthForCode } from "@/lib/kana";
 
 export const dynamic = "force-dynamic";
 
@@ -67,10 +68,23 @@ export async function GET(req: NextRequest) {
   // 名称部分一致は「イオン 岡崎」のように空白区切りで複数語を入力したら、両方を含む
   // 名称だけに絞り込む(検索エンジンのAND検索と同じ考え方)。同じ列に対して.ilike()を
   // 複数回呼ぶと、PostgREST側でAND条件になる。
-  const nameTerms = query.split(/[\s　]+/).filter(Boolean);
+  //
+  // 半角・全角どちらで入力しても検索できるようにする: 得意先名(customer_name)は
+  // 数字・カナとも全角のみでデータが入っているため、名称検索は入力を全角化してから
+  // 照合する。得意先コード(customer_code)は逆に半角数字のみのため、完全一致検索は
+  // 入力を半角化してから照合する。
+  const nameTerms = query
+    .split(/[\s　]+/)
+    .filter(Boolean)
+    .map((t) => toFullWidthForSearch(t));
 
   const SELECT_COLUMNS = "customer_code, customer_name, postal_code, address";
-  let byCodeQuery = supabase.from("customer_master").select(SELECT_COLUMNS).eq("is_deleted", false).eq("customer_code", query).limit(5);
+  let byCodeQuery = supabase
+    .from("customer_master")
+    .select(SELECT_COLUMNS)
+    .eq("is_deleted", false)
+    .eq("customer_code", toHalfWidthForCode(query))
+    .limit(5);
   let byNameQuery = supabase.from("customer_master").select(SELECT_COLUMNS).eq("is_deleted", false);
   for (const term of nameTerms) {
     byNameQuery = byNameQuery.ilike("customer_name", `%${term}%`);

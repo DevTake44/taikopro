@@ -155,15 +155,36 @@ export default function CustomerHistorySearch() {
           得意先コード・得意先名で検索(入力するたびに自動で絞り込みます。「イオン 岡崎」のように空白区切りでさらに絞り込めます)
         </label>
         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-          <input
-            type="text"
-            autoFocus
-            placeholder="例: イオン 岡崎"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && search()}
-            style={{ flex: 1, padding: "10px 12px", fontSize: 15 }}
-          />
+          <div style={{ position: "relative", flex: 1 }}>
+            <input
+              type="text"
+              autoFocus
+              placeholder="例: イオン 岡崎"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && search()}
+              style={{ width: "100%", padding: "10px 34px 10px 12px", fontSize: 15, boxSizing: "border-box" }}
+            />
+            {query && (
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => {
+                  setQuery("");
+                  setResults(null);
+                }}
+                title="検索語をクリア"
+                style={{
+                  position: "absolute",
+                  right: 6,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
           <button type="button" className="btn-primary" onClick={search} disabled={searching}>
             {searching ? "検索中…" : "検索"}
           </button>
