@@ -64,15 +64,18 @@ export async function GET(req: NextRequest) {
 
   // .or()にユーザー入力をそのまま埋め込むと、カンマ等でフィルタ構文が壊れうるため、
   // コード完全一致・名称部分一致を別々のクエリにして結果をマージする。
+  // 名称部分一致は「イオン 岡崎」のように空白区切りで複数語を入力したら、両方を含む
+  // 名称だけに絞り込む(検索エンジンのAND検索と同じ考え方)。同じ列に対して.ilike()を
+  // 複数回呼ぶと、PostgREST側でAND条件になる。
+  const nameTerms = query.split(/[\s　]+/).filter(Boolean);
+
   const SELECT_COLUMNS = "customer_code, customer_name, postal_code, address";
   let byCodeQuery = supabase.from("customer_master").select(SELECT_COLUMNS).eq("is_deleted", false).eq("customer_code", query).limit(5);
-  let byNameQuery = supabase
-    .from("customer_master")
-    .select(SELECT_COLUMNS)
-    .eq("is_deleted", false)
-    .ilike("customer_name", `%${query}%`)
-    .order("customer_code", { ascending: true })
-    .limit(100);
+  let byNameQuery = supabase.from("customer_master").select(SELECT_COLUMNS).eq("is_deleted", false);
+  for (const term of nameTerms) {
+    byNameQuery = byNameQuery.ilike("customer_name", `%${term}%`);
+  }
+  byNameQuery = byNameQuery.order("customer_code", { ascending: true }).limit(100);
   if (codesFilter) {
     byCodeQuery = byCodeQuery.in("customer_code", codesFilter);
     byNameQuery = byNameQuery.in("customer_code", codesFilter);

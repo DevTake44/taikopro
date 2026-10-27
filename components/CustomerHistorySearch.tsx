@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { yen, jpn } from "@/lib/format";
 import { BRANCH_NAMES, branchNameOnly } from "@/lib/branch-names";
 import { REP_NAMES, repNameOnly } from "@/lib/rep-names";
@@ -70,8 +70,16 @@ export default function CustomerHistorySearch() {
     setRepFilter("");
   }
 
+  // 検索結果が返ってくる順番は保証されないため、入力中に連打すると古い応答が後から
+  // 画面に表示されてしまうことがある。リクエストごとに連番を振り、最新のものだけ反映する。
+  const latestRequestId = useRef(0);
+
   async function search() {
-    if (!query.trim() && !branchFilter && !repFilter) return;
+    if (!query.trim() && !branchFilter && !repFilter) {
+      setResults(null);
+      return;
+    }
+    const requestId = ++latestRequestId.current;
     setSearching(true);
     setError(null);
     try {
@@ -82,13 +90,24 @@ export default function CustomerHistorySearch() {
       const res = await fetch(`/api/quote-customer-search?${params.toString()}`);
       const json = await res.json();
       if (json.error) throw new Error(json.error);
-      setResults(json.rows ?? []);
+      if (requestId === latestRequestId.current) setResults(json.rows ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (requestId === latestRequestId.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setSearching(false);
+      if (requestId === latestRequestId.current) setSearching(false);
     }
   }
+
+  // 検索エンジンのように、入力するたびに(少し待ってから)自動で絞り込む。
+  // Enter・検索ボタンを押さなくても、「イオン」→ 空白 →「岡崎」と打つにつれて
+  // 候補が自動で絞られていく。
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      search();
+    }, 250);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, branchFilter, repFilter]);
 
   async function selectCustomer(c: CustomerOption) {
     setSelected(c);
@@ -132,12 +151,14 @@ export default function CustomerHistorySearch() {
           </select>
         </div>
 
-        <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>得意先コード・得意先名で検索</label>
+        <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>
+          得意先コード・得意先名で検索(入力するたびに自動で絞り込みます。「イオン 岡崎」のように空白区切りでさらに絞り込めます)
+        </label>
         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
           <input
             type="text"
             autoFocus
-            placeholder="電話口で聞いた会社名などを入力してEnter"
+            placeholder="例: イオン 岡崎"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && search()}
