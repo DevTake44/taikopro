@@ -10,6 +10,11 @@ type MenuLink = {
 
 const SALES_APP_LINKS: MenuLink[] = [
   {
+    href: "/dx/customer-performance",
+    title: "顧客実績",
+    description: "会社名・顧客コードから、過去の売上実績(月別・よく買う商品・直近明細)をすぐに確認します。",
+  },
+  {
     href: "/dx/purchase-lookup",
     title: "仕入価格検索",
     description: "品番・品名から、仕入先ごとの最新価格や仕入実績の履歴を検索します。",
