@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { yen, jpn } from "@/lib/format";
-import { branchNameOnly } from "@/lib/branch-names";
-import { repNameOnly } from "@/lib/rep-names";
+import { BRANCH_NAMES, branchNameOnly } from "@/lib/branch-names";
+import { REP_NAMES, repNameOnly } from "@/lib/rep-names";
+import type { BranchRepPair } from "@/app/api/quote-customer-branch-reps/route";
 
 type CustomerOption = {
   customer_code: string;
@@ -37,12 +38,48 @@ export default function CustomerHistorySearch() {
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // 拠点・担当を先に選んでおくと、名前検索(ilike)の対象をその拠点・担当の得意先だけに
+  // DB側で絞り込めるため、拠点が大きい(得意先が多い)場合ほど検索が速くなる。
+  const [branchFilter, setBranchFilter] = useState("");
+  const [repFilter, setRepFilter] = useState("");
+  const [branchRepPairs, setBranchRepPairs] = useState<BranchRepPair[]>([]);
+
+  useEffect(() => {
+    fetch("/api/quote-customer-branch-reps")
+      .then((r) => r.json())
+      .then((json) => setBranchRepPairs(json.pairs ?? []))
+      .catch(() => {});
+  }, []);
+
+  const branchCodes = useMemo(() => {
+    const codes = new Set(branchRepPairs.map((p) => p.branch_code));
+    return Array.from(codes).sort();
+  }, [branchRepPairs]);
+
+  const repCodesForBranch = useMemo(() => {
+    const codes = branchRepPairs
+      .filter((p) => (branchFilter ? p.branch_code === branchFilter : true))
+      .map((p) => p.rep_code)
+      .filter((c): c is string => !!c);
+    return Array.from(new Set(codes)).sort();
+  }, [branchRepPairs, branchFilter]);
+
+  function onBranchFilterChange(v: string) {
+    setBranchFilter(v);
+    // 拠点を変えたら、担当が新しい拠点に存在しない値のままにならないようリセットする。
+    setRepFilter("");
+  }
+
   async function search() {
-    if (!query.trim()) return;
+    if (!query.trim() && !branchFilter && !repFilter) return;
     setSearching(true);
     setError(null);
     try {
-      const res = await fetch(`/api/quote-customer-search?query=${encodeURIComponent(query.trim())}`);
+      const params = new URLSearchParams();
+      if (query.trim()) params.set("query", query.trim());
+      if (branchFilter) params.set("branch", branchFilter);
+      if (repFilter) params.set("rep", repFilter);
+      const res = await fetch(`/api/quote-customer-search?${params.toString()}`);
       const json = await res.json();
       if (json.error) throw new Error(json.error);
       setResults(json.rows ?? []);
@@ -75,6 +112,26 @@ export default function CustomerHistorySearch() {
   return (
     <div>
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>拠点・担当で絞り込み(先に選ぶと検索が速くなります・任意)</label>
+        <div style={{ display: "flex", gap: 6, marginTop: 4, marginBottom: 10 }}>
+          <select value={branchFilter} onChange={(e) => onBranchFilterChange(e.target.value)} style={{ flex: 1, padding: "8px 10px" }}>
+            <option value="">拠点(すべて)</option>
+            {branchCodes.map((code) => (
+              <option key={code} value={code}>
+                {BRANCH_NAMES[code] ?? code}
+              </option>
+            ))}
+          </select>
+          <select value={repFilter} onChange={(e) => setRepFilter(e.target.value)} style={{ flex: 1, padding: "8px 10px" }}>
+            <option value="">担当(すべて)</option>
+            {repCodesForBranch.map((code) => (
+              <option key={code} value={code}>
+                {REP_NAMES[code] ?? code}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>得意先コード・得意先名で検索</label>
         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
           <input
