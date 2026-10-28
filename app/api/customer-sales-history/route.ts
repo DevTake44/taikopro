@@ -5,10 +5,13 @@ import { toFullWidthForSearch } from "@/lib/kana";
 export const dynamic = "force-dynamic";
 
 type HistoryRow = {
+  customer_code: string | null;
+  customer_name: string | null;
   delivery_date: string | null;
   order_no: string | null;
   item_code: string | null;
   item_name: string | null;
+  spec: string | null;
   qty: number | null;
   sell_price: number | null;
   branch_code: string | null;
@@ -16,19 +19,39 @@ type HistoryRow = {
   project_name: string | null;
 };
 
-const COLUMNS = "delivery_date, order_no, item_code, item_name, qty, sell_price, branch_code, rep_code, project_name";
+const COLUMNS =
+  "customer_code, customer_name, delivery_date, order_no, item_code, item_name, qty, sell_price, branch_code, rep_code, project_name";
+
+// 商品名(sales_lines.item_name)にはサイズ・色が入っていないことが多いため、
+// 商品マスタ(product_master)の仕様(spec)を品番で引いて付加する。
+async function attachSpec(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  rows: Omit<HistoryRow, "spec">[]
+): Promise<HistoryRow[]> {
+  const itemCodes = Array.from(new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c)));
+  if (itemCodes.length === 0) return rows.map((r) => ({ ...r, spec: null }));
+
+  const { data: specRows } = await supabase.from("product_master").select("product_code, spec").in("product_code", itemCodes);
+  const specByCode = new Map((specRows ?? []).map((r) => [r.product_code as string, r.spec as string | null]));
+  return rows.map((r) => ({ ...r, spec: (r.item_code && specByCode.get(r.item_code)) ?? null }));
+}
 
 // コールセンター対応中など、得意先の直近の取引実績をすぐに呼び出すための専用API。
 // 経営レポート(/sales)のような事前集計・キャッシュは使わず、customer_code(+delivery_date)の
 // インデックスを使った直接検索で都度取得する(応答速度を優先するため)。
+// customer_codeはカンマ区切りで複数指定できる(同じ会社が拠点ごとに別の得意先コードに
+// 分かれている場合、どの拠点で取引があったかまとめて検索できるようにするため)。
 // product(商品コード・商品名)を指定すると、「直近50件」ではなく、その得意先が
 // その商品を取引した直近の実績を検索する(直近50件には出てこない過去の購入でも
 // 見つけられるようにするため)。
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const customerCode = (searchParams.get("customer_code") ?? "").trim();
+  const customerCodes = (searchParams.get("customer_code") ?? "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
   const productQuery = (searchParams.get("product") ?? "").trim();
-  if (!customerCode) return NextResponse.json({ error: "customer_codeを指定してください。" }, { status: 400 });
+  if (customerCodes.length === 0) return NextResponse.json({ error: "customer_codeを指定してください。" }, { status: 400 });
 
   const supabase = getSupabaseServerClient();
 
@@ -36,11 +59,11 @@ export async function GET(req: NextRequest) {
     const { data, error } = await supabase
       .from("sales_lines")
       .select(COLUMNS)
-      .eq("customer_code", customerCode)
+      .in("customer_code", customerCodes)
       .order("delivery_date", { ascending: false })
       .limit(50);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ rows: data ?? [] });
+    return NextResponse.json({ rows: await attachSpec(supabase, (data ?? []) as Omit<HistoryRow, "spec">[]) });
   }
 
   // 商品名は全角(数字・カナとも)で入っているため、名称検索は入力を全角化してから照合する
@@ -51,11 +74,11 @@ export async function GET(req: NextRequest) {
   let byCodeQuery = supabase
     .from("sales_lines")
     .select(COLUMNS)
-    .eq("customer_code", customerCode)
+    .in("customer_code", customerCodes)
     .ilike("item_code", `%${productQuery}%`)
     .order("delivery_date", { ascending: false })
     .limit(50);
-  let byNameQuery = supabase.from("sales_lines").select(COLUMNS).eq("customer_code", customerCode);
+  let byNameQuery = supabase.from("sales_lines").select(COLUMNS).in("customer_code", customerCodes);
   for (const term of nameTerms) {
     byNameQuery = byNameQuery.ilike("item_name", `%${term}%`);
   }
@@ -65,17 +88,17 @@ export async function GET(req: NextRequest) {
   if (byCode.error) return NextResponse.json({ error: byCode.error.message }, { status: 500 });
   if (byName.error) return NextResponse.json({ error: byName.error.message }, { status: 500 });
 
-  const merged = [...(byCode.data ?? []), ...(byName.data ?? [])] as HistoryRow[];
+  const merged = [...(byCode.data ?? []), ...(byName.data ?? [])] as Omit<HistoryRow, "spec">[];
   merged.sort((a, b) => (b.delivery_date ?? "").localeCompare(a.delivery_date ?? ""));
   const seen = new Set<string>();
-  const rows: HistoryRow[] = [];
+  const rows: Omit<HistoryRow, "spec">[] = [];
   for (const r of merged) {
-    const key = `${r.order_no}|${r.item_code}|${r.delivery_date}`;
+    const key = `${r.order_no}|${r.item_code}|${r.delivery_date}|${r.customer_code}`;
     if (seen.has(key)) continue;
     seen.add(key);
     rows.push(r);
     if (rows.length >= 50) break;
   }
 
-  return NextResponse.json({ rows });
+  return NextResponse.json({ rows: await attachSpec(supabase, rows) });
 }

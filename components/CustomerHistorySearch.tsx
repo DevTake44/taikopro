@@ -14,10 +14,13 @@ type CustomerOption = {
 };
 
 type HistoryRow = {
+  customer_code: string | null;
+  customer_name: string | null;
   delivery_date: string | null;
   order_no: string | null;
   item_code: string | null;
   item_name: string | null;
+  spec: string | null;
   qty: number | null;
   sell_price: number | null;
   branch_code: string | null;
@@ -34,7 +37,9 @@ export default function CustomerHistorySearch() {
   const [results, setResults] = useState<CustomerOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [selected, setSelected] = useState<CustomerOption | null>(null);
+  // 同じ会社が拠点ごとに別の得意先コードに分かれている場合(例:高速)、どの拠点で
+  // 取引があったかまとめて検索できるよう、得意先は複数選択できるようにしている。
+  const [selected, setSelected] = useState<CustomerOption[]>([]);
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
 
@@ -114,12 +119,16 @@ export default function CustomerHistorySearch() {
   const [productFilter, setProductFilter] = useState("");
   const latestHistoryRequestId = useRef(0);
 
-  async function fetchHistory(customerCode: string, product: string) {
+  async function fetchHistory(customerCodes: string[], product: string) {
+    if (customerCodes.length === 0) {
+      setHistory(null);
+      return;
+    }
     const requestId = ++latestHistoryRequestId.current;
     setHistoryLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ customer_code: customerCode });
+      const params = new URLSearchParams({ customer_code: customerCodes.join(",") });
       if (product.trim()) params.set("product", product.trim());
       const res = await fetch(`/api/customer-sales-history?${params.toString()}`);
       const json = await res.json();
@@ -132,24 +141,43 @@ export default function CustomerHistorySearch() {
     }
   }
 
-  function selectCustomer(c: CustomerOption) {
-    setSelected(c);
-    setResults(null);
-    setQuery("");
+  // クリックした得意先を選択に追加/解除する(複数の拠点をまとめて検索できるように、
+  // 単一選択の置き換えではなくトグルにしている)。検索結果はそのまま残すので、
+  // 同じ検索語のリストから続けて別の拠点も選べる。
+  function toggleCustomer(c: CustomerOption) {
+    setSelected((prev) => {
+      const exists = prev.some((p) => p.customer_code === c.customer_code);
+      if (exists) return prev.filter((p) => p.customer_code !== c.customer_code);
+      return [...prev, c];
+    });
+  }
+
+  function removeCustomer(customerCode: string) {
+    setSelected((prev) => prev.filter((p) => p.customer_code !== customerCode));
+  }
+
+  function clearSelection() {
+    setSelected([]);
     setHistory(null);
     setProductFilter("");
-    fetchHistory(c.customer_code, "");
   }
+
+  const selectedCodesKey = useMemo(
+    () => selected.map((c) => c.customer_code).sort().join(","),
+    [selected]
+  );
 
   // 商品での絞り込みも、得意先検索と同じく入力するたびに自動で絞り込む。
   useEffect(() => {
-    if (!selected) return;
     const timer = setTimeout(() => {
-      fetchHistory(selected.customer_code, productFilter);
+      fetchHistory(selected.map((c) => c.customer_code), productFilter);
     }, 250);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productFilter, selected?.customer_code]);
+  }, [productFilter, selectedCodesKey]);
+
+  const showCustomerColumn = selected.length > 1;
+  const columnCount = showCustomerColumn ? 12 : 11;
 
   return (
     <div>
@@ -175,7 +203,8 @@ export default function CustomerHistorySearch() {
         </div>
 
         <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>
-          得意先コード・得意先名で検索(入力するたびに自動で絞り込みます。「イオン 岡崎」のように空白区切りでさらに絞り込めます)
+          得意先コード・得意先名で検索(入力するたびに自動で絞り込みます。「イオン 岡崎」のように空白区切りでさらに絞り込めます。
+          クリックで得意先を選択に追加できます。同じ会社の別拠点もまとめて選べます)
         </label>
         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
           <div style={{ position: "relative", flex: 1 }}>
@@ -216,44 +245,71 @@ export default function CustomerHistorySearch() {
         {results && (
           <div className="card" style={{ marginTop: 8, maxHeight: 280, overflowY: "auto" }}>
             {results.length === 0 && <p className="cell-sub" style={{ padding: 10 }}>見つかりません。</p>}
-            {results.map((c) => (
-              <div key={c.customer_code} className="search-item" onClick={() => selectCustomer(c)}>
-                <span style={{ fontWeight: 600 }}>{c.customer_name}</span>
-                <span className="cell-sub" style={{ marginLeft: 8 }}>
-                  {c.customer_code}
-                  {c.address ? `・${c.address}` : ""}
-                </span>
-              </div>
-            ))}
+            {results.map((c) => {
+              const isSelected = selected.some((s) => s.customer_code === c.customer_code);
+              return (
+                <div
+                  key={c.customer_code}
+                  className="search-item"
+                  onClick={() => toggleCustomer(c)}
+                  style={isSelected ? { background: "var(--line)" } : undefined}
+                >
+                  <span style={{ fontWeight: 600 }}>
+                    {isSelected ? "✓ " : ""}
+                    {c.customer_name}
+                  </span>
+                  <span className="cell-sub" style={{ marginLeft: 8 }}>
+                    {c.customer_code}
+                    {c.address ? `・${c.address}` : ""}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      {selected && (
+      {selected.length > 0 && (
         <div className="card" style={{ padding: 0, marginBottom: 16 }}>
           <div className="card-head">
             <div>
-              <h2>
-                {selected.customer_name}
-                <span className="cell-sub" style={{ marginLeft: 10, fontWeight: 400 }}>
-                  {selected.customer_code}
-                </span>
-              </h2>
-              {(selected.postal_code || selected.address) && (
-                <div className="cell-sub" style={{ marginTop: 2 }}>
-                  {selected.postal_code && `〒${selected.postal_code} `}
-                  {selected.address}
-                </div>
-              )}
+              <h2>選択中の得意先({selected.length}件)</h2>
             </div>
-            <button type="button" onClick={() => { setSelected(null); setHistory(null); setProductFilter(""); }}>
-              別の得意先を検索
+            <button type="button" onClick={clearSelection}>
+              すべて解除
             </button>
           </div>
+          <div style={{ padding: "0 20px 16px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {selected.map((c) => (
+              <span
+                key={c.customer_code}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  border: "1px solid var(--line)",
+                  borderRadius: 999,
+                  padding: "4px 6px 4px 12px",
+                  fontSize: 13,
+                }}
+              >
+                {c.customer_name}
+                <span className="cell-sub">{c.customer_code}</span>
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => removeCustomer(c.customer_code)}
+                  title="この得意先を外す"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
 
-          <div style={{ padding: "12px 20px 0" }}>
+          <div style={{ padding: "0 20px 0" }}>
             <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>
               商品コード・商品名で絞り込み(入力するたびに自動で絞り込みます)
             </label>
@@ -283,10 +339,12 @@ export default function CustomerHistorySearch() {
             <table className="mat">
               <thead>
                 <tr>
+                  {showCustomerColumn && <th className="namecol">得意先</th>}
                   <th>納品日</th>
                   <th>受注番号</th>
                   <th className="codecol">商品コード</th>
                   <th className="namecol">商品名</th>
+                  <th className="namecol">仕様</th>
                   <th>数量</th>
                   <th>単価</th>
                   <th>金額</th>
@@ -298,14 +356,14 @@ export default function CustomerHistorySearch() {
               <tbody>
                 {historyLoading && (
                   <tr>
-                    <td colSpan={10} className="cell-sub" style={{ padding: 16 }}>
+                    <td colSpan={columnCount} className="cell-sub" style={{ padding: 16 }}>
                       読み込み中…
                     </td>
                   </tr>
                 )}
                 {!historyLoading && history && history.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="cell-sub" style={{ padding: 16 }}>
+                    <td colSpan={columnCount} className="cell-sub" style={{ padding: 16 }}>
                       取引実績がありません。
                     </td>
                   </tr>
@@ -313,10 +371,12 @@ export default function CustomerHistorySearch() {
                 {!historyLoading &&
                   history?.map((r, i) => (
                     <tr key={i}>
+                      {showCustomerColumn && <td className="namecol">{r.customer_name ?? "—"}</td>}
                       <td>{r.delivery_date ?? "—"}</td>
                       <td className="cell-sub">{r.order_no ?? "—"}</td>
                       <td className="codecol">{r.item_code ?? "—"}</td>
                       <td className="namecol">{r.item_name ?? "—"}</td>
+                      <td className="namecol">{r.spec ?? "—"}</td>
                       <td>{r.qty != null ? jpn(r.qty) : "—"}</td>
                       <td>{r.sell_price != null ? yen(r.sell_price) : "—"}</td>
                       <td>{r.qty != null && r.sell_price != null ? yen(r.qty * r.sell_price) : "—"}</td>
