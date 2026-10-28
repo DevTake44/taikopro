@@ -109,24 +109,47 @@ export default function CustomerHistorySearch() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, branchFilter, repFilter]);
 
-  async function selectCustomer(c: CustomerOption) {
+  // 得意先選択後、さらに商品で絞り込むための検索語。「直近50件」の中だけでなく、
+  // その商品の取引実績をDB側から探し直す(直近には出てこない過去の購入も見つけられるように)。
+  const [productFilter, setProductFilter] = useState("");
+  const latestHistoryRequestId = useRef(0);
+
+  async function fetchHistory(customerCode: string, product: string) {
+    const requestId = ++latestHistoryRequestId.current;
+    setHistoryLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ customer_code: customerCode });
+      if (product.trim()) params.set("product", product.trim());
+      const res = await fetch(`/api/customer-sales-history?${params.toString()}`);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      if (requestId === latestHistoryRequestId.current) setHistory(json.rows ?? []);
+    } catch (e) {
+      if (requestId === latestHistoryRequestId.current) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (requestId === latestHistoryRequestId.current) setHistoryLoading(false);
+    }
+  }
+
+  function selectCustomer(c: CustomerOption) {
     setSelected(c);
     setResults(null);
     setQuery("");
     setHistory(null);
-    setHistoryLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/customer-sales-history?customer_code=${encodeURIComponent(c.customer_code)}`);
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setHistory(json.rows ?? []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setHistoryLoading(false);
-    }
+    setProductFilter("");
+    fetchHistory(c.customer_code, "");
   }
+
+  // 商品での絞り込みも、得意先検索と同じく入力するたびに自動で絞り込む。
+  useEffect(() => {
+    if (!selected) return;
+    const timer = setTimeout(() => {
+      fetchHistory(selected.customer_code, productFilter);
+    }, 250);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productFilter, selected?.customer_code]);
 
   return (
     <div>
@@ -225,9 +248,35 @@ export default function CustomerHistorySearch() {
                 </div>
               )}
             </div>
-            <button type="button" onClick={() => { setSelected(null); setHistory(null); }}>
+            <button type="button" onClick={() => { setSelected(null); setHistory(null); setProductFilter(""); }}>
               別の得意先を検索
             </button>
+          </div>
+
+          <div style={{ padding: "12px 20px 0" }}>
+            <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>
+              商品コード・商品名で絞り込み(入力するたびに自動で絞り込みます)
+            </label>
+            <div style={{ position: "relative", marginTop: 4, maxWidth: 420 }}>
+              <input
+                type="text"
+                placeholder="例: ラップ"
+                value={productFilter}
+                onChange={(e) => setProductFilter(e.target.value)}
+                style={{ width: "100%", padding: "8px 34px 8px 10px", boxSizing: "border-box" }}
+              />
+              {productFilter && (
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => setProductFilter("")}
+                  title="絞り込みをクリア"
+                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)" }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="matwrap">
@@ -281,7 +330,9 @@ export default function CustomerHistorySearch() {
           </div>
           {history && history.length > 0 && (
             <div className="cell-sub" style={{ padding: "10px 20px" }}>
-              直近{history.length}件(納品日の新しい順)を表示しています。
+              {productFilter
+                ? `「${productFilter}」に該当する直近${history.length}件(納品日の新しい順)を表示しています。`
+                : `直近${history.length}件(納品日の新しい順)を表示しています。`}
             </div>
           )}
         </div>
