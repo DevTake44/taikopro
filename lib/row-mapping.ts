@@ -96,20 +96,6 @@ export type TransferRowInsert = {
 
 const MIN_SALES_COLS = 54;
 
-// 保持対象の会計期間(会社の期は9/20区切り、2期分): 2024/9/21〜2026/9/20。
-// Supabase無料枠(500MB)の容量を、気づかないうちに超えてしまうことがないよう、
-// この期間より前・後の受注日/仕入日を持つ行は取り込まない(2026-07-30時点で導入)。
-// 対象期間を変更する場合は、この2つの定数を変更する。
-const RETENTION_FROM = "2024-09-21";
-const RETENTION_TO = "2026-09-20";
-
-// 日付が期間外(かつ日付が取得できている場合)なら true。
-// 日付が取れない行(dateOrNullがnullを返す行)は、この判定では従来通り除外しない。
-function isOutsideRetentionWindow(dateStr: string | null): boolean {
-  if (dateStr === null) return false;
-  return dateStr < RETENTION_FROM || dateStr > RETENTION_TO;
-}
-
 function cell(cols: string[], i: number): string {
   const v = cols[i];
   return v === undefined || v === null ? "" : v.trim();
@@ -182,9 +168,6 @@ export function mapSalesRow(cols: string[]): SalesRowInsert | null {
   if (item_name === "伝票消費税") return null;
 
   const order_date = dateOrNull(cols, 21);
-
-  // 対象2期間(2024/9/21〜2026/9/20)より前・後の受注日は取り込まない。
-  if (isOutsideRetentionWindow(order_date)) return null;
 
   return {
     order_no,
