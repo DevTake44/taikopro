@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
         .from("customer_master")
         .select("customer_code, customer_name, postal_code, address")
         .eq("is_deleted", false)
-        .in("customer_code", Array.from(allowedCodes).slice(0, 1000))
+        .in("customer_code", Array.from(allowedCodes))
         .order("customer_code", { ascending: true })
         .limit(50);
       if (masterError) return NextResponse.json({ error: masterError.message }, { status: 500 });
@@ -61,7 +61,13 @@ export async function GET(req: NextRequest) {
   // .in()でcustomer_code = ANY(array)の形にすると、PKインデックス経由で絞り込んだ
   // 候補だけを調べる計画になり、実測で最大の拠点(約1,300件)でも22ms→5ms程度まで
   // 速くなることを確認した。
-  const codesFilter = allowedCodes ? Array.from(allowedCodes).slice(0, 1000) : null;
+  //
+  // 注意(2026-10-28判明): 以前は件数を1000件に切り詰めていたが、東京(拠点21)が
+  // 1,158件と1000件を超えており、切り詰めた分(東急ストアなど)が検索候補から
+  // 丸ごと漏れる不具合があった。.in()の配列サイズ自体に1000件のような上限は無い
+  // (Data APIの1000行上限は「1回のレスポンスで返る行数」の話で、配列の要素数とは
+  // 別物)ため、切り詰めず全件を渡す。
+  const codesFilter = allowedCodes ? Array.from(allowedCodes) : null;
 
   // .or()にユーザー入力をそのまま埋め込むと、カンマ等でフィルタ構文が壊れうるため、
   // コード完全一致・名称部分一致を別々のクエリにして結果をマージする。
