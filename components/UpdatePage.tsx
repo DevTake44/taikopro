@@ -1,5 +1,5 @@
 "use client";
-import { useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import Link from "next/link";
 import Papa from "papaparse";
 import type { TableStatus } from "@/lib/fetchDataStatus";
@@ -13,6 +13,7 @@ import { transformPurchasesCsv } from "@/lib/purchasesTransform";
 import { transformProductMasterCsv } from "@/lib/productMasterTransform";
 import { transformSupplierMasterCsv } from "@/lib/supplierMasterTransform";
 import { transformCustomerMasterCsv } from "@/lib/customerMasterTransform";
+import { loadFileHandle, saveFileHandle } from "@/lib/fileHandleStore";
 
 const CHUNK_SIZE = 1000;
 
@@ -178,6 +179,130 @@ function PurchasesUploadBox() {
       onUpload={handleUpload}
       accept=".csv"
     />
+  );
+}
+
+// 社内共有フォルダの商品マスタ.csvを、毎回ファイル選択ダイアログを開かずに取り込むための
+// 1クリック取込。File System Access API(Chrome/Edge限定)でファイルの「場所」の参照
+// (FileSystemFileHandle)をIndexedDBに覚えておき、次回以降はそれを使って直接読みに行く。
+// 共有フォルダ(\\192.168.64.211\マスタcsv\商品マスタ.csv)は社内LAN内限定でサーバー側から
+// 読みに行けないため、ブラウザ(社内PC)側でファイルを読んでアップロードする方式にしている。
+function OneClickProductMasterImport() {
+  const handleRef = useRef<FileSystemFileHandle | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [status, setStatus] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [message, setMessage] = useState<string | null>(null);
+  const [checkedStorage, setCheckedStorage] = useState(false);
+
+  useEffect(() => {
+    loadFileHandle("product-master")
+      .then((handle) => {
+        if (handle) {
+          handleRef.current = handle;
+          setFileName(handle.name);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setCheckedStorage(true));
+  }, []);
+
+  async function pickFile() {
+    setMessage(null);
+    if (!window.showOpenFilePicker) {
+      setMessage("このブラウザは対応していません(Chrome・Edgeをお使いください)。");
+      return;
+    }
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: "CSV", accept: { "text/csv": [".csv"] } }],
+        excludeAcceptAllOption: false,
+        multiple: false,
+      });
+      handleRef.current = handle;
+      setFileName(handle.name);
+      await saveFileHandle("product-master", handle);
+    } catch (e) {
+      // ユーザーがダイアログをキャンセルした場合は何もしない。
+      if (e instanceof Error && e.name !== "AbortError") setMessage(e.message);
+    }
+  }
+
+  async function importNow() {
+    if (!handleRef.current) return;
+    setStatus("busy");
+    setMessage(null);
+    try {
+      let permission = await handleRef.current.queryPermission({ mode: "read" });
+      if (permission !== "granted") {
+        permission = await handleRef.current.requestPermission({ mode: "read" });
+      }
+      if (permission !== "granted") {
+        throw new Error("ファイルへのアクセスが許可されませんでした。");
+      }
+
+      const file = await handleRef.current.getFile();
+      const buf = await file.arrayBuffer();
+      const text = decodeCsvBuffer(buf);
+      const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
+      const fatalErrors = parsed.errors.filter((e) => e.type !== "FieldMismatch");
+      if (fatalErrors.length > 0) {
+        throw new Error("CSVの読み込み中にエラーが発生しました: " + fatalErrors[0].message);
+      }
+      const { rows, skipped } = transformProductMasterCsv(parsed.data);
+      if (rows.length === 0) {
+        throw new Error("有効なデータ行がありませんでした。");
+      }
+      await uploadRowsInChunks(rows, "/api/commit-product-master", () => {});
+      setStatus("done");
+      const updatedAt = new Date(file.lastModified).toLocaleString("ja-JP");
+      setMessage(
+        `${rows.length.toLocaleString()}件を反映しました(ファイル更新日時: ${updatedAt})` +
+          (skipped.length > 0 ? `・スキップ${skipped.length}件` : "")
+      );
+    } catch (e) {
+      setStatus("error");
+      setMessage(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const supported = checkedStorage && typeof window !== "undefined" && "showOpenFilePicker" in window;
+  if (checkedStorage && !supported) return null; // Chrome/Edge以外では表示しない(非対応ブラウザに混乱させないため)
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2>商品マスタを1クリックで取り込む</h2>
+      </div>
+      <div style={{ padding: "0 20px 20px" }}>
+        <p style={{ fontSize: 13, color: "var(--ink-faint)", marginBottom: 12 }}>
+          社内共有フォルダの商品マスタ.csvを、初回だけ選んでおけば、次回以降はボタン1つで最新の内容を取り込めます(Chrome・Edge限定)。
+        </p>
+        {!fileName ? (
+          <button className="btn-primary" onClick={pickFile} disabled={!checkedStorage}>
+            商品マスタ.csvを選ぶ(初回のみ)
+          </button>
+        ) : (
+          <>
+            <div style={{ fontSize: 12.5, color: "var(--ink-faint)", marginBottom: 10 }}>
+              選択中のファイル: <span style={{ color: "var(--brand)", fontWeight: 600 }}>{fileName}</span>{" "}
+              <button type="button" className="btn-icon" onClick={pickFile} title="別のファイルに変更する">
+                変更
+              </button>
+            </div>
+            <button className="btn-primary" disabled={status === "busy"} onClick={importNow}>
+              {status === "busy" && <span className="spinner" />}
+              {status === "busy" ? "取り込み中…" : "最新を取り込む"}
+            </button>
+          </>
+        )}
+        {message && (
+          <div className={status === "error" ? "alert alert-error" : "alert alert-success"} style={{ marginTop: 10 }}>
+            {status === "error" ? "❌ " : "✓ "}
+            {message}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -543,6 +668,7 @@ export default function UpdatePage({
       <div className="page active" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(440px, 1fr))", gap: 16 }}>
         <SalesUploadBox />
         <PurchasesUploadBox />
+        <OneClickProductMasterImport />
         <ProductMasterUploadBox />
         <SupplierMasterUploadBox />
         <CustomerMasterUploadBox />
