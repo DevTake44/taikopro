@@ -179,6 +179,14 @@ export default function CustomerHistorySearch() {
   const showCustomerColumn = selected.length > 1;
   const columnCount = showCustomerColumn ? 12 : 11;
 
+  // 売上明細(sales_lines)のcustomer_nameは古い伝票などで支店名が省略されて
+  // 「㈱高速」のように会社名だけのことがあり、どの支店か区別できない。
+  // 得意先マスタ(customer_master)から取得した選択時の正式名称を優先して表示する。
+  const selectedNameByCode = useMemo(
+    () => new Map(selected.map((c) => [c.customer_code, c.customer_name])),
+    [selected]
+  );
+
   return (
     <div>
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
@@ -371,7 +379,16 @@ export default function CustomerHistorySearch() {
                 {!historyLoading &&
                   history?.map((r, i) => (
                     <tr key={i}>
-                      {showCustomerColumn && <td className="namecol">{r.customer_name ?? "—"}</td>}
+                      {showCustomerColumn && (
+                        <td className="namecol">
+                          {(r.customer_code && selectedNameByCode.get(r.customer_code)) ?? r.customer_name ?? "—"}
+                          {r.customer_code && (
+                            <span className="cell-sub" style={{ display: "block", fontWeight: 400 }}>
+                              {r.customer_code}
+                            </span>
+                          )}
+                        </td>
+                      )}
                       <td>{r.delivery_date ?? "—"}</td>
                       <td className="cell-sub">{r.order_no ?? "—"}</td>
                       <td className="codecol">{r.item_code ?? "—"}</td>
