@@ -389,12 +389,34 @@ function toMonthCell(c: { s: number; p: number }): MonthCell {
   return { s: c.s, p: c.p, m: c.s ? Math.round(((c.s - c.p) / c.s) * 1000) / 10 : null };
 }
 
+// 四半期の区切り(10月始まりの会計年度に合わせる: 10-12月・1-3月・4-6月・7-9月)。
+// monthsOfFiscalYear()が返す12ヶ月の並び(10月始まり)と対応するよう、3ヶ月ずつ束ねる。
+const QUARTER_LABELS = ["10-12月", "1-3月", "4-6月", "7-9月"];
+
+// 12ヶ月分のMonthCellPairを、3ヶ月ずつ合算して4四半期分にまとめる。
+// 対比(cmp)は、四半期内の3ヶ月すべてに対比データがある場合だけ表示する
+// (一部の月だけ対比できる状態で合算すると、差額の意味が誤解を招くため)。
+function groupIntoQuarters(cells: MonthCellPair[]): MonthCellPair[] {
+  const quarters: MonthCellPair[] = [];
+  for (let q = 0; q < 4; q++) {
+    const months = cells.slice(q * 3, q * 3 + 3);
+    const base = months.reduce((acc, m) => ({ s: acc.s + m.base.s, p: acc.p + m.base.p }), { s: 0, p: 0 });
+    const hasAllCmp = months.every((m) => m.cmp !== null);
+    const cmp = hasAllCmp
+      ? months.reduce((acc, m) => ({ s: acc.s + (m.cmp?.s ?? 0), p: acc.p + (m.cmp?.p ?? 0) }), { s: 0, p: 0 })
+      : null;
+    quarters.push({ base: toMonthCell(base), cmp: cmp ? toMonthCell(cmp) : null });
+  }
+  return quarters;
+}
+
 function MatrixPage({ data }: { data: DashboardData }) {
   const [dim, setDim] = useState<Dim>("loc");
   const [metric, setMetric] = useState<Metric>("sales");
   const [sortKey, setSortKey] = useState<SortKey>("total");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [filter, setFilter] = useState("");
+  const [period, setPeriod] = useState<"month" | "quarter">("month");
 
   const CUR = data.summary.CUR;
   const years = data.fiscalYears; // 昇順
@@ -566,6 +588,20 @@ function MatrixPage({ data }: { data: DashboardData }) {
             ))}
           </div>
         </div>
+        <div className="card-head" style={{ paddingTop: 0 }}>
+          <div className="tabs">
+            {(
+              [
+                ["month", "月別"],
+                ["quarter", "四半期別(10-12/1-3/4-6/7-9)"],
+              ] as [typeof period, string][]
+            ).map(([p, label]) => (
+              <button key={p} className={period === p ? "active" : ""} onClick={() => setPeriod(p)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="card-head" style={{ paddingTop: 0, flexWrap: "wrap", gap: 16 }}>
           <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
             表示期間:
@@ -626,31 +662,34 @@ function MatrixPage({ data }: { data: DashboardData }) {
                 <th className="namecol" onClick={() => onSort("name")}>
                   {dimName[dim]}{sortKey === "name" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                 </th>
-                {baseMonths.map((m) => (
-                  <th key={m}>{monL(m)}</th>
-                ))}
+                {period === "quarter"
+                  ? QUARTER_LABELS.map((label) => <th key={label}>{label}</th>)
+                  : baseMonths.map((m) => <th key={m}>{monL(m)}</th>)}
                 <th className="totcol" onClick={() => onSort("total")}>
                   トータル{sortKey === "total" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                 </th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.code}>
-                  <td className="codecol">{r.code}</td>
-                  <td className="namecol">{r.name}</td>
-                  {r.cells.map((c, i) => (
-                    <MatrixCell key={i} metric={metric} base={c.base} cmp={c.cmp} />
-                  ))}
-                  <MatrixTotalCell metric={metric} row={r} />
-                </tr>
-              ))}
+              {rows.map((r) => {
+                const cells = period === "quarter" ? groupIntoQuarters(r.cells) : r.cells;
+                return (
+                  <tr key={r.code}>
+                    <td className="codecol">{r.code}</td>
+                    <td className="namecol">{r.name}</td>
+                    {cells.map((c, i) => (
+                      <MatrixCell key={i} metric={metric} base={c.base} cmp={c.cmp} />
+                    ))}
+                    <MatrixTotalCell metric={metric} row={r} />
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot className="mat-foot">
               <tr>
                 <td className="codecol" />
                 <td className="namecol">合計</td>
-                {grand.cells.map((c, i) => (
+                {(period === "quarter" ? groupIntoQuarters(grand.cells) : grand.cells).map((c, i) => (
                   <MatrixCell key={i} metric={metric} base={c.base} cmp={c.cmp} />
                 ))}
                 <MatrixTotalCell metric={metric} row={grand} />

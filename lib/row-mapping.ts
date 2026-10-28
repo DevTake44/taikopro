@@ -4,9 +4,15 @@
 // 列番号(0始まり)は、過去にPythonで解析した際に確定させたものと同じ。
 // 売上側: 0=得意先コード, 2=得意先名1, 11=受注番号, 12=受注行番号, 15=納品書番号,
 //         16=納品書行数, 21=受注年月日, 22=納品年月日, 23=営業所コード, 24=営業担当,
-//         27=品番, 29=品名, 34=受注総数量, 37=納品総数量, 39=販売単価, 40=金額,
+//         27=品番, 29=品名, 30=仕様, 34=受注総数量, 37=納品総数量, 39=販売単価, 40=金額,
 //         42=出荷場所コード(AQ列), 43=出荷場所名(AR列), 46=件名(物件名), 49=手配区分,
 //         50=仕入先コード(AY列), 51=仕入先名1, 53=原価(BB列)
+//
+// 追加(2026-10-28、顧客実績の仕様表示のため): 仕様(30列目、spec)を新たに取り込む。
+// この「仕様」はその受注時点のサイズ・色などの実績値で、商品マスタの現在の仕様
+// (product_master.spec、現在の代表値1つ)より正確(受注ごとに異なり得るため)。
+// 既存行にはこの列が無い(過去データは再取込みしない限りNULLのまま)ので、
+// 顧客実績画面の表示では商品マスタの値をフォールバックとして使う。
 //
 // 注意(2026-07-30に判明): 売上側のqtyは「受注総数量(34列目)」ではなく
 // 「納品総数量(37列目)」を使う。1つの受注が複数回・複数月に分けて納品される場合や、
@@ -55,6 +61,7 @@ export type SalesRowInsert = {
   arrange_type: string | null;
   item_code: string | null;
   item_name: string | null;
+  spec: string | null;
   project_name: string | null;
   qty: number | null;
   sell_price: number | null;
@@ -88,20 +95,6 @@ export type TransferRowInsert = {
 };
 
 const MIN_SALES_COLS = 54;
-
-// 保持対象の会計期間(会社の期は9/20区切り、2期分): 2024/9/21〜2026/9/20。
-// Supabase無料枠(500MB)の容量を、気づかないうちに超えてしまうことがないよう、
-// この期間より前・後の受注日/仕入日を持つ行は取り込まない(2026-07-30時点で導入)。
-// 対象期間を変更する場合は、この2つの定数を変更する。
-const RETENTION_FROM = "2024-09-21";
-const RETENTION_TO = "2026-09-20";
-
-// 日付が期間外(かつ日付が取得できている場合)なら true。
-// 日付が取れない行(dateOrNullがnullを返す行)は、この判定では従来通り除外しない。
-function isOutsideRetentionWindow(dateStr: string | null): boolean {
-  if (dateStr === null) return false;
-  return dateStr < RETENTION_FROM || dateStr > RETENTION_TO;
-}
 
 function cell(cols: string[], i: number): string {
   const v = cols[i];
@@ -176,9 +169,6 @@ export function mapSalesRow(cols: string[]): SalesRowInsert | null {
 
   const order_date = dateOrNull(cols, 21);
 
-  // 対象2期間(2024/9/21〜2026/9/20)より前・後の受注日は取り込まない。
-  if (isOutsideRetentionWindow(order_date)) return null;
-
   return {
     order_no,
     order_line,
@@ -193,6 +183,7 @@ export function mapSalesRow(cols: string[]): SalesRowInsert | null {
     arrange_type: textOrNull(cols, 49),
     item_code: textOrNull(cols, 27),
     item_name: textOrNull(cols, 29),
+    spec: textOrNull(cols, 30),
     project_name: textOrNull(cols, 46),
     qty: numOrNull(cols, 37),
     sell_price: numOrNull(cols, 39),
