@@ -115,20 +115,9 @@ export default function PurchaseLookupPage() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSearch()}
           placeholder={mode === "code" ? "品番を入力" : "品名・仕様のキーワードを入力(スペース区切りで複数語OK)"}
-          style={{ flex: 1, padding: "8px 12px", fontSize: 14, border: "1px solid #ccc", borderRadius: 6 }}
+          style={{ flex: 1, fontSize: 14 }}
         />
-        <button
-          onClick={handleSearch}
-          disabled={loading || query.trim() === ""}
-          style={{
-            padding: "8px 20px",
-            borderRadius: 6,
-            border: "1px solid #2563d9",
-            background: loading || query.trim() === "" ? "#c3d6f8" : "#2563d9",
-            color: "#fff",
-            cursor: loading || query.trim() === "" ? "not-allowed" : "pointer",
-          }}
-        >
+        <button className="btn-primary" onClick={handleSearch} disabled={loading || query.trim() === ""}>
           {loading ? (
             <>
               <span className="spinner" />
@@ -138,18 +127,7 @@ export default function PurchaseLookupPage() {
             "検索"
           )}
         </button>
-        <button
-          onClick={handleReset}
-          disabled={loading}
-          style={{
-            padding: "8px 20px",
-            borderRadius: 6,
-            border: "1px solid #999",
-            background: "#fff",
-            color: "#444",
-            cursor: loading ? "not-allowed" : "pointer",
-          }}
-        >
+        <button onClick={handleReset} disabled={loading}>
           リセット
         </button>
       </div>
@@ -195,14 +173,14 @@ function ProductCard({ result }: { result: ProductSearchResult }) {
           <p style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 6 }}>仕様: {m.spec}</p>
         )}
         {m?.source_updated_at && (
-          <p style={{ fontSize: 12, color: sourceStale ? "#b8860b" : "var(--ink-faint)", marginBottom: 12 }}>
+          <p style={{ fontSize: 12, color: sourceStale ? "var(--amber)" : "var(--ink-faint)", marginBottom: 12 }}>
             最終更新(基幹システム): {m.source_updated_at}
             {sourceStale && " ※更新から2年以上経過しており、単価情報の信頼度が低い可能性があります"}
           </p>
         )}
 
         {result.masterMismatch && (
-          <p style={{ color: "#b8860b", fontSize: 13, marginBottom: 12 }}>⚠ {result.masterMismatch}</p>
+          <p style={{ color: "var(--amber)", fontSize: 13, marginBottom: 12 }}>⚠ {result.masterMismatch}</p>
         )}
 
         {hasHistory ? (
@@ -220,7 +198,7 @@ function ProductCard({ result }: { result: ProductSearchResult }) {
               </thead>
               <tbody>
                 {result.latestBySupplier.map((s) => (
-                  <tr key={s.supplier_code ?? s.supplier_name} style={{ background: isOld(s.purchase_date) ? "#fff3e0" : undefined }}>
+                  <tr key={s.supplier_code ?? s.supplier_name} style={{ background: isOld(s.purchase_date) ? "#fff8ec" : undefined }}>
                     <td>{s.supplier_name ?? s.supplier_code}</td>
                     <td>{yen(s.unit_price)}</td>
                     <td>{s.purchase_date}</td>
@@ -269,7 +247,7 @@ function ProductCard({ result }: { result: ProductSearchResult }) {
                 {result.history.map((h) => (
                   <tr
                     key={`${h.purchase_number}_${h.purchase_line}`}
-                    style={{ background: isOld(h.purchase_date) ? "#fff3e0" : undefined }}
+                    style={{ background: isOld(h.purchase_date) ? "#fff8ec" : undefined }}
                   >
                     <td>{h.purchase_date}</td>
                     <td>{h.supplier_name ?? h.supplier_code ?? "-"}</td>

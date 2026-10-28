@@ -34,6 +34,15 @@ export const BRANCH_NAMES: Record<string, string> = {
   "99": "大阪支店",
 };
 
+// 見積書・請求書を発行する拠点(太幸の拠点一覧資料に住所・電話・FAX・振込先が
+// 登録されている17拠点)。拠点コード順。経理・在庫・物流など発行主体にならない
+// コードや、資料に記載の無い拠点はここには含めない。
+export const ISSUING_BRANCH_CODES = [
+  "1", "2", "3", "5", "6", "7", "9",
+  "21", "22", "23", "24", "25", "27",
+  "51", "52", "61", "63",
+];
+
 export function branchLabel(code: string | null | undefined): string {
   if (!code) return "—";
   const name = BRANCH_NAMES[code];

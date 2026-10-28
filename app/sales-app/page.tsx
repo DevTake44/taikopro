@@ -10,6 +10,11 @@ type MenuLink = {
 
 const SALES_APP_LINKS: MenuLink[] = [
   {
+    href: "/sales-app/customer-history",
+    title: "顧客実績",
+    description: "電話対応中でもすぐに呼び出せるよう、得意先ごとの直近の取引実績を素早く検索します。",
+  },
+  {
     href: "/dx/purchase-lookup",
     title: "仕入価格検索",
     description: "品番・品名から、仕入先ごとの最新価格や仕入実績の履歴を検索します。",
@@ -23,6 +28,11 @@ const SALES_APP_LINKS: MenuLink[] = [
     href: "/dx/room-reservation",
     title: "会議室予約",
     description: "東京の会議室の週間予約状況を確認し、予約・変更・削除ができます。",
+  },
+  {
+    href: "/sales-app/quotes",
+    title: "見積書・請求書作成",
+    description: "得意先マスタ・商品マスタ・過去の売上明細から選んで見積書を作成し、そのまま請求書に転用できます。",
   },
 ];
 

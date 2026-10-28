@@ -587,7 +587,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
             <select
               value={branchFilter}
               onChange={(e) => setBranchFilter(e.target.value)}
-              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+              style={{ fontSize: 12.5 }}
             >
               <option value="">全拠点</option>
               {Object.keys(BRANCH_NAMES).map((code) => (
@@ -602,7 +602,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
             <select
               value={repFilter}
               onChange={(e) => setRepFilter(e.target.value)}
-              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+              style={{ fontSize: 12.5 }}
             >
               <option value="">全担当</option>
               {repCodesForBranch.map((code) => (
@@ -619,7 +619,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
               placeholder="名前・コードで検索(表の得意先コードクリックでも入力可)"
               value={customerFilter}
               onChange={(e) => setCustomerFilter(e.target.value)}
-              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2", minWidth: 220 }}
+              style={{ fontSize: 12.5, minWidth: 220 }}
             />
           </label>
           <label style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -627,7 +627,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
             <select
               value={monthFilter}
               onChange={(e) => setMonthFilter(e.target.value)}
-              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+              style={{ fontSize: 12.5 }}
             >
               <option value="">年間(12ヶ月)</option>
               {monthPeriodEnds.map((p) => (
@@ -651,7 +651,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
             <select
               value={baseYear}
               onChange={(e) => setBaseYear(Number(e.target.value))}
-              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+              style={{ fontSize: 12.5 }}
             >
               {availableYears.map((y) => (
                 <option key={y} value={y}>
@@ -665,7 +665,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
             <select
               value={compareYear}
               onChange={(e) => setCompareYear(e.target.value === "none" ? "none" : Number(e.target.value))}
-              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+              style={{ fontSize: 12.5 }}
             >
               <option value="none">対比なし</option>
               {availableYears.map((y) => (
@@ -684,7 +684,7 @@ export default function FreightProfitDashboard({ availableYears }: { availableYe
                 setSortKey(k);
                 setSortDir(d);
               }}
-              style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
+              style={{ fontSize: 12.5 }}
             >
               <option value="total_desc">トータル(表示中の指標・多い順)</option>
               <option value="total_asc">トータル(表示中の指標・少ない順)</option>

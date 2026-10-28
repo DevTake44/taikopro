@@ -1,5 +1,5 @@
 "use client";
-import { useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import Link from "next/link";
 import Papa from "papaparse";
 import type { TableStatus } from "@/lib/fetchDataStatus";
@@ -13,6 +13,7 @@ import { transformPurchasesCsv } from "@/lib/purchasesTransform";
 import { transformProductMasterCsv } from "@/lib/productMasterTransform";
 import { transformSupplierMasterCsv } from "@/lib/supplierMasterTransform";
 import { transformCustomerMasterCsv } from "@/lib/customerMasterTransform";
+import { loadFileHandle, saveFileHandle } from "@/lib/fileHandleStore";
 
 const CHUNK_SIZE = 1000;
 
@@ -181,6 +182,130 @@ function PurchasesUploadBox() {
   );
 }
 
+// 社内共有フォルダの商品マスタ.csvを、毎回ファイル選択ダイアログを開かずに取り込むための
+// 1クリック取込。File System Access API(Chrome/Edge限定)でファイルの「場所」の参照
+// (FileSystemFileHandle)をIndexedDBに覚えておき、次回以降はそれを使って直接読みに行く。
+// 共有フォルダ(\\192.168.64.211\マスタcsv\商品マスタ.csv)は社内LAN内限定でサーバー側から
+// 読みに行けないため、ブラウザ(社内PC)側でファイルを読んでアップロードする方式にしている。
+function OneClickProductMasterImport() {
+  const handleRef = useRef<FileSystemFileHandle | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [status, setStatus] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [message, setMessage] = useState<string | null>(null);
+  const [checkedStorage, setCheckedStorage] = useState(false);
+
+  useEffect(() => {
+    loadFileHandle("product-master")
+      .then((handle) => {
+        if (handle) {
+          handleRef.current = handle;
+          setFileName(handle.name);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setCheckedStorage(true));
+  }, []);
+
+  async function pickFile() {
+    setMessage(null);
+    if (!window.showOpenFilePicker) {
+      setMessage("このブラウザは対応していません(Chrome・Edgeをお使いください)。");
+      return;
+    }
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: "CSV", accept: { "text/csv": [".csv"] } }],
+        excludeAcceptAllOption: false,
+        multiple: false,
+      });
+      handleRef.current = handle;
+      setFileName(handle.name);
+      await saveFileHandle("product-master", handle);
+    } catch (e) {
+      // ユーザーがダイアログをキャンセルした場合は何もしない。
+      if (e instanceof Error && e.name !== "AbortError") setMessage(e.message);
+    }
+  }
+
+  async function importNow() {
+    if (!handleRef.current) return;
+    setStatus("busy");
+    setMessage(null);
+    try {
+      let permission = await handleRef.current.queryPermission({ mode: "read" });
+      if (permission !== "granted") {
+        permission = await handleRef.current.requestPermission({ mode: "read" });
+      }
+      if (permission !== "granted") {
+        throw new Error("ファイルへのアクセスが許可されませんでした。");
+      }
+
+      const file = await handleRef.current.getFile();
+      const buf = await file.arrayBuffer();
+      const text = decodeCsvBuffer(buf);
+      const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
+      const fatalErrors = parsed.errors.filter((e) => e.type !== "FieldMismatch");
+      if (fatalErrors.length > 0) {
+        throw new Error("CSVの読み込み中にエラーが発生しました: " + fatalErrors[0].message);
+      }
+      const { rows, skipped } = transformProductMasterCsv(parsed.data);
+      if (rows.length === 0) {
+        throw new Error("有効なデータ行がありませんでした。");
+      }
+      await uploadRowsInChunks(rows, "/api/commit-product-master", () => {});
+      setStatus("done");
+      const updatedAt = new Date(file.lastModified).toLocaleString("ja-JP");
+      setMessage(
+        `${rows.length.toLocaleString()}件を反映しました(ファイル更新日時: ${updatedAt})` +
+          (skipped.length > 0 ? `・スキップ${skipped.length}件` : "")
+      );
+    } catch (e) {
+      setStatus("error");
+      setMessage(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const supported = checkedStorage && typeof window !== "undefined" && "showOpenFilePicker" in window;
+  if (checkedStorage && !supported) return null; // Chrome/Edge以外では表示しない(非対応ブラウザに混乱させないため)
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2>商品マスタを1クリックで取り込む</h2>
+      </div>
+      <div style={{ padding: "0 20px 20px" }}>
+        <p style={{ fontSize: 13, color: "var(--ink-faint)", marginBottom: 12 }}>
+          社内共有フォルダの商品マスタ.csvを、初回だけ選んでおけば、次回以降はボタン1つで最新の内容を取り込めます(Chrome・Edge限定)。
+        </p>
+        {!fileName ? (
+          <button className="btn-primary" onClick={pickFile} disabled={!checkedStorage}>
+            商品マスタ.csvを選ぶ(初回のみ)
+          </button>
+        ) : (
+          <>
+            <div style={{ fontSize: 12.5, color: "var(--ink-faint)", marginBottom: 10 }}>
+              選択中のファイル: <span style={{ color: "var(--brand)", fontWeight: 600 }}>{fileName}</span>{" "}
+              <button type="button" className="btn-icon" onClick={pickFile} title="別のファイルに変更する">
+                変更
+              </button>
+            </div>
+            <button className="btn-primary" disabled={status === "busy"} onClick={importNow}>
+              {status === "busy" && <span className="spinner" />}
+              {status === "busy" ? "取り込み中…" : "最新を取り込む"}
+            </button>
+          </>
+        )}
+        {message && (
+          <div className={status === "error" ? "alert alert-error" : "alert alert-success"} style={{ marginTop: 10 }}>
+            {status === "error" ? "❌ " : "✓ "}
+            {message}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ProductMasterUploadBox() {
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState<Progress>({ stage: "idle" });
@@ -278,7 +403,7 @@ function SupplierMasterUploadBox() {
   return (
     <UploadBoxShell
       title="④ 仕入先マスタの更新"
-      description="仕入先マスタCSVを、そのままアップロードしてください。"
+      description="仕入先マスタCSVを、そのままアップロードしてください。仕入先コード・仕入先名上段/下段・削除フラグ・支払統括店コードの列を使用します(支払統括店コードは、見積書・請求書の仕入先検索で支払先専用のコードを除外するために使います)。"
       file={file}
       setFile={setFile}
       progress={progress}
@@ -331,8 +456,8 @@ function CustomerMasterUploadBox() {
 
   return (
     <UploadBoxShell
-      title="⑤ 得意先マスタの更新(締め日・未売上受注チェック用)"
-      description="得意先マスタCSVを、そのままアップロードしてください。得意先コード・得意先名上段/下段・締日・削除フラグの列を使用します。"
+      title="⑤ 得意先マスタの更新(締め日・未売上受注チェック・見積/請求書用)"
+      description="得意先マスタCSVを、そのままアップロードしてください。得意先コード・得意先名上段/下段・締日・削除フラグ・郵便番号・住所上段/下段１/下段２の列を使用します。"
       file={file}
       setFile={setFile}
       progress={progress}
@@ -420,72 +545,50 @@ function UploadBoxShell({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           style={{
-            border: `2px dashed ${isDragging ? "#2563d9" : "#c3d6f8"}`,
-            borderRadius: 8,
-            padding: "20px 16px",
-            textAlign: "center",
-            background: isDragging ? "#eaf1fd" : "#f8fafd",
+            border: `1.5px dashed ${isDragging ? "var(--brand)" : "var(--line)"}`,
+            borderRadius: "var(--radius-sm)",
+            padding: "12px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            background: isDragging ? "#eaf1fd" : "#fafbfd",
             transition: "background 0.15s ease, border-color 0.15s ease",
             opacity: busy ? 0.6 : 1,
           }}
         >
-          <p style={{ fontSize: 13, color: isDragging ? "#2563d9" : "var(--ink-faint)", margin: "0 0 10px", fontWeight: isDragging ? 700 : 400 }}>
-            {isDragging ? "ここにCSVファイルを離してください" : "ここにCSVファイルをドラッグ&ドロップ、または下のボタンで選択"}
-          </p>
-          <input
-            type="file"
-            accept={accept}
-            disabled={busy}
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-          {file && (
-            <p style={{ fontSize: 13, color: "#2563d9", marginTop: 10, marginBottom: 0 }}>
-              選択中のファイル: {file.name}
-            </p>
-          )}
+          <span style={{ fontSize: 12.5, color: isDragging ? "var(--brand)" : "var(--ink-faint)", fontWeight: isDragging ? 700 : 400, whiteSpace: "nowrap" }}>
+            {isDragging ? "ここで離してください" : "ドラッグ&ドロップ、または選択:"}
+          </span>
+          <input type="file" accept={accept} disabled={busy} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          {file && <span style={{ fontSize: 12.5, color: "var(--brand)", fontWeight: 600 }}>{file.name}</span>}
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <button
-            disabled={!file || busy}
-            onClick={onUpload}
-            style={{
-              padding: "8px 20px",
-              borderRadius: 6,
-              border: "1px solid #2563d9",
-              background: !file || busy ? "#c3d6f8" : "#2563d9",
-              color: "#fff",
-              cursor: !file || busy ? "not-allowed" : "pointer",
-            }}
-          >
+          <button className="btn-primary" disabled={!file || busy} onClick={onUpload}>
             {busy && <span className="spinner" />}
             {statusText}
           </button>
         </div>
-        {result && (
-          <div style={{ marginTop: 16, fontSize: 13 }}>
-            {result.error ? (
-              <p style={{ color: "var(--neg)" }}>❌ {result.error}</p>
-            ) : (
+        {result &&
+          (result.error ? (
+            <div className="alert alert-error">❌ {result.error}</div>
+          ) : (
+            <div className="alert alert-success">
               <div>
-                <p style={{ color: "var(--pos)" }}>
-                  ✓ {result.rowCount?.toLocaleString()}件を反映しました
-                  {result.totalAmount !== undefined && `(合計 ${result.totalAmount.toLocaleString()}円)`}
-                </p>
-                {result.extraInfo && <p style={{ color: "var(--ink-faint)" }}>{result.extraInfo}</p>}
-                {!!result.skippedCount && (
-                  <p style={{ color: "var(--ink-faint)" }}>
-                    スキップされた行: {result.skippedCount}件
-                    {result.skippedSample && result.skippedSample.length > 0 && (
-                      <span> (例: {result.skippedSample[0]})</span>
-                    )}
-                  </p>
-                )}
-                <p style={{ color: "var(--ink-faint)" }}>画面を再読み込みすると最新の数字が確認できます。</p>
+                ✓ {result.rowCount?.toLocaleString()}件を反映しました
+                {result.totalAmount !== undefined && `(合計 ${result.totalAmount.toLocaleString()}円)`}
               </div>
-            )}
-          </div>
-        )}
+              {result.extraInfo && <div style={{ marginTop: 4 }}>{result.extraInfo}</div>}
+              {!!result.skippedCount && (
+                <div style={{ marginTop: 4 }}>
+                  スキップされた行: {result.skippedCount}件
+                  {result.skippedSample && result.skippedSample.length > 0 && <span> (例: {result.skippedSample[0]})</span>}
+                </div>
+              )}
+              <div style={{ marginTop: 4, opacity: 0.8 }}>画面を再読み込みすると最新の数字が確認できます。</div>
+            </div>
+          ))}
       </div>
     </div>
   );
@@ -518,18 +621,7 @@ function RefreshButton() {
           アップロード後にページを再読み込みしても数字が変わらない場合、ここを押してください。
           Supabaseの画面を開く必要はありません。
         </p>
-        <button
-          disabled={state === "loading"}
-          onClick={handleRefresh}
-          style={{
-            padding: "8px 20px",
-            borderRadius: 6,
-            border: "1px solid #2563d9",
-            background: state === "loading" ? "#c3d6f8" : "#2563d9",
-            color: "#fff",
-            cursor: state === "loading" ? "not-allowed" : "pointer",
-          }}
-        >
+        <button className="btn-primary" disabled={state === "loading"} onClick={handleRefresh}>
           {state === "loading" ? (
             <>
               <span className="spinner" />
@@ -539,12 +631,7 @@ function RefreshButton() {
             "今すぐ画面データを更新する"
           )}
         </button>
-        {message && (
-          <p style={{ marginTop: 12, fontSize: 13, color: state === "error" ? "var(--neg)" : "var(--pos)" }}>
-            {state === "error" ? "❌ " : "✓ "}
-            {message}
-          </p>
-        )}
+        {message && <div className={`alert ${state === "error" ? "alert-error" : "alert-success"}`}>{state === "error" ? "❌ " : "✓ "}{message}</div>}
       </div>
     </div>
   );
@@ -562,7 +649,7 @@ export default function UpdatePage({
   uploadLogError: string | null;
 }) {
   return (
-    <div className="wrap" style={{ maxWidth: 900 }}>
+    <div className="wrap" style={{ maxWidth: 1200 }}>
       <header className="top">
         <div className="title">
           <h1>データ更新</h1>
@@ -576,8 +663,12 @@ export default function UpdatePage({
         <RefreshButton />
         <DataStatusTable statuses={statuses} error={statusError} />
         <UploadLogTable logs={uploadLogs} error={uploadLogError} />
+      </div>
+      <h2 className="blk" style={{ margin: "24px 0 12px" }}>CSVアップロード</h2>
+      <div className="page active" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(440px, 1fr))", gap: 16 }}>
         <SalesUploadBox />
         <PurchasesUploadBox />
+        <OneClickProductMasterImport />
         <ProductMasterUploadBox />
         <SupplierMasterUploadBox />
         <CustomerMasterUploadBox />

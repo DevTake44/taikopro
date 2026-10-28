@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { UploadLogRow } from "@/lib/fetchUploadLog";
 
 const UPLOAD_TYPE_LABELS: Record<string, string> = {
@@ -29,11 +32,18 @@ function fmtDateTime(d: string): string {
 // このアプリはログイン画面が全社共通の1パスワードで、「誰が」操作したかは記録できないため、
 // 「いつ・どの処理が・何件」実行されたかだけを表示する。
 export default function UploadLogTable({ logs, error }: { logs: UploadLogRow[]; error: string | null }) {
+  // 履歴が長くなってきたため、既定では閉じておき、クリックしたら下に表示する。
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <div className="card" style={{ marginBottom: 20 }}>
       <div className="card-head">
         <h2>アップロード履歴</h2>
+        <button type="button" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? "閉じる" : "表示する"}
+        </button>
       </div>
+      {!expanded ? null : (
       <div style={{ padding: "0 20px 20px" }}>
         <p style={{ fontSize: 13, color: "var(--ink-faint)", marginBottom: 12 }}>
           直近{logs.length > 0 ? "" : "50件分"}のアップロード・削除処理の記録です。このアプリは全社共通の1つのパスワードでログインする仕組みのため「誰が」操作したかは記録されません。「いつ・何のデータが・何件」処理されたかの確認用です。
@@ -91,6 +101,7 @@ export default function UploadLogTable({ logs, error }: { logs: UploadLogRow[]; 
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

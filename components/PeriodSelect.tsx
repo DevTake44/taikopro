@@ -22,14 +22,10 @@ export function PeriodSelect({
   onChange: (y: number) => void;
 }) {
   return (
-    <div style={{ marginBottom: 14, fontSize: 12.5 }}>
+    <div className="toolbar">
       <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-        期選択:
-        <select
-          value={selectedYear}
-          onChange={(e) => onChange(Number(e.target.value))}
-          style={{ fontSize: 12.5, padding: "4px 8px", borderRadius: 6, border: "1px solid #d7dbe2" }}
-        >
+        期選択
+        <select value={selectedYear} onChange={(e) => onChange(Number(e.target.value))}>
           {[...years].reverse().map((y) => (
             <option key={y} value={y}>
               {fiscalYearLabel(y, trueCUR)}({y}年度)
@@ -38,9 +34,7 @@ export function PeriodSelect({
         </select>
       </label>
       {selectedYear !== trueCUR && (
-        <span style={{ marginLeft: 10, color: "var(--ink-faint)" }}>
-          ※ {fiscalYearLabel(selectedYear, trueCUR)}({selectedYear}年度)を「今期」として表示しています
-        </span>
+        <span>※ {fiscalYearLabel(selectedYear, trueCUR)}({selectedYear}年度)を「今期」として表示しています</span>
       )}
     </div>
   );

@@ -27,12 +27,7 @@ export default function RefreshButton({
   }
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={state === "loading"}
-      className="ghost-btn-inline"
-      style={{ cursor: state === "loading" ? "default" : "pointer", border: "1px solid #d7dbe2", background: "#fff" }}
-    >
+    <button onClick={handleClick} disabled={state === "loading"}>
       {state === "loading"
         ? "更新中…"
         : state === "done"

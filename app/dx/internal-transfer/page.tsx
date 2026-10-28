@@ -68,7 +68,7 @@ export default async function InternalTransferPage() {
         </div>
         <div className="card">
           <p>データの取得に失敗しました。環境変数(SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)が正しく設定されているか確認してください。</p>
-          <pre style={{ whiteSpace: "pre-wrap", color: "#c0392b" }}>{error.message}</pre>
+          <pre style={{ whiteSpace: "pre-wrap", color: "var(--neg)" }}>{error.message}</pre>
         </div>
       </div>
     );

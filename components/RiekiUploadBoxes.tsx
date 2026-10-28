@@ -284,7 +284,7 @@ function UploadBox({
   }
 
   return (
-    <div className="card" style={{ marginBottom: 20 }}>
+    <div className="card">
       <div className="card-head">
         <h2>{title}</h2>
       </div>
@@ -296,17 +296,21 @@ function UploadBox({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           style={{
-            border: `2px dashed ${isDragging ? "#2563d9" : "#c3d6f8"}`,
-            borderRadius: 8,
-            padding: "20px 16px",
-            textAlign: "center",
-            background: isDragging ? "#eaf1fd" : "#f8fafd",
+            border: `1.5px dashed ${isDragging ? "var(--brand)" : "var(--line)"}`,
+            borderRadius: "var(--radius-sm)",
+            padding: "12px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            background: isDragging ? "#eaf1fd" : "#fafbfd",
+            transition: "background 0.15s ease, border-color 0.15s ease",
             opacity: status.running ? 0.6 : 1,
           }}
         >
-          <p style={{ fontSize: 13, color: isDragging ? "#2563d9" : "var(--ink-faint)", margin: "0 0 10px" }}>
-            {isDragging ? "ここにCSVファイルを離してください" : "ここにCSVファイルをドラッグ&ドロップ、または下のボタンで選択"}
-          </p>
+          <span style={{ fontSize: 12.5, color: isDragging ? "var(--brand)" : "var(--ink-faint)", fontWeight: isDragging ? 700 : 400, whiteSpace: "nowrap" }}>
+            {isDragging ? "ここで離してください" : "ドラッグ&ドロップ、または選択:"}
+          </span>
           <input
             type="file"
             accept=".csv"
@@ -317,7 +321,7 @@ function UploadBox({
               e.target.value = "";
             }}
           />
-          {file && <p style={{ fontSize: 13, color: "#2563d9", marginTop: 10, marginBottom: 0 }}>選択中のファイル: {file.name}</p>}
+          {file && <span style={{ fontSize: 12.5, color: "var(--brand)", fontWeight: 600 }}>{file.name}</span>}
         </div>
 
         {status.fileName && (
@@ -331,13 +335,13 @@ function UploadBox({
               </div>
             )}
             {status.running && !status.refreshing && (
-              <div style={{ color: "#2563d9", marginTop: 4 }}>
+              <div style={{ color: "var(--brand)", marginTop: 4 }}>
                 <span className="spinner" />
                 {mode === "replace" ? "置き換え中…" : mode === "accumulate" ? "取り込み中…" : "アップロード中…"}
               </div>
             )}
             {status.refreshing && (
-              <div style={{ color: "#2563d9", marginTop: 4 }}>
+              <div style={{ color: "var(--brand)", marginTop: 4 }}>
                 <span className="spinner" />
                 値上げ検知・売上利益等の集計を更新中…(数十秒かかる場合があります)
               </div>
@@ -351,7 +355,7 @@ function UploadBox({
                   : `完了しました。${status.sentRows.toLocaleString("ja-JP")}件を反映しました。`}
                 {status.refreshed && " 値上げ検知・売上利益等の集計も更新済みです。"}
                 {mode === "replace" && status.duplicatesRemoved !== null && status.duplicatesRemoved > 0 && (
-                  <div style={{ color: "#2563d9" }}>
+                  <div style={{ color: "var(--brand)" }}>
                     うち、受注番号・受注行番号が重複していた{status.duplicatesRemoved.toLocaleString("ja-JP")}件は自動的に1件にまとめました。
                   </div>
                 )}
@@ -368,8 +372,8 @@ function UploadBox({
               </div>
             )}
             {kind === "salesLines" && status.finished && status.duplicateCandidateTotal > 0 && (
-              <div className="card" style={{ marginTop: 10, padding: "10px 12px", background: "rgba(220,180,40,0.08)" }}>
-                <b style={{ color: "#b8860b" }}>⚠ 二重登録の疑いあり</b>
+              <div className="alert alert-warning" style={{ marginTop: 10 }}>
+                <b>⚠ 二重登録の疑いあり</b>
                 <p style={{ marginTop: 4 }}>
                   受注番号・受注行番号・品番・数量・単価は同じなのに、納品書番号だけが違う行が
                   {status.duplicateCandidateTotal.toLocaleString("ja-JP")}件見つかりました。同じ出荷が納品書番号を変えて

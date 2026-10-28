@@ -178,7 +178,7 @@ export default function SalesReconciliationDashboard() {
         </header>
         <div className="card" style={{ padding: 20 }}>
           <p>データの取得に失敗しました。</p>
-          <pre style={{ whiteSpace: "pre-wrap", color: "#d9483b" }}>{error}</pre>
+          <pre style={{ whiteSpace: "pre-wrap", color: "var(--neg)" }}>{error}</pre>
         </div>
       </div>
     );
@@ -320,7 +320,7 @@ export default function SalesReconciliationDashboard() {
                     <td><span className="cell-s">{fmtYen(r.stock)}</span></td>
                     <td><span className="cell-s">{fmtYen(r.freight)}</span></td>
                     <td className="totcol"><span className="cell-s">{fmtYen(r.total)}</span></td>
-                    <td><span className="cell-s" style={{ color: "#9aa3b2" }}>{fmtYen(r.summary)}</span></td>
+                    <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{fmtYen(r.summary)}</span></td>
                     <td>
                       <span className={`cell-s ${r.total - r.summary >= 0 ? "val-pos" : "val-neg"}`}>
                         {r.total - r.summary >= 0 ? "+" : ""}
