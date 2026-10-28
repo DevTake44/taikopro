@@ -20,20 +20,23 @@ type HistoryRow = {
 };
 
 const COLUMNS =
-  "customer_code, customer_name, delivery_date, order_no, item_code, item_name, qty, sell_price, branch_code, rep_code, project_name";
+  "customer_code, customer_name, delivery_date, order_no, item_code, item_name, spec, qty, sell_price, branch_code, rep_code, project_name";
 
-// 商品名(sales_lines.item_name)にはサイズ・色が入っていないことが多いため、
-// 商品マスタ(product_master)の仕様(spec)を品番で引いて付加する。
-async function attachSpec(
+// 仕様は本来、売上明細(sales_lines.spec)にその受注時点の実績値(サイズ・色など)が
+// 入っている(2026-10-28の取り込み修正以降)。ただし、それより前に取り込んだ既存行には
+// この列が無い(NULL)ため、その場合だけ商品マスタ(product_master.spec、現在の代表値)を
+// フォールバックとして補う。
+async function fillMissingSpec(
   supabase: ReturnType<typeof getSupabaseServerClient>,
-  rows: Omit<HistoryRow, "spec">[]
+  rows: HistoryRow[]
 ): Promise<HistoryRow[]> {
-  const itemCodes = Array.from(new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c)));
-  if (itemCodes.length === 0) return rows.map((r) => ({ ...r, spec: null }));
+  const needsFallback = rows.filter((r) => !r.spec && r.item_code);
+  if (needsFallback.length === 0) return rows;
 
+  const itemCodes = Array.from(new Set(needsFallback.map((r) => r.item_code as string)));
   const { data: specRows } = await supabase.from("product_master").select("product_code, spec").in("product_code", itemCodes);
   const specByCode = new Map((specRows ?? []).map((r) => [r.product_code as string, r.spec as string | null]));
-  return rows.map((r) => ({ ...r, spec: (r.item_code && specByCode.get(r.item_code)) ?? null }));
+  return rows.map((r) => (r.spec || !r.item_code ? r : { ...r, spec: specByCode.get(r.item_code) ?? null }));
 }
 
 // コールセンター対応中など、得意先の直近の取引実績をすぐに呼び出すための専用API。
@@ -63,7 +66,7 @@ export async function GET(req: NextRequest) {
       .order("delivery_date", { ascending: false })
       .limit(50);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ rows: await attachSpec(supabase, (data ?? []) as Omit<HistoryRow, "spec">[]) });
+    return NextResponse.json({ rows: await fillMissingSpec(supabase, (data ?? []) as HistoryRow[]) });
   }
 
   // 商品名は全角(数字・カナとも)で入っているため、名称検索は入力を全角化してから照合する
@@ -88,10 +91,10 @@ export async function GET(req: NextRequest) {
   if (byCode.error) return NextResponse.json({ error: byCode.error.message }, { status: 500 });
   if (byName.error) return NextResponse.json({ error: byName.error.message }, { status: 500 });
 
-  const merged = [...(byCode.data ?? []), ...(byName.data ?? [])] as Omit<HistoryRow, "spec">[];
+  const merged = [...(byCode.data ?? []), ...(byName.data ?? [])] as HistoryRow[];
   merged.sort((a, b) => (b.delivery_date ?? "").localeCompare(a.delivery_date ?? ""));
   const seen = new Set<string>();
-  const rows: Omit<HistoryRow, "spec">[] = [];
+  const rows: HistoryRow[] = [];
   for (const r of merged) {
     const key = `${r.order_no}|${r.item_code}|${r.delivery_date}|${r.customer_code}`;
     if (seen.has(key)) continue;
@@ -100,5 +103,5 @@ export async function GET(req: NextRequest) {
     if (rows.length >= 50) break;
   }
 
-  return NextResponse.json({ rows: await attachSpec(supabase, rows) });
+  return NextResponse.json({ rows: await fillMissingSpec(supabase, rows) });
 }
