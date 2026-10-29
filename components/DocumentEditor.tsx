@@ -194,6 +194,11 @@ export default function DocumentEditor({
       setCustomerName(`${draft.customer_name} 御中`);
       if (draft.postal_code) setCustomerPostalCode(draft.postal_code);
       if (draft.address) setCustomerAddress(draft.address);
+      // 発行拠点として選べるのは17拠点(ISSUING_BRANCH_CODES)のみなので、
+      // それ以外の拠点(経理・在庫・物流など)だった場合は手動選択のままにする。
+      if (draft.branch_code && (ISSUING_BRANCH_CODES as string[]).includes(draft.branch_code)) {
+        setBranchCode(draft.branch_code);
+      }
       draft.lines.forEach((line, i) => {
         addLine({
           ...emptyLine("sales_history"),

@@ -16,5 +16,7 @@ export type QuoteDraft = {
   customer_name: string;
   postal_code: string | null;
   address: string | null;
+  // 実績のある拠点(選んだ商品の取引実績から)。見積書発行拠点の初期値として使う。
+  branch_code: string | null;
   lines: QuoteDraftLine[];
 };

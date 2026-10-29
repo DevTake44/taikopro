@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { yen, jpn } from "@/lib/format";
 import { BRANCH_NAMES, branchNameOnly } from "@/lib/branch-names";
 import { REP_NAMES, repNameOnly } from "@/lib/rep-names";
@@ -44,6 +43,7 @@ type QuoteCartItem = {
   key: string;
   customer_code: string;
   customer_name: string;
+  branch_code: string | null;
   item_code: string | null;
   item_name: string;
   spec: string | null;
@@ -70,7 +70,6 @@ type HistoryRow = {
 // 呼び出せるようにするための画面。経営レポート(/sales)とは別に、直接検索のみの
 // 軽量な作りにして応答速度を優先する(取引履歴のみ表示・集計はしない)。
 export default function CustomerHistorySearch() {
-  const router = useRouter();
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<CustomerOption[] | null>(null);
@@ -383,6 +382,7 @@ export default function CustomerHistorySearch() {
           key,
           customer_code: customerCode,
           customer_name: customerName,
+          branch_code: r.branch_code,
           item_code: r.item_code,
           item_name: r.item_name ?? "",
           spec: r.spec,
@@ -411,11 +411,14 @@ export default function CustomerHistorySearch() {
     }
     const customerCode = quoteCart[0].customer_code;
     const customer = selected.find((c) => c.customer_code === customerCode);
+    // 拠点は、選んだ商品の取引実績の拠点(先頭行のもの)を初期値にする。
+    const branchCode = quoteCart.find((c) => c.branch_code)?.branch_code ?? null;
     const draft: QuoteDraft = {
       customer_code: customerCode,
       customer_name: quoteCart[0].customer_name,
       postal_code: customer?.postal_code ?? null,
       address: customer?.address ?? null,
+      branch_code: branchCode,
       lines: quoteCart.map((c) => ({
         product_code: c.item_code,
         product_name: c.item_name,
@@ -426,7 +429,9 @@ export default function CustomerHistorySearch() {
     };
     sessionStorage.setItem(QUOTE_DRAFT_SESSION_KEY, JSON.stringify(draft));
     setQuoteCart([]);
-    router.push("/sales-app/quotes/new");
+    // コールセンター対応中は顧客実績のタブ・検索状態を保ったまま、見積書は別タブで
+    // 何度でも開けるようにする(同じタブで遷移すると検索し直しになってしまうため)。
+    window.open("/sales-app/quotes/new", "_blank");
   }
 
   // 売上明細(sales_lines)のcustomer_nameは古い伝票などで支店名が省略されて
