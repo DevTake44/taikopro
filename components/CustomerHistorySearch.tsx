@@ -13,6 +13,13 @@ type CustomerOption = {
   address: string | null;
 };
 
+type PhoneNumber = {
+  id: number;
+  customer_code: string;
+  phone_number: string;
+  created_at: string;
+};
+
 type HistoryRow = {
   customer_code: string | null;
   customer_name: string | null;
@@ -176,6 +183,77 @@ export default function CustomerHistorySearch() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productFilter, selectedCodesKey]);
 
+  // 得意先マスタに電話番号が無いため、コールセンター対応でその場で分かった番号を
+  // 日々登録していけるようにするための機能。選択した得意先ごとに登録済み番号を表示し、
+  // 追加・削除できる。
+  const [phoneNumbersByCode, setPhoneNumbersByCode] = useState<Record<string, PhoneNumber[]>>({});
+  const [phoneInputByCode, setPhoneInputByCode] = useState<Record<string, string>>({});
+  const [phoneBusyByCode, setPhoneBusyByCode] = useState<Record<string, boolean>>({});
+
+  async function fetchPhoneNumbers(customerCodes: string[]) {
+    if (customerCodes.length === 0) {
+      setPhoneNumbersByCode({});
+      return;
+    }
+    try {
+      const res = await fetch(`/api/customer-phone-numbers?customer_code=${customerCodes.join(",")}`);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      const grouped: Record<string, PhoneNumber[]> = {};
+      for (const row of (json.rows ?? []) as PhoneNumber[]) {
+        (grouped[row.customer_code] ??= []).push(row);
+      }
+      setPhoneNumbersByCode(grouped);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  useEffect(() => {
+    fetchPhoneNumbers(selected.map((c) => c.customer_code));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCodesKey]);
+
+  async function addPhoneNumber(customerCode: string) {
+    const value = (phoneInputByCode[customerCode] ?? "").trim();
+    if (!value) return;
+    setPhoneBusyByCode((s) => ({ ...s, [customerCode]: true }));
+    setError(null);
+    try {
+      const res = await fetch("/api/customer-phone-numbers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_code: customerCode, phone_number: value }),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setPhoneNumbersByCode((s) => ({
+        ...s,
+        [customerCode]: [json.row as PhoneNumber, ...(s[customerCode] ?? [])],
+      }));
+      setPhoneInputByCode((s) => ({ ...s, [customerCode]: "" }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPhoneBusyByCode((s) => ({ ...s, [customerCode]: false }));
+    }
+  }
+
+  async function removePhoneNumber(customerCode: string, id: number) {
+    setError(null);
+    try {
+      const res = await fetch(`/api/customer-phone-numbers?id=${id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setPhoneNumbersByCode((s) => ({
+        ...s,
+        [customerCode]: (s[customerCode] ?? []).filter((p) => p.id !== id),
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const showCustomerColumn = selected.length > 1;
   const columnCount = showCustomerColumn ? 12 : 11;
 
@@ -211,7 +289,7 @@ export default function CustomerHistorySearch() {
         </div>
 
         <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>
-          得意先コード・得意先名で検索(入力するたびに自動で絞り込みます。「イオン 岡崎」のように空白区切りでさらに絞り込めます。
+          得意先コード・得意先名・電話番号で検索(入力するたびに自動で絞り込みます。「イオン 岡崎」のように空白区切りでさらに絞り込めます。
           クリックで得意先を選択に追加できます。同じ会社の別拠点もまとめて選べます)
         </label>
         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
@@ -219,7 +297,7 @@ export default function CustomerHistorySearch() {
             <input
               type="text"
               autoFocus
-              placeholder="例: イオン 岡崎"
+              placeholder="例: イオン 岡崎 / 03-1234-5678"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && search()}
@@ -314,6 +392,57 @@ export default function CustomerHistorySearch() {
                   ×
                 </button>
               </span>
+            ))}
+          </div>
+
+          <div style={{ padding: "0 20px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+            {selected.map((c) => (
+              <div key={c.customer_code}>
+                <div style={{ fontSize: 12, color: "var(--ink-faint)", marginBottom: 4 }}>
+                  {c.customer_name}の電話番号
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                  {(phoneNumbersByCode[c.customer_code] ?? []).map((p) => (
+                    <span
+                      key={p.id}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        border: "1px solid var(--line)",
+                        borderRadius: 999,
+                        padding: "2px 4px 2px 10px",
+                        fontSize: 13,
+                      }}
+                    >
+                      {p.phone_number}
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        onClick={() => removePhoneNumber(c.customer_code, p.id)}
+                        title="この電話番号を削除"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    placeholder="電話番号を追加"
+                    value={phoneInputByCode[c.customer_code] ?? ""}
+                    onChange={(e) => setPhoneInputByCode((s) => ({ ...s, [c.customer_code]: e.target.value }))}
+                    onKeyDown={(e) => e.key === "Enter" && addPhoneNumber(c.customer_code)}
+                    style={{ width: 150, padding: "4px 8px", fontSize: 13 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => addPhoneNumber(c.customer_code)}
+                    disabled={!!phoneBusyByCode[c.customer_code]}
+                  >
+                    追加
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
 

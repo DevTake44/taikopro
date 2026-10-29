@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { fetchAllPagesConcurrent } from "@/lib/fetchPaged";
 import { toFullWidthForSearch, toHalfWidthForCode } from "@/lib/kana";
+import { normalizePhoneDigits } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
 
@@ -101,13 +102,35 @@ export async function GET(req: NextRequest) {
     byNameQuery = byNameQuery.in("customer_code", codesFilter);
   }
 
-  const [byCode, byName] = await Promise.all([byCodeQuery, byNameQuery]);
+  // 得意先マスタに電話番号は無いため、別途登録した電話番号(customer_phone_numbers、
+  // コールセンター対応中にその場で登録していく)から該当の得意先コードを探し、
+  // それを得意先マスタに引き直して結果に加える。ハイフン等は無視して数字だけで照合する。
+  const phoneDigits = normalizePhoneDigits(query);
+  async function searchByPhone(): Promise<{ data: CustomerOption[] | null; error: { message: string } | null }> {
+    if (phoneDigits.length < 2) return { data: [], error: null };
+    const { data: phoneRows, error: phoneError } = await supabase
+      .from("customer_phone_numbers")
+      .select("customer_code")
+      .ilike("phone_number", `%${phoneDigits}%`)
+      .limit(50);
+    if (phoneError) return { data: null, error: phoneError };
+    let codes = Array.from(new Set((phoneRows ?? []).map((r) => r.customer_code as string)));
+    if (codesFilter) {
+      const allowed = new Set(codesFilter);
+      codes = codes.filter((c) => allowed.has(c));
+    }
+    if (codes.length === 0) return { data: [], error: null };
+    return supabase.from("customer_master").select(SELECT_COLUMNS).eq("is_deleted", false).in("customer_code", codes);
+  }
+
+  const [byCode, byName, byPhone] = await Promise.all([byCodeQuery, byNameQuery, searchByPhone()]);
   if (byCode.error) return NextResponse.json({ error: byCode.error.message }, { status: 500 });
   if (byName.error) return NextResponse.json({ error: byName.error.message }, { status: 500 });
+  if (byPhone.error) return NextResponse.json({ error: byPhone.error.message }, { status: 500 });
 
   const seen = new Set<string>();
   const rows: CustomerOption[] = [];
-  for (const r of [...(byCode.data ?? []), ...(byName.data ?? [])] as CustomerOption[]) {
+  for (const r of [...(byCode.data ?? []), ...(byName.data ?? []), ...(byPhone.data ?? [])] as CustomerOption[]) {
     if (seen.has(r.customer_code)) continue;
     seen.add(r.customer_code);
     rows.push(r);
