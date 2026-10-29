@@ -21,6 +21,20 @@ type PhoneNumber = {
   created_at: string;
 };
 
+type CustomerNote = {
+  id: number;
+  customer_code: string;
+  note: string;
+  created_at: string;
+};
+
+function fmtDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 type HistoryRow = {
   customer_code: string | null;
   customer_name: string | null;
@@ -255,6 +269,81 @@ export default function CustomerHistorySearch() {
     }
   }
 
+  // 通話中に気づいたことをその場でメモしておき、別の担当者が次に電話を受けたときも
+  // 経緯が分かるようにするための機能。選択した得意先ごとにメモを表示し、追加・削除できる。
+  const [notesByCode, setNotesByCode] = useState<Record<string, CustomerNote[]>>({});
+  const [noteInputByCode, setNoteInputByCode] = useState<Record<string, string>>({});
+  const [noteBusyByCode, setNoteBusyByCode] = useState<Record<string, boolean>>({});
+  // メモが増えると実績の表が下にいって見にくくなるため、過去のメモ一覧は既定で
+  // 折り畳んでおく(メモの追加自体はいつでもできる)。
+  const [notesExpandedByCode, setNotesExpandedByCode] = useState<Record<string, boolean>>({});
+
+  async function fetchNotes(customerCodes: string[]) {
+    if (customerCodes.length === 0) {
+      setNotesByCode({});
+      return;
+    }
+    try {
+      const res = await fetch(`/api/customer-notes?customer_code=${customerCodes.join(",")}`);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      const grouped: Record<string, CustomerNote[]> = {};
+      for (const row of (json.rows ?? []) as CustomerNote[]) {
+        (grouped[row.customer_code] ??= []).push(row);
+      }
+      setNotesByCode(grouped);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  useEffect(() => {
+    fetchNotes(selected.map((c) => c.customer_code));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCodesKey]);
+
+  async function addNote(customerCode: string) {
+    const value = (noteInputByCode[customerCode] ?? "").trim();
+    if (!value) return;
+    setNoteBusyByCode((s) => ({ ...s, [customerCode]: true }));
+    setError(null);
+    try {
+      const res = await fetch("/api/customer-notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_code: customerCode, note: value }),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setNotesByCode((s) => ({
+        ...s,
+        [customerCode]: [json.row as CustomerNote, ...(s[customerCode] ?? [])],
+      }));
+      setNoteInputByCode((s) => ({ ...s, [customerCode]: "" }));
+      // 追加したメモがすぐ見えるよう、折り畳みは自動で開く。
+      setNotesExpandedByCode((s) => ({ ...s, [customerCode]: true }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setNoteBusyByCode((s) => ({ ...s, [customerCode]: false }));
+    }
+  }
+
+  async function removeNote(customerCode: string, id: number) {
+    setError(null);
+    try {
+      const res = await fetch(`/api/customer-notes?id=${id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setNotesByCode((s) => ({
+        ...s,
+        [customerCode]: (s[customerCode] ?? []).filter((n) => n.id !== id),
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const showCustomerColumn = selected.length > 1;
   const columnCount = showCustomerColumn ? 12 : 11;
 
@@ -463,6 +552,73 @@ export default function CustomerHistorySearch() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div style={{ padding: "0 20px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+            {selected.map((c) => {
+              const notes = notesByCode[c.customer_code] ?? [];
+              const expanded = !!notesExpandedByCode[c.customer_code];
+              return (
+              <div key={c.customer_code}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, color: "var(--ink-faint)" }}>{c.customer_name}の問い合わせメモ</div>
+                  {notes.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesExpandedByCode((s) => ({ ...s, [c.customer_code]: !expanded }))
+                      }
+                    >
+                      {expanded ? "閉じる" : `過去のメモを表示する(${notes.length}件)`}
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                  <input
+                    type="text"
+                    placeholder="例: 納期を10日に変更希望と連絡あり"
+                    value={noteInputByCode[c.customer_code] ?? ""}
+                    onChange={(e) => setNoteInputByCode((s) => ({ ...s, [c.customer_code]: e.target.value }))}
+                    onKeyDown={(e) => e.key === "Enter" && addNote(c.customer_code)}
+                    style={{ flex: 1, padding: "6px 10px", fontSize: 13 }}
+                  />
+                  <button type="button" onClick={() => addNote(c.customer_code)} disabled={!!noteBusyByCode[c.customer_code]}>
+                    追加
+                  </button>
+                </div>
+                {expanded && notes.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {(notesByCode[c.customer_code] ?? []).map((n) => (
+                      <div
+                        key={n.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 8,
+                          fontSize: 13,
+                          borderBottom: "1px solid var(--line)",
+                          paddingBottom: 4,
+                        }}
+                      >
+                        <span className="cell-sub" style={{ whiteSpace: "nowrap" }}>
+                          {fmtDateTime(n.created_at)}
+                        </span>
+                        <span style={{ flex: 1 }}>{n.note}</span>
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          onClick={() => removeNote(c.customer_code, n.id)}
+                          title="このメモを削除"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              );
+            })}
           </div>
 
           <div style={{ padding: "0 20px 0" }}>
