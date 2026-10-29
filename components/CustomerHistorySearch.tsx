@@ -11,6 +11,7 @@ type CustomerOption = {
   customer_name: string;
   postal_code: string | null;
   address: string | null;
+  phone_number: string | null;
 };
 
 type PhoneNumber = {
@@ -347,6 +348,7 @@ export default function CustomerHistorySearch() {
                   <span className="cell-sub" style={{ marginLeft: 8 }}>
                     {c.customer_code}
                     {c.address ? `・${c.address}` : ""}
+                    {c.phone_number ? `・${c.phone_number}` : ""}
                   </span>
                 </div>
               );
@@ -402,6 +404,23 @@ export default function CustomerHistorySearch() {
                   {c.customer_name}の電話番号
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                  {c.phone_number && (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        border: "1px solid var(--line)",
+                        borderRadius: 999,
+                        padding: "2px 10px",
+                        fontSize: 13,
+                      }}
+                      title="得意先マスタの電話番号"
+                    >
+                      {c.phone_number}
+                      <span className="cell-sub">(マスタ)</span>
+                    </span>
+                  )}
                   {(phoneNumbersByCode[c.customer_code] ?? []).map((p) => (
                     <span
                       key={p.id}
