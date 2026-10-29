@@ -11,6 +11,7 @@ type CustomerOption = {
   customer_name: string;
   postal_code: string | null;
   address: string | null;
+  phone_number: string | null;
 };
 
 // 見積書・請求書の得意先選択用。customer_masterを得意先コード・得意先名で検索する。
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
       // 絞り込み条件だけで一覧表示(文字検索なし)。customer_masterから名称・住所を引く。
       const { data: masterRows, error: masterError } = await supabase
         .from("customer_master")
-        .select("customer_code, customer_name, postal_code, address")
+        .select("customer_code, customer_name, postal_code, address, phone_number")
         .eq("is_deleted", false)
         .in("customer_code", Array.from(allowedCodes))
         .order("customer_code", { ascending: true })
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest) {
     .filter(Boolean)
     .map((t) => toFullWidthForSearch(t));
 
-  const SELECT_COLUMNS = "customer_code, customer_name, postal_code, address";
+  const SELECT_COLUMNS = "customer_code, customer_name, postal_code, address, phone_number";
   let byCodeQuery = supabase
     .from("customer_master")
     .select(SELECT_COLUMNS)
@@ -102,25 +103,45 @@ export async function GET(req: NextRequest) {
     byNameQuery = byNameQuery.in("customer_code", codesFilter);
   }
 
-  // 得意先マスタに電話番号は無いため、別途登録した電話番号(customer_phone_numbers、
-  // コールセンター対応中にその場で登録していく)から該当の得意先コードを探し、
-  // それを得意先マスタに引き直して結果に加える。ハイフン等は無視して数字だけで照合する。
+  // 電話番号検索は2つの情報源を両方見る。ハイフン等は無視して数字だけで照合する。
+  // ①得意先マスタ自体のphone_number(得意先マスタCSVの電話番号列を取り込んだもの)
+  // ②customer_phone_numbers(マスタに無い番号を、コールセンター対応中にその場で
+  //   追加登録していくための補助テーブル)
   const phoneDigits = normalizePhoneDigits(query);
   async function searchByPhone(): Promise<{ data: CustomerOption[] | null; error: { message: string } | null }> {
     if (phoneDigits.length < 2) return { data: [], error: null };
-    const { data: phoneRows, error: phoneError } = await supabase
+
+    let masterPhoneQuery = supabase
+      .from("customer_master")
+      .select(SELECT_COLUMNS)
+      .eq("is_deleted", false)
+      .ilike("phone_number", `%${phoneDigits}%`)
+      .limit(50);
+    if (codesFilter) masterPhoneQuery = masterPhoneQuery.in("customer_code", codesFilter);
+
+    const { data: extraPhoneRows, error: extraPhoneError } = await supabase
       .from("customer_phone_numbers")
       .select("customer_code")
       .ilike("phone_number", `%${phoneDigits}%`)
       .limit(50);
-    if (phoneError) return { data: null, error: phoneError };
-    let codes = Array.from(new Set((phoneRows ?? []).map((r) => r.customer_code as string)));
+    if (extraPhoneError) return { data: null, error: extraPhoneError };
+
+    let extraCodes = Array.from(new Set((extraPhoneRows ?? []).map((r) => r.customer_code as string)));
     if (codesFilter) {
       const allowed = new Set(codesFilter);
-      codes = codes.filter((c) => allowed.has(c));
+      extraCodes = extraCodes.filter((c) => allowed.has(c));
     }
-    if (codes.length === 0) return { data: [], error: null };
-    return supabase.from("customer_master").select(SELECT_COLUMNS).eq("is_deleted", false).in("customer_code", codes);
+
+    const [masterResult, extraResult] = await Promise.all([
+      masterPhoneQuery,
+      extraCodes.length > 0
+        ? supabase.from("customer_master").select(SELECT_COLUMNS).eq("is_deleted", false).in("customer_code", extraCodes)
+        : Promise.resolve({ data: [] as CustomerOption[], error: null }),
+    ]);
+    if (masterResult.error) return { data: null, error: masterResult.error };
+    if (extraResult.error) return { data: null, error: extraResult.error };
+
+    return { data: [...(masterResult.data ?? []), ...(extraResult.data ?? [])] as CustomerOption[], error: null };
   }
 
   const [byCode, byName, byPhone] = await Promise.all([byCodeQuery, byNameQuery, searchByPhone()]);
