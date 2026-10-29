@@ -274,6 +274,9 @@ export default function CustomerHistorySearch() {
   const [notesByCode, setNotesByCode] = useState<Record<string, CustomerNote[]>>({});
   const [noteInputByCode, setNoteInputByCode] = useState<Record<string, string>>({});
   const [noteBusyByCode, setNoteBusyByCode] = useState<Record<string, boolean>>({});
+  // メモが増えると実績の表が下にいって見にくくなるため、過去のメモ一覧は既定で
+  // 折り畳んでおく(メモの追加自体はいつでもできる)。
+  const [notesExpandedByCode, setNotesExpandedByCode] = useState<Record<string, boolean>>({});
 
   async function fetchNotes(customerCodes: string[]) {
     if (customerCodes.length === 0) {
@@ -317,6 +320,8 @@ export default function CustomerHistorySearch() {
         [customerCode]: [json.row as CustomerNote, ...(s[customerCode] ?? [])],
       }));
       setNoteInputByCode((s) => ({ ...s, [customerCode]: "" }));
+      // 追加したメモがすぐ見えるよう、折り畳みは自動で開く。
+      setNotesExpandedByCode((s) => ({ ...s, [customerCode]: true }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -550,10 +555,23 @@ export default function CustomerHistorySearch() {
           </div>
 
           <div style={{ padding: "0 20px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-            {selected.map((c) => (
+            {selected.map((c) => {
+              const notes = notesByCode[c.customer_code] ?? [];
+              const expanded = !!notesExpandedByCode[c.customer_code];
+              return (
               <div key={c.customer_code}>
-                <div style={{ fontSize: 12, color: "var(--ink-faint)", marginBottom: 4 }}>
-                  {c.customer_name}の問い合わせメモ
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, color: "var(--ink-faint)" }}>{c.customer_name}の問い合わせメモ</div>
+                  {notes.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesExpandedByCode((s) => ({ ...s, [c.customer_code]: !expanded }))
+                      }
+                    >
+                      {expanded ? "閉じる" : `過去のメモを表示する(${notes.length}件)`}
+                    </button>
+                  )}
                 </div>
                 <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                   <input
@@ -568,7 +586,7 @@ export default function CustomerHistorySearch() {
                     追加
                   </button>
                 </div>
-                {(notesByCode[c.customer_code] ?? []).length > 0 && (
+                {expanded && notes.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     {(notesByCode[c.customer_code] ?? []).map((n) => (
                       <div
@@ -599,7 +617,8 @@ export default function CustomerHistorySearch() {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div style={{ padding: "0 20px 0" }}>
