@@ -8,6 +8,7 @@ import { calcTotals, TAX_ROUNDING_LABEL, type DocumentLine, type DocumentWithLin
 import { BRANCH_NAMES, ISSUING_BRANCH_CODES } from "@/lib/branch-names";
 import { REP_NAMES } from "@/lib/rep-names";
 import type { BranchRepPair } from "@/app/api/quote-customer-branch-reps/route";
+import { QUOTE_DRAFT_SESSION_KEY, type QuoteDraft } from "@/lib/quoteDraftHandoff";
 
 type Kind = "quote" | "invoice";
 
@@ -178,6 +179,38 @@ export default function DocumentEditor({
       .then((r) => r.json())
       .then((json) => setBranchRepPairs(json.pairs ?? []))
       .catch(() => {});
+  }, []);
+
+  // 顧客実績画面で電話中に「見積に追加」した商品があれば、新規作成時に自動で読み込む。
+  // 新規作成(doc===null)の一回限りの初期化なので、既存の見積を開いた場合は対象外。
+  useEffect(() => {
+    if (kind !== "quote" || doc) return;
+    const raw = sessionStorage.getItem(QUOTE_DRAFT_SESSION_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(QUOTE_DRAFT_SESSION_KEY);
+    try {
+      const draft: QuoteDraft = JSON.parse(raw);
+      setCustomerCode(draft.customer_code);
+      setCustomerName(`${draft.customer_name} 御中`);
+      if (draft.postal_code) setCustomerPostalCode(draft.postal_code);
+      if (draft.address) setCustomerAddress(draft.address);
+      draft.lines.forEach((line, i) => {
+        addLine({
+          ...emptyLine("sales_history"),
+          product_code: line.product_code,
+          product_name: line.product_name,
+          spec: line.spec,
+          qty: line.qty,
+          unit_price: line.unit_price,
+        });
+        // 新規作成時は明細が空から始まるため、lines配列中の位置はiと一致する
+        // (addLineの戻り値は同一レンダー内で連続呼び出しすると使えないため使わない)。
+        if (line.product_code) refreshLineMeta(i, line.product_code, false);
+      });
+    } catch {
+      // 壊れたデータは無視する。
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 拠点の選択肢は、見積・請求書を発行する17拠点(ISSUING_BRANCH_CODES)に固定する。

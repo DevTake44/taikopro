@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { yen, jpn } from "@/lib/format";
 import { BRANCH_NAMES, branchNameOnly } from "@/lib/branch-names";
 import { REP_NAMES, repNameOnly } from "@/lib/rep-names";
 import type { BranchRepPair } from "@/app/api/quote-customer-branch-reps/route";
+import { QUOTE_DRAFT_SESSION_KEY, type QuoteDraft } from "@/lib/quoteDraftHandoff";
 
 type CustomerOption = {
   customer_code: string;
@@ -35,6 +37,20 @@ function fmtDateTime(iso: string): string {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// 電話中に見積書に載せたい商品を「ロック」して集めておくためのカート。
+// 1件の見積書は得意先1件分なので、カートに入れた商品の得意先がすべて同じであることを
+// 見積書作成時にチェックする。
+type QuoteCartItem = {
+  key: string;
+  customer_code: string;
+  customer_name: string;
+  item_code: string | null;
+  item_name: string;
+  spec: string | null;
+  qty: number;
+  unit_price: number;
+};
+
 type HistoryRow = {
   customer_code: string | null;
   customer_name: string | null;
@@ -54,6 +70,7 @@ type HistoryRow = {
 // 呼び出せるようにするための画面。経営レポート(/sales)とは別に、直接検索のみの
 // 軽量な作りにして応答速度を優先する(取引履歴のみ表示・集計はしない)。
 export default function CustomerHistorySearch() {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<CustomerOption[] | null>(null);
@@ -345,7 +362,72 @@ export default function CustomerHistorySearch() {
   }
 
   const showCustomerColumn = selected.length > 1;
-  const columnCount = showCustomerColumn ? 12 : 11;
+  const columnCount = (showCustomerColumn ? 12 : 11) + 1;
+
+  // 電話中に、取引実績の行から見積書に載せたい商品を選んで(ロックして)おき、
+  // 複数選び終わったらまとめて見積書の新規作成画面に渡す機能。
+  const [quoteCart, setQuoteCart] = useState<QuoteCartItem[]>([]);
+
+  function rowKey(r: HistoryRow, i: number): string {
+    return `${r.customer_code ?? ""}_${r.order_no ?? ""}_${r.item_code ?? ""}_${r.delivery_date ?? ""}_${i}`;
+  }
+
+  function toggleCartItem(r: HistoryRow, key: string) {
+    setQuoteCart((prev) => {
+      if (prev.some((c) => c.key === key)) return prev.filter((c) => c.key !== key);
+      const customerCode = r.customer_code ?? "";
+      const customerName = (r.customer_code && selectedNameByCode.get(r.customer_code)) || r.customer_name || "";
+      return [
+        ...prev,
+        {
+          key,
+          customer_code: customerCode,
+          customer_name: customerName,
+          item_code: r.item_code,
+          item_name: r.item_name ?? "",
+          spec: r.spec,
+          qty: r.qty ?? 1,
+          unit_price: r.sell_price ?? 0,
+        },
+      ];
+    });
+  }
+
+  function updateCartQty(key: string, qty: number) {
+    setQuoteCart((prev) => prev.map((c) => (c.key === key ? { ...c, qty } : c)));
+  }
+
+  function removeCartItem(key: string) {
+    setQuoteCart((prev) => prev.filter((c) => c.key !== key));
+  }
+
+  const cartCustomerCodes = useMemo(() => new Set(quoteCart.map((c) => c.customer_code)), [quoteCart]);
+
+  function createQuoteFromCart() {
+    if (quoteCart.length === 0) return;
+    if (cartCustomerCodes.size > 1) {
+      setError("見積書は1つの得意先分しか作成できません。複数の得意先の商品が選ばれています。");
+      return;
+    }
+    const customerCode = quoteCart[0].customer_code;
+    const customer = selected.find((c) => c.customer_code === customerCode);
+    const draft: QuoteDraft = {
+      customer_code: customerCode,
+      customer_name: quoteCart[0].customer_name,
+      postal_code: customer?.postal_code ?? null,
+      address: customer?.address ?? null,
+      lines: quoteCart.map((c) => ({
+        product_code: c.item_code,
+        product_name: c.item_name,
+        spec: c.spec,
+        qty: c.qty,
+        unit_price: c.unit_price,
+      })),
+    };
+    sessionStorage.setItem(QUOTE_DRAFT_SESSION_KEY, JSON.stringify(draft));
+    setQuoteCart([]);
+    router.push("/sales-app/quotes/new");
+  }
 
   // 売上明細(sales_lines)のcustomer_nameは古い伝票などで支店名が省略されて
   // 「㈱高速」のように会社名だけのことがあり、どの支店か区別できない。
@@ -647,10 +729,50 @@ export default function CustomerHistorySearch() {
             </div>
           </div>
 
+          {quoteCart.length > 0 && (
+            <div style={{ padding: "0 20px 16px" }}>
+              <div style={{ fontSize: 12, color: "var(--ink-faint)", marginBottom: 4 }}>
+                見積書に追加する商品({quoteCart.length}件)・チェックを入れた行を数量を確認して「見積書を作成」を押してください
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {quoteCart.map((c) => (
+                  <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                    <span className="cell-sub" style={{ width: 90, flexShrink: 0 }}>{c.customer_name}</span>
+                    <span className="cell-sub" style={{ width: 110, flexShrink: 0 }}>{c.item_code ?? "—"}</span>
+                    <span style={{ flex: 1 }}>
+                      {c.item_name}
+                      {c.spec ? `(${c.spec})` : ""}
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={c.qty}
+                      onChange={(e) => updateCartQty(c.key, Number(e.target.value) || 1)}
+                      style={{ width: 70, padding: "4px 6px" }}
+                    />
+                    <span className="cell-sub">{yen(c.unit_price)}</span>
+                    <button type="button" className="btn-icon" onClick={() => removeCartItem(c.key)} title="カートから外す">
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {cartCustomerCodes.size > 1 && (
+                <p style={{ color: "var(--neg)", fontSize: 12, marginTop: 6 }}>
+                  複数の得意先の商品が混ざっています。見積書は1つの得意先分しか作成できません。
+                </p>
+              )}
+              <button type="button" className="btn-primary" style={{ marginTop: 8 }} onClick={createQuoteFromCart}>
+                見積書を作成
+              </button>
+            </div>
+          )}
+
           <div className="matwrap">
             <table className="mat">
               <thead>
                 <tr>
+                  <th>見積</th>
                   {showCustomerColumn && <th className="namecol">得意先</th>}
                   <th>納品日</th>
                   <th>受注番号</th>
@@ -681,8 +803,20 @@ export default function CustomerHistorySearch() {
                   </tr>
                 )}
                 {!historyLoading &&
-                  history?.map((r, i) => (
+                  history?.map((r, i) => {
+                    const key = rowKey(r, i);
+                    const locked = quoteCart.some((c) => c.key === key);
+                    return (
                     <tr key={i}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={locked}
+                          disabled={!r.item_code}
+                          onChange={() => toggleCartItem(r, key)}
+                          title="見積書に追加する商品としてロック"
+                        />
+                      </td>
                       {showCustomerColumn && (
                         <td className="namecol">
                           {(r.customer_code && selectedNameByCode.get(r.customer_code)) ?? r.customer_name ?? "—"}
@@ -705,7 +839,8 @@ export default function CustomerHistorySearch() {
                       <td>{repNameOnly(r.rep_code)}</td>
                       <td className="namecol">{r.project_name ?? "—"}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
               </tbody>
             </table>
           </div>
