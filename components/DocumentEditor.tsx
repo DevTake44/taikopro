@@ -70,7 +70,9 @@ type EditableLine = DocumentLine & {
   // 仕入値がいつ時点の値か(直近仕入実績の日付、またはマスタの同期日)。古い仕入実績を
   // そのまま使ってしまっていないか、営業担当が一目で判断できるようにするため保持する。
   cost_date?: string | null;
-  cost_source?: "purchase" | "master" | null;
+  // "sales_data"は、顧客実績からの引き継ぎで、受注番号+行番号に対応する仕入実績が
+  // 見つからなかった場合のフォールバック(売上データに記録された受注時点の原価)。
+  cost_source?: "purchase" | "master" | "sales_data" | null;
   // 仕入値の候補一覧(直近の仕入実績で金額が異なるもの+マスタ登録値)。ボタンから
   // 候補パネルを開いて選び直せるようにする。
   costOptions?: CostOption[];
@@ -212,26 +214,67 @@ export default function DocumentEditor({
           spec: line.spec,
           qty: line.qty,
           unit_price: line.unit_price,
-          // 仕入値・仕入先は、ひとまず取引実績(sales_lines)に記録された値を入れておく。
-          // 通常の品番は直後のrefreshLineMeta(applyCost=true)がpurchases(仕入実績)から
-          // 取得し直した値で上書きする(見積の仕入値は本来purchases参照が正しいため)。
-          // 「77700」のような複数商品が相乗りする共通コードだけは品番でpurchasesを
-          // 検索できない(quote-product-costが対象外にしている)ため、この実績値の
-          // ままにする(refreshLineMetaをapplyCost=falseで呼び、上書きさせない)。
+          // 仕入値・仕入先は、ひとまず売上データ(sales_lines)に記録された受注時点の
+          // 原価を仮置きしておく。直後、受注番号+行番号でpurchases(仕入実績)と
+          // 突き合わせて、見つかればそちらの値(より正確)に上書きする。
           cost_price: line.cost_price,
           supplier_code: line.supplier_code,
           supplier_name: line.supplier_name,
+          cost_date: line.delivery_date,
+          cost_source: line.cost_price != null ? "sales_data" : null,
           margin_pct: computeMarginPct(line.cost_price, line.unit_price),
         });
-        // 新規作成時は明細が空から始まるため、lines配列中の位置はiと一致する
-        // (addLineの戻り値は同一レンダー内で連続呼び出しすると使えないため使わない)。
-        // 通常の品番はapplyCost=trueでpurchasesから正しい仕入値に上書きする。共通コード
-        // (77700等)はpurchasesを検索できないため、applyCost=falseで実績値を保持する。
-        if (line.product_code) {
-          const isCommonCode = NON_PRODUCT_CODES.has(line.product_code.trim());
-          refreshLineMeta(i, line.product_code, !isCommonCode);
-        }
+        // 品番からの参考情報(他得意先への参照売価・仕入値候補)は、見積の仕入値を
+        // 上書きしない(applyCost=false)。仕入値は下のpurchases突き合わせに任せる。
+        if (line.product_code) refreshLineMeta(i, line.product_code, false);
       });
+
+      // 受注番号+受注行番号でpurchases(仕入実績)と突き合わせ、見つかった行だけ
+      // より正確な仕入値・仕入先・日付に上書きする。「77700」のような共通コードは
+      // 品番だけでは特定できないが、受注番号+行番号なら一意に特定できるため、
+      // 共通コードかどうかを問わずこの方法で解決できる。顧客実績の検索自体は
+      // 速度を優先してこの問い合わせを行わないため、ここ(新規作成画面)でまとめて
+      // 1回だけ問い合わせる。
+      const orderNos = Array.from(new Set(draft.lines.map((l) => l.order_no).filter((v): v is string => !!v)));
+      if (orderNos.length > 0) {
+        fetch(`/api/quote-order-cost-lookup?order_nos=${orderNos.join(",")}`)
+          .then((r) => r.json())
+          .then((json) => {
+            type OrderCostRow = {
+              order_no: string;
+              order_line: string;
+              unit_price: number;
+              supplier_code: string | null;
+              supplier_name: string | null;
+              purchase_date: string;
+            };
+            const rows: OrderCostRow[] = json.rows ?? [];
+            const byKey = new Map(rows.map((r) => [`${r.order_no}|${r.order_line}`, r]));
+            setLines((prev) =>
+              prev.map((l, i) => {
+                const draftLine = draft.lines[i];
+                if (!draftLine?.order_no || !draftLine.order_line) return l;
+                const match = byKey.get(`${draftLine.order_no}|${draftLine.order_line}`);
+                if (!match) return l;
+                const next: EditableLine = {
+                  ...l,
+                  cost_price: match.unit_price,
+                  supplier_code: match.supplier_code,
+                  supplier_name: match.supplier_name,
+                  cost_date: match.purchase_date,
+                  cost_source: "purchase",
+                };
+                const margin = computeMarginPct(next.cost_price, next.unit_price);
+                if (margin !== null) next.margin_pct = margin;
+                return next;
+              })
+            );
+          })
+          .catch(() => {
+            // 取得失敗時は、仮置きした売上データの原価のままにする(品番検索・更新
+            // ボタンから手動で取得し直せる)。
+          });
+      }
     } catch {
       // 壊れたデータは無視する。
     }
@@ -331,6 +374,10 @@ export default function DocumentEditor({
     const ym = l.cost_date ? l.cost_date.slice(2, 7).replace("-", "/") : null;
     if (l.cost_source === "master") return ym ? `(マスタ・${ym})` : "(マスタ値)";
     if (l.cost_source === "purchase") return ym ? `(${ym}時点)` : null;
+    // 顧客実績からの引き継ぎで、仕入実績(purchases)が見つからなかった場合のみ
+    // (在庫出荷等でpurchasesと1対1にならないケース)。日付が無いと鮮度が判断できない
+    // という指摘があったため、必ず受注日を添えて表示する。
+    if (l.cost_source === "sales_data") return ym ? `(受注時点・${ym})` : "(受注時点の原価)";
     return null;
   }
 

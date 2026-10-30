@@ -9,12 +9,19 @@ export type QuoteDraftLine = {
   spec: string | null;
   qty: number;
   unit_price: number;
-  // 取引実績(sales_lines)に記録された、この受注固有の仕入値・仕入先。
-  // 「77700」のような共通コードは品番だけでは仕入値を検索できないため、
-  // 商品マスタ/品番経由の再検索ではなく、実績値をそのまま引き継ぐ。
+  // 受注番号+受注行番号。見積書の新規作成画面に遷移した後、この2つでpurchases
+  // (仕入実績)を直接ひもづけて正確な仕入値・仕入先・日付を取得し直すために使う
+  // (品番だけでは「77700」のような共通コードを特定できないため)。
+  // 顧客実績の検索自体は速度を保つため、この問い合わせを一切行わない。
+  order_no: string | null;
+  order_line: string | null;
+  // purchasesと突き合わせるまでの一時的な仮値。取引実績(sales_lines)に記録された
+  // この受注固有の仕入値・仕入先(受注時点の原価)。purchasesに実績が無かった場合、
+  // この値をdelivery_dateとともに「受注時点の原価」として表示する。
   cost_price: number | null;
   supplier_code: string | null;
   supplier_name: string | null;
+  delivery_date: string | null;
 };
 
 export type QuoteDraft = {
