@@ -9,6 +9,7 @@ type HistoryRow = {
   customer_name: string | null;
   delivery_date: string | null;
   order_no: string | null;
+  order_line: string | null;
   item_code: string | null;
   item_name: string | null;
   spec: string | null;
@@ -17,10 +18,20 @@ type HistoryRow = {
   branch_code: string | null;
   rep_code: string | null;
   project_name: string | null;
+  assumed_cost: number | null;
+  supplier_code: string | null;
+  supplier_name: string | null;
 };
 
+// order_no・order_line・assumed_cost・supplier_code・supplier_nameは、見積書作成
+// (顧客実績から商品をロック→見積書を作成)に引き継ぐための情報。
+// 本来の仕入値はpurchases(仕入実績)を見るべきだが、ここ(顧客実績の検索)では
+// 速度を優先してpurchasesへの問い合わせは一切行わない。受注番号+受注行番号を
+// 渡しておき、見積書の新規作成画面に遷移した後にそちらでpurchasesとひもづける
+// (「77700」のような共通コードは品番だけでは特定できないが、受注番号+行番号なら
+// 一意に特定できる)。assumed_cost等は、purchasesに実績が無い場合のフォールバック用。
 const COLUMNS =
-  "customer_code, customer_name, delivery_date, order_no, item_code, item_name, spec, qty, sell_price, branch_code, rep_code, project_name";
+  "customer_code, customer_name, delivery_date, order_no, order_line, item_code, item_name, spec, qty, sell_price, branch_code, rep_code, project_name, assumed_cost, supplier_code, supplier_name";
 
 // 仕様は本来、売上明細(sales_lines.spec)にその受注時点の実績値(サイズ・色など)が
 // 入っている(2026-10-28の取り込み修正以降)。ただし、それより前に取り込んだ既存行には

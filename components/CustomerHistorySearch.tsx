@@ -44,11 +44,17 @@ type QuoteCartItem = {
   customer_code: string;
   customer_name: string;
   branch_code: string | null;
+  order_no: string | null;
+  order_line: string | null;
   item_code: string | null;
   item_name: string;
   spec: string | null;
   qty: number;
   unit_price: number;
+  cost_price: number | null;
+  supplier_code: string | null;
+  supplier_name: string | null;
+  delivery_date: string | null;
 };
 
 type HistoryRow = {
@@ -56,6 +62,7 @@ type HistoryRow = {
   customer_name: string | null;
   delivery_date: string | null;
   order_no: string | null;
+  order_line: string | null;
   item_code: string | null;
   item_name: string | null;
   spec: string | null;
@@ -64,6 +71,9 @@ type HistoryRow = {
   branch_code: string | null;
   rep_code: string | null;
   project_name: string | null;
+  assumed_cost: number | null;
+  supplier_code: string | null;
+  supplier_name: string | null;
 };
 
 // コールセンター対応中など、電話口で得意先名・コードを聞いたらすぐに直近の取引実績を
@@ -383,11 +393,17 @@ export default function CustomerHistorySearch() {
           customer_code: customerCode,
           customer_name: customerName,
           branch_code: r.branch_code,
+          order_no: r.order_no,
+          order_line: r.order_line,
           item_code: r.item_code,
           item_name: r.item_name ?? "",
           spec: r.spec,
           qty: r.qty ?? 1,
           unit_price: r.sell_price ?? 0,
+          cost_price: r.assumed_cost,
+          supplier_code: r.supplier_code,
+          supplier_name: r.supplier_name,
+          delivery_date: r.delivery_date,
         },
       ];
     });
@@ -425,6 +441,12 @@ export default function CustomerHistorySearch() {
         spec: c.spec,
         qty: c.qty,
         unit_price: c.unit_price,
+        order_no: c.order_no,
+        order_line: c.order_line,
+        cost_price: c.cost_price,
+        supplier_code: c.supplier_code,
+        supplier_name: c.supplier_name,
+        delivery_date: c.delivery_date,
       })),
     };
     sessionStorage.setItem(QUOTE_DRAFT_SESSION_KEY, JSON.stringify(draft));

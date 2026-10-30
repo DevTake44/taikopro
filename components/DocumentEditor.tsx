@@ -46,6 +46,15 @@ type OrderLineOption = {
 
 type ReferenceOption = { customer_code: string; customer_name: string; unit_price: number; delivery_date: string };
 type SupplierOption = { supplier_code: string; supplier_name: string };
+// /api/quote-order-cost-lookupの結果(受注番号+受注行番号でひもづけたpurchases実績)。
+type OrderCostRow = {
+  order_no: string;
+  order_line: string;
+  unit_price: number;
+  supplier_code: string | null;
+  supplier_name: string | null;
+  purchase_date: string;
+};
 // 仕入値の候補(直近の仕入実績で金額が異なるもの・商品マスタ登録値)。
 type CostOption = {
   source: "purchase" | "master";
@@ -54,6 +63,11 @@ type CostOption = {
   supplier_name: string | null;
   date: string | null;
 };
+
+// product_master上は存在するが実商品ではない「諸口」系コード(/api/quote-product-costと
+// 同じ一覧)。これらは品番で仕入値を検索しても必ず空で返ってくるため、「更新」ボタンで
+// 誤って仕入値(取引実績から引き継いだ正しい値)を空に上書きしてしまわないようにする。
+const NON_PRODUCT_CODES = new Set(["77700", "66600", "88800", "99"]);
 
 // 仕入値・利益率・参照売価は見積データとしては保存しない(単価を決めるための参考情報)。
 // 仕入先(supplier_code/supplier_name)は、将来の販売管理・受注CSV取込との連動のため
@@ -65,7 +79,9 @@ type EditableLine = DocumentLine & {
   // 仕入値がいつ時点の値か(直近仕入実績の日付、またはマスタの同期日)。古い仕入実績を
   // そのまま使ってしまっていないか、営業担当が一目で判断できるようにするため保持する。
   cost_date?: string | null;
-  cost_source?: "purchase" | "master" | null;
+  // "sales_data"は、顧客実績からの引き継ぎで、受注番号+行番号に対応する仕入実績が
+  // 見つからなかった場合のフォールバック(売上データに記録された受注時点の原価)。
+  cost_source?: "purchase" | "master" | "sales_data" | null;
   // 仕入値の候補一覧(直近の仕入実績で金額が異なるもの+マスタ登録値)。ボタンから
   // 候補パネルを開いて選び直せるようにする。
   costOptions?: CostOption[];
@@ -199,7 +215,7 @@ export default function DocumentEditor({
       if (draft.branch_code && (ISSUING_BRANCH_CODES as string[]).includes(draft.branch_code)) {
         setBranchCode(draft.branch_code);
       }
-      draft.lines.forEach((line, i) => {
+      draft.lines.forEach((line) => {
         addLine({
           ...emptyLine("sales_history"),
           product_code: line.product_code,
@@ -207,10 +223,69 @@ export default function DocumentEditor({
           spec: line.spec,
           qty: line.qty,
           unit_price: line.unit_price,
+          // 仕入値・仕入先は、ひとまず売上データ(sales_lines)に記録された受注時点の
+          // 原価を仮置きしておく。直後の突き合わせ(①受注番号+行番号でpurchases、
+          // ②品番でpurchases/マスタ)で、より正確な値が見つかればそちらに上書きする。
+          cost_price: line.cost_price,
+          supplier_code: line.supplier_code,
+          supplier_name: line.supplier_name,
+          cost_date: line.delivery_date,
+          cost_source: line.cost_price != null ? "sales_data" : null,
+          margin_pct: computeMarginPct(line.cost_price, line.unit_price),
         });
-        // 新規作成時は明細が空から始まるため、lines配列中の位置はiと一致する
-        // (addLineの戻り値は同一レンダー内で連続呼び出しすると使えないため使わない)。
-        if (line.product_code) refreshLineMeta(i, line.product_code, false);
+      });
+
+      // 仕入値は次の優先順で決める(経営レポートのv_profit_linesと同じ考え方)。
+      // ①受注番号+受注行番号でpurchases(仕入実績)と突き合わせる(最も正確・この
+      //   受注そのものの実績)。「77700」のような共通コードも品番ではなくこちらで
+      //   特定できるため対応できる。
+      // ②①で見つからない通常の品番は、品番ベースでpurchases(他の受注分の直近実績)
+      //   →商品マスタの順に探す(quote-product-costの既存ロジックそのまま、
+      //   applyCost=true)。
+      // ③①②どちらでも見つからない共通コードは、売上データの原価(仮置き済み)の
+      //   ままにする(品番で検索しても意味が無いため)。
+      // 顧客実績の検索自体は速度を優先してpurchasesへの問い合わせを一切行わないため、
+      // これらはすべてここ(新規作成画面)でまとめて行う。
+      const orderNos = Array.from(new Set(draft.lines.map((l) => l.order_no).filter((v): v is string => !!v)));
+      const lookupPromise: Promise<{ rows?: OrderCostRow[] }> =
+        orderNos.length > 0
+          ? fetch(`/api/quote-order-cost-lookup?order_nos=${orderNos.join(",")}`)
+              .then((r) => r.json())
+              .catch(() => ({ rows: [] }))
+          : Promise.resolve({ rows: [] });
+
+      lookupPromise.then((json) => {
+        const rows: OrderCostRow[] = json.rows ?? [];
+        const byKey = new Map(rows.map((r) => [`${r.order_no}|${r.order_line}`, r]));
+
+        draft.lines.forEach((line, i) => {
+          const match = line.order_no && line.order_line ? byKey.get(`${line.order_no}|${line.order_line}`) : undefined;
+          if (match) {
+            setLines((prev) =>
+              prev.map((l, idx) => {
+                if (idx !== i) return l;
+                const next: EditableLine = {
+                  ...l,
+                  cost_price: match.unit_price,
+                  supplier_code: match.supplier_code,
+                  supplier_name: match.supplier_name,
+                  cost_date: match.purchase_date,
+                  cost_source: "purchase",
+                };
+                const margin = computeMarginPct(next.cost_price, next.unit_price);
+                if (margin !== null) next.margin_pct = margin;
+                return next;
+              })
+            );
+            // 候補パネル・参照売価は別途取得するが、仕入値は上書きしない(applyCost=false)。
+            if (line.product_code) refreshLineMeta(i, line.product_code, false);
+            return;
+          }
+          if (!line.product_code) return;
+          const isCommonCode = NON_PRODUCT_CODES.has(line.product_code.trim());
+          if (isCommonCode) return; // ③ 売上データの原価のまま。
+          refreshLineMeta(i, line.product_code, true); // ②
+        });
       });
     } catch {
       // 壊れたデータは無視する。
@@ -311,6 +386,10 @@ export default function DocumentEditor({
     const ym = l.cost_date ? l.cost_date.slice(2, 7).replace("-", "/") : null;
     if (l.cost_source === "master") return ym ? `(マスタ・${ym})` : "(マスタ値)";
     if (l.cost_source === "purchase") return ym ? `(${ym}時点)` : null;
+    // 顧客実績からの引き継ぎで、仕入実績(purchases)が見つからなかった場合のみ
+    // (在庫出荷等でpurchasesと1対1にならないケース)。日付が無いと鮮度が判断できない
+    // という指摘があったため、必ず受注日を添えて表示する。
+    if (l.cost_source === "sales_data") return ym ? `(受注時点・${ym})` : "(受注時点の原価)";
     return null;
   }
 
@@ -1303,17 +1382,31 @@ export default function DocumentEditor({
                         <span className="cell-sub" style={{ fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                           {costDateLabel(l)}
                         </span>
-                        {(l.costOptions?.length ?? 0) > 0 && (
+                        <span style={{ display: "flex", gap: 2, flexShrink: 0 }}>
                           <button
                             type="button"
                             className="btn-icon"
-                            style={{ flexShrink: 0 }}
-                            onClick={(e) => openCostOptions(i, e)}
-                            title="他の仕入値候補(直近の仕入実績・マスタ登録値)から選ぶ"
+                            disabled={!l.product_code?.trim() || NON_PRODUCT_CODES.has(l.product_code.trim())}
+                            onClick={() => l.product_code && refreshLineMeta(i, l.product_code, true)}
+                            title={
+                              l.product_code && NON_PRODUCT_CODES.has(l.product_code.trim())
+                                ? "この品番は複数商品が相乗りする共通コードのため、仕入値の自動検索はできません"
+                                : "品番から仕入値・参照売価を取得し直す"
+                            }
                           >
-                            候補
+                            更新
                           </button>
-                        )}
+                          {(l.costOptions?.length ?? 0) > 0 && (
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={(e) => openCostOptions(i, e)}
+                              title="他の仕入値候補(直近の仕入実績・マスタ登録値)から選ぶ"
+                            >
+                              候補
+                            </button>
+                          )}
+                        </span>
                       </div>
                       {editingCostIndex === i && costPanelPos && (
                         <div
