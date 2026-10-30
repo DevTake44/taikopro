@@ -106,7 +106,8 @@ export default function CustomerHistorySearch() {
 
   const branchCodes = useMemo(() => {
     const codes = new Set(branchRepPairs.map((p) => p.branch_code));
-    return Array.from(codes).sort();
+    // 文字列のままsort()すると"10"が"2"より前に来てしまうため、数値として並べる。
+    return Array.from(codes).sort((a, b) => Number(a) - Number(b));
   }, [branchRepPairs]);
 
   const repCodesForBranch = useMemo(() => {
