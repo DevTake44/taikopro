@@ -621,10 +621,10 @@ export default function LifeBillingCheck() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
-          <Link href="/dx/life-check" className="ghost-btn" style={{ textDecoration: "none" }}>
+          <Link href="/dx/life-check" target="_blank" className="ghost-btn" style={{ textDecoration: "none" }}>
             ライフ照合(受注番号さがし)
           </Link>
-          <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
+          <Link href="/dx/upload" target="_blank" className="ghost-btn" style={{ textDecoration: "none" }}>
             データ更新
           </Link>
           <Link href="/dx" className="ghost-btn" style={{ textDecoration: "none" }}>

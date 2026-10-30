@@ -55,6 +55,7 @@ export default function ManagementMenuPage() {
           <Link
             key={l.href}
             href={l.href}
+            target="_blank"
             className="card"
             style={{ textDecoration: "none", color: "inherit", display: "block", padding: 20 }}
           >

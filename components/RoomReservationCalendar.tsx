@@ -170,7 +170,7 @@ export default function RoomReservationCalendar() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
         <h1>会議室予約(東京)</h1>
         <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
-          <Link href="/dx/room-reservation/history" className="ghost-btn" style={{ textDecoration: "none" }}>
+          <Link href="/dx/room-reservation/history" target="_blank" className="ghost-btn" style={{ textDecoration: "none" }}>
             履歴
           </Link>
           <Link href="/sales-app" className="ghost-btn" style={{ textDecoration: "none" }}>

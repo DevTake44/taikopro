@@ -26,7 +26,7 @@ export default async function QuotesListPage({
           <p>見積書の作成・編集・請求書への変換を行います。</p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <Link href="/sales-app/invoices" className="ghost-btn-inline">
+          <Link href="/sales-app/invoices" target="_blank" className="ghost-btn-inline">
             請求書一覧へ
           </Link>
           <Link href="/sales-app" className="ghost-btn-inline">
@@ -38,7 +38,7 @@ export default async function QuotesListPage({
       <div className="card" style={{ padding: 0, marginBottom: 16 }}>
         <div className="card-head">
           <h2>一覧(新しい順・最大200件)</h2>
-          <Link href="/sales-app/quotes/new" className="btn btn-primary btn-sm">
+          <Link href="/sales-app/quotes/new" target="_blank" className="btn btn-primary btn-sm">
             + 新規見積作成
           </Link>
         </div>
@@ -61,7 +61,7 @@ export default async function QuotesListPage({
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td className="codecol">
-                    <Link href={`/sales-app/quotes/${r.id}`}>{r.doc_no}</Link>
+                    <Link href={`/sales-app/quotes/${r.id}`} target="_blank">{r.doc_no}</Link>
                   </td>
                   <td>{branchNameOnly(r.branch_code)}</td>
                   <td className="namecol">{r.customer_name}</td>

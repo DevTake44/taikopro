@@ -54,6 +54,7 @@ export default async function MenuPage() {
           <Link
             key={p.href}
             href={p.href}
+            target="_blank"
             className="card"
             style={{ textDecoration: "none", color: "inherit", display: "block", padding: 28 }}
           >

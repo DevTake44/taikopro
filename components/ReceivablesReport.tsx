@@ -744,6 +744,7 @@ export default function ReceivablesReport() {
       <div style={{ marginTop: 20 }}>
         <Link
           href="/dx/payable-check"
+          target="_blank"
           className="ghost-btn"
           style={{ display: "inline-block", textDecoration: "none", marginRight: 10 }}
         >
@@ -751,6 +752,7 @@ export default function ReceivablesReport() {
         </Link>
         <Link
           href="/dx/freight-check"
+          target="_blank"
           className="ghost-btn"
           style={{ display: "inline-block", textDecoration: "none", marginRight: 10 }}
         >

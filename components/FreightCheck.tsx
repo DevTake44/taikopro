@@ -1037,7 +1037,7 @@ export default function FreightCheck({
         <h2 style={{ marginTop: 0 }}>① 送り状番号↔受注番号の対応データ</h2>
         <p className="subtitle" style={{ margin: "0 0 8px" }}>
           「送り状問合せ」CSVから取り込み済みのデータです。取り込み・更新は
-          <Link href="/dx/upload" style={{ marginLeft: 4 }}>
+          <Link href="/dx/upload" target="_blank" style={{ marginLeft: 4 }}>
             データ更新
           </Link>
           画面から行ってください(3か月分プールされ、古いデータは自動削除されます)。
@@ -1455,6 +1455,7 @@ export default function FreightCheck({
       <div style={{ marginTop: 20 }}>
         <Link
           href="/dx/upload"
+          target="_blank"
           className="ghost-btn"
           style={{ display: "inline-block", textDecoration: "none", marginRight: 10 }}
         >

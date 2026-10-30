@@ -308,7 +308,7 @@ export default function InternalTransferDashboard({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <h1>社内間金額</h1>
         <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-          <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
+          <Link href="/dx/upload" target="_blank" className="ghost-btn" style={{ textDecoration: "none" }}>
             データ更新
           </Link>
           <Link href="/dx" className="ghost-btn" style={{ textDecoration: "none" }}>
