@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "経営管理" };
 
 type MenuLink = {
   href: string;
@@ -55,6 +56,7 @@ export default function ManagementMenuPage() {
           <Link
             key={l.href}
             href={l.href}
+            target="_blank"
             className="card"
             style={{ textDecoration: "none", color: "inherit", display: "block", padding: 20 }}
           >

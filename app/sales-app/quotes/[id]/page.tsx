@@ -4,6 +4,12 @@ import DocumentEditor from "@/components/DocumentEditor";
 
 export const dynamic = "force-dynamic";
 
+export async function generateMetadata({ params }: { params: { id: string } }) {
+  const id = parseInt(params.id, 10);
+  const doc = Number.isFinite(id) ? await getDocument("quote", id) : null;
+  return { title: doc ? `見積書 ${doc.doc_no}` : "見積書" };
+}
+
 export default async function QuoteDetailPage({ params }: { params: { id: string } }) {
   const id = parseInt(params.id, 10);
   if (!Number.isFinite(id)) notFound();

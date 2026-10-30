@@ -536,7 +536,7 @@ export default function BenrinetCheck() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-          <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
+          <Link href="/dx/upload" target="_blank" className="ghost-btn" style={{ textDecoration: "none" }}>
             データ更新
           </Link>
           <Link href="/dx" className="ghost-btn" style={{ textDecoration: "none" }}>

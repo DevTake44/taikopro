@@ -239,10 +239,10 @@ export default function PriceAlertsDashboard({ rows }: { rows: PriceIncreaseAler
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <h1>値上げ検知ダッシュボード</h1>
         <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
-          <Link href="/dx/purchase-lookup" className="ghost-btn" style={{ textDecoration: "none" }}>
+          <Link href="/dx/purchase-lookup" target="_blank" className="ghost-btn" style={{ textDecoration: "none" }}>
             仕入価格検索を開く
           </Link>
-          <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
+          <Link href="/dx/upload" target="_blank" className="ghost-btn" style={{ textDecoration: "none" }}>
             データ更新
           </Link>
           <Link href="/sales-app" className="ghost-btn" style={{ textDecoration: "none" }}>

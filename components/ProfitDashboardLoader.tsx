@@ -239,7 +239,7 @@ export default function ProfitDashboardLoader() {
             <h1>売上利益</h1>
             <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
               <CrossPageNav current="profit" />
-              <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
+              <Link href="/dx/upload" target="_blank" className="ghost-btn" style={{ textDecoration: "none" }}>
                 データ更新
               </Link>
               <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>
@@ -268,7 +268,7 @@ export default function ProfitDashboardLoader() {
           <h1>売上利益</h1>
           <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
             <CrossPageNav current="profit" />
-            <Link href="/dx/upload" className="ghost-btn" style={{ textDecoration: "none" }}>
+            <Link href="/dx/upload" target="_blank" className="ghost-btn" style={{ textDecoration: "none" }}>
               データ更新
             </Link>
             <Link href="/menu" className="ghost-btn" style={{ textDecoration: "none" }}>

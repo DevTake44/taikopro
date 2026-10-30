@@ -7,6 +7,7 @@ import InternalTransferDashboard from "@/components/InternalTransferDashboard";
 // Vercelのキャッシュに古い結果が残らないよう、毎回サーバーで実行する
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+export const metadata = { title: "社内間金額" };
 
 // Supabase/PostgREST は .range() を付けないと最大1000件までしか返さない。
 // .order()で安定した並び順を指定しないと、ページをまたいで行が重複・欠落することが

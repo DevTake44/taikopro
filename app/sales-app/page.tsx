@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "営業アプリ" };
 
 type MenuLink = {
   href: string;
@@ -60,6 +61,7 @@ export default function SalesAppMenuPage() {
           <Link
             key={l.href}
             href={l.href}
+            target="_blank"
             className="card"
             style={{ textDecoration: "none", color: "inherit", display: "block", padding: 20 }}
           >

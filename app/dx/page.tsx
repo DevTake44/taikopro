@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "社内DX" };
 
 type ToolLink = {
   href: string;
@@ -89,6 +90,7 @@ export default function DxMenuPage() {
           <Link
             key={t.href}
             href={t.href}
+            target="_blank"
             className="card"
             style={{ textDecoration: "none", color: "inherit", display: "block", padding: 20 }}
           >

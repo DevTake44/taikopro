@@ -3,6 +3,7 @@ import { fetchAllDataStatuses } from "@/lib/fetchDataStatus";
 import { fetchRecentUploadLogs } from "@/lib/fetchUploadLog";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "データ更新" };
 
 export default async function DxUploadPage() {
   let statuses: Awaited<ReturnType<typeof fetchAllDataStatuses>> = [];

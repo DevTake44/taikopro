@@ -6,6 +6,7 @@ import PriceAlertsDashboard from "@/components/PriceAlertsDashboard";
 // Vercelのキャッシュに古い結果が残らないよう、毎回サーバーで実行する
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+export const metadata = { title: "値上げ検知" };
 
 // Supabase/PostgREST は .select("*") に .range() を付けない場合、デフォルトで
 // 最大1000件までしか返さない。v_price_increase_alertsは万単位あるため、.range()で

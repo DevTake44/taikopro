@@ -6,6 +6,7 @@ import DocumentListFilters from "@/components/DocumentListFilters";
 import DuplicateButton from "@/components/DuplicateButton";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "請求書一覧" };
 
 const STATUS_LABEL: Record<string, string> = { draft: "下書き", confirmed: "確定" };
 
@@ -26,7 +27,7 @@ export default async function InvoicesListPage({
           <p>見積書から変換した請求書の確認・編集を行います。</p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <Link href="/sales-app/quotes" className="ghost-btn-inline">
+          <Link href="/sales-app/quotes" target="_blank" className="ghost-btn-inline">
             見積書一覧へ
           </Link>
           <Link href="/sales-app" className="ghost-btn-inline">
@@ -58,7 +59,7 @@ export default async function InvoicesListPage({
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td className="codecol">
-                    <Link href={`/sales-app/invoices/${r.id}`}>{r.doc_no}</Link>
+                    <Link href={`/sales-app/invoices/${r.id}`} target="_blank">{r.doc_no}</Link>
                   </td>
                   <td>{branchNameOnly(r.branch_code)}</td>
                   <td className="namecol">{r.customer_name}</td>
