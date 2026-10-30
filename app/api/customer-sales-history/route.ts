@@ -92,9 +92,11 @@ export async function GET(req: NextRequest) {
     .ilike("item_code", `%${productQuery}%`)
     .order("delivery_date", { ascending: false })
     .limit(50);
+  // 品名だけでなく仕様(サイズ・色など)も検索対象にする。空白区切りの各語は、
+  // 品名・仕様のどちらかに一致すればよい(AND: 語ごと / OR: 品名or仕様)。
   let byNameQuery = supabase.from("sales_lines").select(COLUMNS).in("customer_code", customerCodes);
   for (const term of nameTerms) {
-    byNameQuery = byNameQuery.ilike("item_name", `%${term}%`);
+    byNameQuery = byNameQuery.or(`item_name.ilike.%${term}%,spec.ilike.%${term}%`);
   }
   byNameQuery = byNameQuery.order("delivery_date", { ascending: false }).limit(50);
 
