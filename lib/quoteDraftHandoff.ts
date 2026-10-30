@@ -9,6 +9,12 @@ export type QuoteDraftLine = {
   spec: string | null;
   qty: number;
   unit_price: number;
+  // 取引実績(sales_lines)に記録された、この受注固有の仕入値・仕入先。
+  // 「77700」のような共通コードは品番だけでは仕入値を検索できないため、
+  // 商品マスタ/品番経由の再検索ではなく、実績値をそのまま引き継ぐ。
+  cost_price: number | null;
+  supplier_code: string | null;
+  supplier_name: string | null;
 };
 
 export type QuoteDraft = {

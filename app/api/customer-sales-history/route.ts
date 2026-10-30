@@ -17,10 +17,17 @@ type HistoryRow = {
   branch_code: string | null;
   rep_code: string | null;
   project_name: string | null;
+  assumed_cost: number | null;
+  supplier_code: string | null;
+  supplier_name: string | null;
 };
 
+// assumed_cost・supplier_code・supplier_nameは、見積書作成(顧客実績から商品をロック→
+// 見積書を作成)に引き継ぐための仕入値・仕入先。「77700」のような複数商品が相乗りする
+// 共通コードは品番だけでは仕入値を検索できない(quote-product-costが対象外にしている)が、
+// このsales_linesの実績値ならその受注固有の値なので、共通コードでも正しく引き継げる。
 const COLUMNS =
-  "customer_code, customer_name, delivery_date, order_no, item_code, item_name, spec, qty, sell_price, branch_code, rep_code, project_name";
+  "customer_code, customer_name, delivery_date, order_no, item_code, item_name, spec, qty, sell_price, branch_code, rep_code, project_name, assumed_cost, supplier_code, supplier_name";
 
 // 仕様は本来、売上明細(sales_lines.spec)にその受注時点の実績値(サイズ・色など)が
 // 入っている(2026-10-28の取り込み修正以降)。ただし、それより前に取り込んだ既存行には

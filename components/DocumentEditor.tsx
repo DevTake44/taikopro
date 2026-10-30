@@ -55,6 +55,11 @@ type CostOption = {
   date: string | null;
 };
 
+// product_master上は存在するが実商品ではない「諸口」系コード(/api/quote-product-costと
+// 同じ一覧)。これらは品番で仕入値を検索しても必ず空で返ってくるため、「更新」ボタンで
+// 誤って仕入値(取引実績から引き継いだ正しい値)を空に上書きしてしまわないようにする。
+const NON_PRODUCT_CODES = new Set(["77700", "66600", "88800", "99"]);
+
 // 仕入値・利益率・参照売価は見積データとしては保存しない(単価を決めるための参考情報)。
 // 仕入先(supplier_code/supplier_name)は、将来の販売管理・受注CSV取込との連動のため
 // DocumentLineの一部として保存する(品番・品名と同じ扱い)。
@@ -207,9 +212,18 @@ export default function DocumentEditor({
           spec: line.spec,
           qty: line.qty,
           unit_price: line.unit_price,
+          // 仕入値・仕入先は、品番での再検索ではなく取引実績(sales_lines)に記録された
+          // 値をそのまま使う。「77700」のような複数商品が相乗りする共通コードは品番
+          // だけでは仕入値を検索できないため(quote-product-costが対象外にしている)、
+          // この実績値が無いと仕入値・仕入先が空のままになってしまう。
+          cost_price: line.cost_price,
+          supplier_code: line.supplier_code,
+          supplier_name: line.supplier_name,
+          margin_pct: computeMarginPct(line.cost_price, line.unit_price),
         });
         // 新規作成時は明細が空から始まるため、lines配列中の位置はiと一致する
         // (addLineの戻り値は同一レンダー内で連続呼び出しすると使えないため使わない)。
+        // applyCost=falseで、上のcost_price(実績値)を上書きせず参照売価だけ取得する。
         if (line.product_code) refreshLineMeta(i, line.product_code, false);
       });
     } catch {
@@ -1303,17 +1317,31 @@ export default function DocumentEditor({
                         <span className="cell-sub" style={{ fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                           {costDateLabel(l)}
                         </span>
-                        {(l.costOptions?.length ?? 0) > 0 && (
+                        <span style={{ display: "flex", gap: 2, flexShrink: 0 }}>
                           <button
                             type="button"
                             className="btn-icon"
-                            style={{ flexShrink: 0 }}
-                            onClick={(e) => openCostOptions(i, e)}
-                            title="他の仕入値候補(直近の仕入実績・マスタ登録値)から選ぶ"
+                            disabled={!l.product_code?.trim() || NON_PRODUCT_CODES.has(l.product_code.trim())}
+                            onClick={() => l.product_code && refreshLineMeta(i, l.product_code, true)}
+                            title={
+                              l.product_code && NON_PRODUCT_CODES.has(l.product_code.trim())
+                                ? "この品番は複数商品が相乗りする共通コードのため、仕入値の自動検索はできません"
+                                : "品番から仕入値・参照売価を取得し直す"
+                            }
                           >
-                            候補
+                            更新
                           </button>
-                        )}
+                          {(l.costOptions?.length ?? 0) > 0 && (
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={(e) => openCostOptions(i, e)}
+                              title="他の仕入値候補(直近の仕入実績・マスタ登録値)から選ぶ"
+                            >
+                              候補
+                            </button>
+                          )}
+                        </span>
                       </div>
                       {editingCostIndex === i && costPanelPos && (
                         <div
