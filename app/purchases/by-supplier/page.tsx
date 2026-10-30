@@ -4,6 +4,7 @@ import PurchaseSupplierReport from "@/components/PurchaseSupplierReport";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
+export const metadata = { title: "仕入先別 仕入額 昨対比" };
 
 export default async function PurchaseBySupplierPage() {
   const supabase = getSupabaseServerClient();

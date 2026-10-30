@@ -6,6 +6,7 @@ import DocumentListFilters from "@/components/DocumentListFilters";
 import DuplicateButton from "@/components/DuplicateButton";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "見積書一覧" };
 
 const STATUS_LABEL: Record<string, string> = { draft: "下書き", confirmed: "確定", converted: "請求書へ変換済" };
 

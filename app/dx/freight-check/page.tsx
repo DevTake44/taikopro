@@ -5,6 +5,7 @@ import FreightCheck from "@/components/FreightCheck";
 
 // Vercelのキャッシュに古い結果が残らないよう、毎回サーバーで実行する
 export const dynamic = "force-dynamic";
+export const metadata = { title: "運賃照合" };
 // このページは合計7〜8万行近くをサーバー側で全件取得してから表示するため、
 // デフォルトの実行時間上限(10秒)だと途中でタイムアウトすることがある。
 export const maxDuration = 60;

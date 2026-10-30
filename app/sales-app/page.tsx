@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "営業アプリ" };
 
 type MenuLink = {
   href: string;

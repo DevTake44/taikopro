@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "経営管理" };
 
 type MenuLink = {
   href: string;

@@ -1,5 +1,7 @@
 import SalesDashboardLoader from "@/components/SalesDashboardLoader";
 
+export const metadata = { title: "売上ダッシュボード" };
+
 // このページ自体はサーバー側でのデータ取得を一切行わない(SalesDashboardLoaderが
 // ブラウザ側で/api/sales-dashboardを呼び出す)。これにより、メニューから戻って
 // 再度開いた時にNext.jsのローディング画面(loading.tsx)が挟まらず、ブラウザ内に

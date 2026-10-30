@@ -2,6 +2,7 @@ import Link from "next/link";
 import CustomerHistorySearch from "@/components/CustomerHistorySearch";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "顧客実績" };
 
 export default function CustomerHistoryPage() {
   return (

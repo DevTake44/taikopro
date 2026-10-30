@@ -1,5 +1,7 @@
 import ProfitSummary from "@/components/ProfitSummary";
 
+export const metadata = { title: "拠点・営業・得意先 利益" };
+
 // このページ自体はサーバー側でのデータ取得を一切行わない(ProfitSummaryコンポーネントが
 // ブラウザ側で/api/profit-summaryを何回かに分けて呼び出し、全件を組み立ててから
 // 表示する。rieki-check-appから移植)。

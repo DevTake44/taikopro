@@ -1,5 +1,7 @@
 import ProfitDashboardLoader from "@/components/ProfitDashboardLoader";
 
+export const metadata = { title: "売上利益" };
+
 // このページ自体はサーバー側でのデータ取得を行わず、components/ProfitDashboardLoader.tsx
 // がブラウザ側で/api/profit-ordersを何回かに分けて呼び出し、全件を組み立ててから
 // 表示する(rieki-check-appから移植)。

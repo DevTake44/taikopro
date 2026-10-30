@@ -4,6 +4,7 @@ import FreightProfitDashboard from "@/components/FreightProfitDashboard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
+export const metadata = { title: "運賃 売上・仕入" };
 
 export default async function FreightSummaryPage() {
   const supabase = getSupabaseServerClient();

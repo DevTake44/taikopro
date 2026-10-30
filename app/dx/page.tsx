@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "社内DX" };
 
 type ToolLink = {
   href: string;

@@ -1,6 +1,7 @@
 import DocumentEditor from "@/components/DocumentEditor";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "見積書 新規作成" };
 
 export default function NewQuotePage() {
   return (

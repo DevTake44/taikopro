@@ -4,6 +4,7 @@ import StockCheckClient from "@/components/StockCheckClient";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+export const metadata = { title: "不動在庫チェック" };
 
 // 経営レポート(/sales)と全く同じキャッシュ済みデータ(getSalesDashboardCore)を使う。
 // これにより、不動在庫チェック単独ページでも、データとして存在する会計年度を
