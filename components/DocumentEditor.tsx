@@ -212,10 +212,12 @@ export default function DocumentEditor({
           spec: line.spec,
           qty: line.qty,
           unit_price: line.unit_price,
-          // 仕入値・仕入先は、品番での再検索ではなく取引実績(sales_lines)に記録された
-          // 値をそのまま使う。「77700」のような複数商品が相乗りする共通コードは品番
-          // だけでは仕入値を検索できないため(quote-product-costが対象外にしている)、
-          // この実績値が無いと仕入値・仕入先が空のままになってしまう。
+          // 仕入値・仕入先は、ひとまず取引実績(sales_lines)に記録された値を入れておく。
+          // 通常の品番は直後のrefreshLineMeta(applyCost=true)がpurchases(仕入実績)から
+          // 取得し直した値で上書きする(見積の仕入値は本来purchases参照が正しいため)。
+          // 「77700」のような複数商品が相乗りする共通コードだけは品番でpurchasesを
+          // 検索できない(quote-product-costが対象外にしている)ため、この実績値の
+          // ままにする(refreshLineMetaをapplyCost=falseで呼び、上書きさせない)。
           cost_price: line.cost_price,
           supplier_code: line.supplier_code,
           supplier_name: line.supplier_name,
@@ -223,8 +225,12 @@ export default function DocumentEditor({
         });
         // 新規作成時は明細が空から始まるため、lines配列中の位置はiと一致する
         // (addLineの戻り値は同一レンダー内で連続呼び出しすると使えないため使わない)。
-        // applyCost=falseで、上のcost_price(実績値)を上書きせず参照売価だけ取得する。
-        if (line.product_code) refreshLineMeta(i, line.product_code, false);
+        // 通常の品番はapplyCost=trueでpurchasesから正しい仕入値に上書きする。共通コード
+        // (77700等)はpurchasesを検索できないため、applyCost=falseで実績値を保持する。
+        if (line.product_code) {
+          const isCommonCode = NON_PRODUCT_CODES.has(line.product_code.trim());
+          refreshLineMeta(i, line.product_code, !isCommonCode);
+        }
       });
     } catch {
       // 壊れたデータは無視する。
