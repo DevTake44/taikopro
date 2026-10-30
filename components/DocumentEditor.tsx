@@ -46,6 +46,15 @@ type OrderLineOption = {
 
 type ReferenceOption = { customer_code: string; customer_name: string; unit_price: number; delivery_date: string };
 type SupplierOption = { supplier_code: string; supplier_name: string };
+// /api/quote-order-cost-lookupの結果(受注番号+受注行番号でひもづけたpurchases実績)。
+type OrderCostRow = {
+  order_no: string;
+  order_line: string;
+  unit_price: number;
+  supplier_code: string | null;
+  supplier_name: string | null;
+  purchase_date: string;
+};
 // 仕入値の候補(直近の仕入実績で金額が異なるもの・商品マスタ登録値)。
 type CostOption = {
   source: "purchase" | "master";
@@ -206,7 +215,7 @@ export default function DocumentEditor({
       if (draft.branch_code && (ISSUING_BRANCH_CODES as string[]).includes(draft.branch_code)) {
         setBranchCode(draft.branch_code);
       }
-      draft.lines.forEach((line, i) => {
+      draft.lines.forEach((line) => {
         addLine({
           ...emptyLine("sales_history"),
           product_code: line.product_code,
@@ -215,8 +224,8 @@ export default function DocumentEditor({
           qty: line.qty,
           unit_price: line.unit_price,
           // 仕入値・仕入先は、ひとまず売上データ(sales_lines)に記録された受注時点の
-          // 原価を仮置きしておく。直後、受注番号+行番号でpurchases(仕入実績)と
-          // 突き合わせて、見つかればそちらの値(より正確)に上書きする。
+          // 原価を仮置きしておく。直後の突き合わせ(①受注番号+行番号でpurchases、
+          // ②品番でpurchases/マスタ)で、より正確な値が見つかればそちらに上書きする。
           cost_price: line.cost_price,
           supplier_code: line.supplier_code,
           supplier_name: line.supplier_name,
@@ -224,38 +233,37 @@ export default function DocumentEditor({
           cost_source: line.cost_price != null ? "sales_data" : null,
           margin_pct: computeMarginPct(line.cost_price, line.unit_price),
         });
-        // 品番からの参考情報(他得意先への参照売価・仕入値候補)は、見積の仕入値を
-        // 上書きしない(applyCost=false)。仕入値は下のpurchases突き合わせに任せる。
-        if (line.product_code) refreshLineMeta(i, line.product_code, false);
       });
 
-      // 受注番号+受注行番号でpurchases(仕入実績)と突き合わせ、見つかった行だけ
-      // より正確な仕入値・仕入先・日付に上書きする。「77700」のような共通コードは
-      // 品番だけでは特定できないが、受注番号+行番号なら一意に特定できるため、
-      // 共通コードかどうかを問わずこの方法で解決できる。顧客実績の検索自体は
-      // 速度を優先してこの問い合わせを行わないため、ここ(新規作成画面)でまとめて
-      // 1回だけ問い合わせる。
+      // 仕入値は次の優先順で決める(経営レポートのv_profit_linesと同じ考え方)。
+      // ①受注番号+受注行番号でpurchases(仕入実績)と突き合わせる(最も正確・この
+      //   受注そのものの実績)。「77700」のような共通コードも品番ではなくこちらで
+      //   特定できるため対応できる。
+      // ②①で見つからない通常の品番は、品番ベースでpurchases(他の受注分の直近実績)
+      //   →商品マスタの順に探す(quote-product-costの既存ロジックそのまま、
+      //   applyCost=true)。
+      // ③①②どちらでも見つからない共通コードは、売上データの原価(仮置き済み)の
+      //   ままにする(品番で検索しても意味が無いため)。
+      // 顧客実績の検索自体は速度を優先してpurchasesへの問い合わせを一切行わないため、
+      // これらはすべてここ(新規作成画面)でまとめて行う。
       const orderNos = Array.from(new Set(draft.lines.map((l) => l.order_no).filter((v): v is string => !!v)));
-      if (orderNos.length > 0) {
-        fetch(`/api/quote-order-cost-lookup?order_nos=${orderNos.join(",")}`)
-          .then((r) => r.json())
-          .then((json) => {
-            type OrderCostRow = {
-              order_no: string;
-              order_line: string;
-              unit_price: number;
-              supplier_code: string | null;
-              supplier_name: string | null;
-              purchase_date: string;
-            };
-            const rows: OrderCostRow[] = json.rows ?? [];
-            const byKey = new Map(rows.map((r) => [`${r.order_no}|${r.order_line}`, r]));
+      const lookupPromise: Promise<{ rows?: OrderCostRow[] }> =
+        orderNos.length > 0
+          ? fetch(`/api/quote-order-cost-lookup?order_nos=${orderNos.join(",")}`)
+              .then((r) => r.json())
+              .catch(() => ({ rows: [] }))
+          : Promise.resolve({ rows: [] });
+
+      lookupPromise.then((json) => {
+        const rows: OrderCostRow[] = json.rows ?? [];
+        const byKey = new Map(rows.map((r) => [`${r.order_no}|${r.order_line}`, r]));
+
+        draft.lines.forEach((line, i) => {
+          const match = line.order_no && line.order_line ? byKey.get(`${line.order_no}|${line.order_line}`) : undefined;
+          if (match) {
             setLines((prev) =>
-              prev.map((l, i) => {
-                const draftLine = draft.lines[i];
-                if (!draftLine?.order_no || !draftLine.order_line) return l;
-                const match = byKey.get(`${draftLine.order_no}|${draftLine.order_line}`);
-                if (!match) return l;
+              prev.map((l, idx) => {
+                if (idx !== i) return l;
                 const next: EditableLine = {
                   ...l,
                   cost_price: match.unit_price,
@@ -269,12 +277,16 @@ export default function DocumentEditor({
                 return next;
               })
             );
-          })
-          .catch(() => {
-            // 取得失敗時は、仮置きした売上データの原価のままにする(品番検索・更新
-            // ボタンから手動で取得し直せる)。
-          });
-      }
+            // 候補パネル・参照売価は別途取得するが、仕入値は上書きしない(applyCost=false)。
+            if (line.product_code) refreshLineMeta(i, line.product_code, false);
+            return;
+          }
+          if (!line.product_code) return;
+          const isCommonCode = NON_PRODUCT_CODES.has(line.product_code.trim());
+          if (isCommonCode) return; // ③ 売上データの原価のまま。
+          refreshLineMeta(i, line.product_code, true); // ②
+        });
+      });
     } catch {
       // 壊れたデータは無視する。
     }
