@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hashPassword, AUTH_COOKIE_NAME } from "./lib/auth";
+import { AUTH_COOKIE_NAME, isManagementOnlyPath, resolveAuthRole } from "./lib/auth";
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -16,11 +16,18 @@ export async function middleware(req: NextRequest) {
   }
 
   const cookie = req.cookies.get(AUTH_COOKIE_NAME)?.value;
-  const expected = await hashPassword(process.env.SITE_PASSWORD ?? "");
-  if (cookie && cookie === expected) {
-    return NextResponse.next();
+  const role = await resolveAuthRole(cookie);
+  if (!role) {
+    return NextResponse.redirect(new URL("/login", req.url));
   }
-  return NextResponse.redirect(new URL("/login", req.url));
+
+  // 「hanbai」合言葉(restricted)は営業アプリ・社内アプリのみ利用可。経営管理関連の
+  // ページに来た場合はメインメニューに戻す。
+  if (role === "restricted" && isManagementOnlyPath(pathname)) {
+    return NextResponse.redirect(new URL("/menu", req.url));
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {

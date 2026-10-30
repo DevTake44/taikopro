@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { AUTH_COOKIE_NAME, resolveAuthRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +28,12 @@ const PANELS: PanelLink[] = [
   },
 ];
 
-export default function MenuPage() {
+export default async function MenuPage() {
+  const cookieStore = await cookies();
+  const role = await resolveAuthRole(cookieStore.get(AUTH_COOKIE_NAME)?.value);
+  // 「hanbai」合言葉(restricted)では経営管理は使えないため、カードごと出さない。
+  const panels = role === "restricted" ? PANELS.filter((p) => p.href !== "/management") : PANELS;
+
   return (
     <div className="wrap" style={{ maxWidth: 900 }}>
       <header className="top" style={{ marginBottom: 28 }}>
@@ -43,7 +50,7 @@ export default function MenuPage() {
           gap: 18,
         }}
       >
-        {PANELS.map((p) => (
+        {panels.map((p) => (
           <Link
             key={p.href}
             href={p.href}
