@@ -31,7 +31,8 @@ export async function GET(req: NextRequest) {
     .limit(500);
 
   if (customerCode) q = q.eq("customer_code", customerCode);
-  if (query) q = q.ilike("item_name", `%${query}%`);
+  // 品名だけでなく仕様(サイズ・色など)も検索対象にする。
+  if (query) q = q.or(`item_name.ilike.%${query}%,spec.ilike.%${query}%`);
 
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
