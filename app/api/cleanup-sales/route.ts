@@ -5,6 +5,33 @@ import { logUpload } from "@/lib/logUpload";
 export const maxDuration = 60;
 export const runtime = "nodejs";
 
+const PAGE_SIZE = 1000;
+
+type ExistingRow = { id: number; target_month_raw: string; staff_code: string | null; customer_code: string | null };
+
+// Supabase(PostgREST)は、limitを指定しないSELECTを既定で1,000件までしか
+// 返さない。対象月度のデータが1,000件を超えると、以降の既存データが
+// クリーンアップの比較対象から漏れ(削除すべき行が永久に消えずに残り)続けて
+// しまうため、rangeで全ページを読み切るまでループする。
+async function fetchAllExisting(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  months: string[]
+): Promise<ExistingRow[]> {
+  const rows: ExistingRow[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("sales_monthly")
+      .select("id, target_month_raw, staff_code, customer_code")
+      .in("target_month_raw", months)
+      .order("id", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...((data ?? []) as ExistingRow[]));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
 // 売上データの更新は「伝票単位の追加」ではなく、その月の全件を毎回まるごと
 // 出力したCSVをアップロードする運用。commit-sales(upsert)だけでは、
 // 得意先コードの統合・削除などでCSVから消えた行がDBに残り続けてしまう。
@@ -29,39 +56,37 @@ export async function POST(req: NextRequest) {
 
     // 対象月度に該当する既存データを、DBから全件取得する
     // (idと、キー判定に使う3列だけ)。
-    const { data: existing, error: selectError } = await supabase
-      .from("sales_monthly")
-      .select("id, target_month_raw, staff_code, customer_code")
-      .in("target_month_raw", months);
-
-    if (selectError) {
+    let existing: ExistingRow[];
+    try {
+      existing = await fetchAllExisting(supabase, months);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
       await logUpload({
         uploadType: "sales_monthly",
         action: "cleanup",
         success: false,
-        errorMessage: selectError.message,
+        errorMessage: message,
       });
       return NextResponse.json(
-        { error: `既存データの確認中にエラーが発生しました: ${selectError.message}` },
+        { error: `既存データの確認中にエラーが発生しました: ${message}` },
         { status: 500 }
       );
     }
 
-    const idsToDelete = (existing ?? [])
+    const idsToDelete = existing
       .filter((r) => !keySet.has(`${r.target_month_raw}|${r.staff_code}|${r.customer_code}`))
       .map((r) => r.id);
 
-    if (idsToDelete.length > 0) {
-      const { error: deleteError } = await supabase
-        .from("sales_monthly")
-        .delete()
-        .in("id", idsToDelete);
+    // 削除対象が多いと1回のIN句が大きくなりすぎるため、チャンクに分けて削除する。
+    for (let i = 0; i < idsToDelete.length; i += PAGE_SIZE) {
+      const chunk = idsToDelete.slice(i, i + PAGE_SIZE);
+      const { error: deleteError } = await supabase.from("sales_monthly").delete().in("id", chunk);
 
       if (deleteError) {
         await logUpload({
           uploadType: "sales_monthly",
           action: "cleanup",
-          deletedCount: idsToDelete.length,
+          deletedCount: i,
           success: false,
           errorMessage: deleteError.message,
         });
