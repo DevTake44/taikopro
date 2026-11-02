@@ -161,11 +161,19 @@ export default function OrderCsvForm({
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
         <div className="cell-sub" style={{ marginBottom: 12 }}>得意先・納入先・配送まわりの情報を入力してください。</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          {/* 受注入力画面の並び: 得意先コード→納入先コード→TEL→郵便番号→名称→住所→担当
+              →客先注番→客先担当→件名→伝票備考→希望納期→入荷場所 */}
           <Field label="得意先コード *必須">
             <input value={customerCode} onChange={(e) => setCustomerCode(e.target.value)} style={inputStyle} />
           </Field>
           <Field label="納入先コード">
             <input value={deliveryCode} onChange={(e) => setDeliveryCode(e.target.value)} style={inputStyle} />
+          </Field>
+          <Field label="納入先TEL">
+            <input value={deliveryTel} onChange={(e) => setDeliveryTel(e.target.value)} style={inputStyle} />
+          </Field>
+          <Field label="納入先郵便番号">
+            <input value={deliveryPostalCode} onChange={(e) => setDeliveryPostalCode(e.target.value)} style={inputStyle} />
           </Field>
           <Field label="納入先名称1">
             <input value={deliveryName1} onChange={(e) => setDeliveryName1(e.target.value)} style={inputStyle} />
@@ -178,12 +186,6 @@ export default function OrderCsvForm({
           </Field>
           <Field label="納入先住所2">
             <input value={deliveryAddress2} onChange={(e) => setDeliveryAddress2(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="納入先郵便番号">
-            <input value={deliveryPostalCode} onChange={(e) => setDeliveryPostalCode(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="納入先TEL">
-            <input value={deliveryTel} onChange={(e) => setDeliveryTel(e.target.value)} style={inputStyle} />
           </Field>
           <Field label="納入先担当">
             <input value={deliveryContact} onChange={(e) => setDeliveryContact(e.target.value)} style={inputStyle} />
@@ -219,12 +221,6 @@ export default function OrderCsvForm({
           ここではまとめて初期値を設定し、「全行に適用」で一括反映できます(行ごとに個別の調整も可能です)。
         </div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <Field label="出荷日">
-            <input type="date" value={defaults.ship_date} onChange={(e) => setDefaults((d) => ({ ...d, ship_date: e.target.value }))} style={inputStyle} />
-          </Field>
-          <Field label="着日">
-            <input type="date" value={defaults.arrival_date} onChange={(e) => setDefaults((d) => ({ ...d, arrival_date: e.target.value }))} style={inputStyle} />
-          </Field>
           <Field label="出荷場所">
             <select value={defaults.ship_location} onChange={(e) => setDefaults((d) => ({ ...d, ship_location: e.target.value }))} style={inputStyle}>
               {SHIPPING_LOCATION_OPTIONS.map((o) => (
@@ -232,12 +228,11 @@ export default function OrderCsvForm({
               ))}
             </select>
           </Field>
-          <Field label="配送方法">
-            <select value={defaults.delivery_method} onChange={(e) => setDefaults((d) => ({ ...d, delivery_method: e.target.value }))} style={inputStyle}>
-              {DELIVERY_METHOD_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+          <Field label="出荷日">
+            <input type="date" value={defaults.ship_date} onChange={(e) => setDefaults((d) => ({ ...d, ship_date: e.target.value }))} style={inputStyle} />
+          </Field>
+          <Field label="着日">
+            <input type="date" value={defaults.arrival_date} onChange={(e) => setDefaults((d) => ({ ...d, arrival_date: e.target.value }))} style={inputStyle} />
           </Field>
           <Field label="着日指定">
             <select value={defaults.arrival_spec} onChange={(e) => setDefaults((d) => ({ ...d, arrival_spec: e.target.value }))} style={inputStyle}>
@@ -249,6 +244,13 @@ export default function OrderCsvForm({
           <Field label="時間帯指定">
             <select value={defaults.time_spec} onChange={(e) => setDefaults((d) => ({ ...d, time_spec: e.target.value }))} style={inputStyle}>
               {TIME_SPEC_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="配送方法">
+            <select value={defaults.delivery_method} onChange={(e) => setDefaults((d) => ({ ...d, delivery_method: e.target.value }))} style={inputStyle}>
+              {DELIVERY_METHOD_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
@@ -280,6 +282,9 @@ export default function OrderCsvForm({
               </button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+              {/* 受注入力画面の並び: コード→品名→仕様→数量→単位→単価→備考→手配コード
+                  →出荷場所→出荷日→仕入先→仕入単価→着日→着日指定→時間帯指定
+                  (配送方法・部門はこの画面に無いため末尾に置く) */}
               <Field label="品目コード">
                 <input value={l.product_code ?? ""} onChange={(e) => updateLine(i, { product_code: e.target.value })} style={inputStyle} />
               </Field>
@@ -297,14 +302,6 @@ export default function OrderCsvForm({
                   style={inputStyle}
                 />
               </Field>
-              <Field label="単価">
-                <input
-                  type="number"
-                  value={l.unit_price}
-                  onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) || 0 })}
-                  style={inputStyle}
-                />
-              </Field>
               <Field label="単位">
                 <input
                   list="unit-suggestions"
@@ -313,6 +310,17 @@ export default function OrderCsvForm({
                   style={inputStyle}
                 />
               </Field>
+              <Field label="単価">
+                <input
+                  type="number"
+                  value={l.unit_price}
+                  onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) || 0 })}
+                  style={inputStyle}
+                />
+              </Field>
+              <Field label="備考">
+                <input value={l.note ?? ""} onChange={(e) => updateLine(i, { note: e.target.value })} style={inputStyle} />
+              </Field>
               <Field label="手配コード *必須">
                 <select value={l.arrange_code} onChange={(e) => updateLine(i, { arrange_code: e.target.value })} style={inputStyle}>
                   <option value="">選択</option>
@@ -320,6 +328,16 @@ export default function OrderCsvForm({
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
+              </Field>
+              <Field label="出荷場所">
+                <select value={l.ship_location} onChange={(e) => updateLine(i, { ship_location: e.target.value })} style={inputStyle}>
+                  {SHIPPING_LOCATION_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="出荷日">
+                <input type="date" value={l.ship_date} onChange={(e) => updateLine(i, { ship_date: e.target.value })} style={inputStyle} />
               </Field>
               <Field label="仕入先">
                 <input value={l.supplier_code ?? ""} onChange={(e) => updateLine(i, { supplier_code: e.target.value })} style={inputStyle} />
@@ -332,25 +350,8 @@ export default function OrderCsvForm({
                   style={inputStyle}
                 />
               </Field>
-              <Field label="出荷日">
-                <input type="date" value={l.ship_date} onChange={(e) => updateLine(i, { ship_date: e.target.value })} style={inputStyle} />
-              </Field>
               <Field label="着日">
                 <input type="date" value={l.arrival_date} onChange={(e) => updateLine(i, { arrival_date: e.target.value })} style={inputStyle} />
-              </Field>
-              <Field label="出荷場所">
-                <select value={l.ship_location} onChange={(e) => updateLine(i, { ship_location: e.target.value })} style={inputStyle}>
-                  {SHIPPING_LOCATION_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="配送方法">
-                <select value={l.delivery_method} onChange={(e) => updateLine(i, { delivery_method: e.target.value })} style={inputStyle}>
-                  {DELIVERY_METHOD_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
               </Field>
               <Field label="着日指定">
                 <select value={l.arrival_spec} onChange={(e) => updateLine(i, { arrival_spec: e.target.value })} style={inputStyle}>
@@ -362,6 +363,13 @@ export default function OrderCsvForm({
               <Field label="時間帯指定">
                 <select value={l.time_spec} onChange={(e) => updateLine(i, { time_spec: e.target.value })} style={inputStyle}>
                   {TIME_SPEC_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="配送方法">
+                <select value={l.delivery_method} onChange={(e) => updateLine(i, { delivery_method: e.target.value })} style={inputStyle}>
+                  {DELIVERY_METHOD_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
