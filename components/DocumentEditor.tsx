@@ -133,6 +133,7 @@ function toSavedLines(lines: EditableLine[]): DocumentLine[] {
     supplier_name: l.supplier_name,
     department: l.department,
     transaction_date: l.transaction_date,
+    cost_price: l.cost_price ?? null,
   }));
 }
 
@@ -1660,6 +1661,11 @@ export default function DocumentEditor({
         {doc && (
           <Link href={`/sales-app/${kind === "quote" ? "quotes" : "invoices"}/${doc.id}/print`} target="_blank" className="ghost-btn-inline">
             印刷プレビュー
+          </Link>
+        )}
+        {doc && kind === "quote" && (
+          <Link href={`/sales-app/quotes/${doc.id}/order-csv`} target="_blank" className="ghost-btn-inline">
+            受注CSV作成
           </Link>
         )}
         {doc && kind === "quote" && doc.status !== "converted" && (

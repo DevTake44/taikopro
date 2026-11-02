@@ -145,6 +145,7 @@ function lineToRow(l: DocumentLine, index: number) {
     supplier_name: l.supplier_name,
     department: l.department,
     transaction_date: l.transaction_date,
+    cost_price: l.cost_price,
   };
 }
 

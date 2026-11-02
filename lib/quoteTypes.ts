@@ -36,6 +36,9 @@ export type DocumentLine = {
   // 1枚の請求書に複数回の納品分をまとめて記載することがあるため、書類全体で1つではなく
   // 明細行ごとに持つ(同じ請求書内でも行によって日付が異なり得る)。
   transaction_date: string | null;
+  // 仕入単価。販売管理の受注CSV取込(諸口商品のとき特に必須)で使うため保存する。
+  // supplier_code/supplier_nameと同様、表示専用だった値を見積データの一部として残す。
+  cost_price: number | null;
 };
 
 export type DocumentStatus = "draft" | "confirmed" | "converted";
