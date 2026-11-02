@@ -257,136 +257,125 @@ export default function OrderCsvForm({
         </div>
       </div>
 
-      <div className="card" style={{ padding: 20, marginBottom: 16, overflowX: "auto" }}>
+      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <div className="cell-sub">明細を入力してください(単位・手配コードは全行必須)。</div>
           <button type="button" onClick={addLine}>+明細行を追加</button>
         </div>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr>
-              <th style={thStyle}>品目コード</th>
-              <th style={thStyle}>品名</th>
-              <th style={thStyle}>仕様</th>
-              <th style={thStyle}>数量</th>
-              <th style={thStyle}>単価</th>
-              <th style={thStyle}>単位</th>
-              <th style={thStyle}>手配コード *必須</th>
-              <th style={thStyle}>仕入先</th>
-              <th style={thStyle}>仕入単価</th>
-              <th style={thStyle}>出荷日</th>
-              <th style={thStyle}>着日</th>
-              <th style={thStyle}>出荷場所</th>
-              <th style={thStyle}>配送方法</th>
-              <th style={thStyle}>着日指定</th>
-              <th style={thStyle}>時間帯指定</th>
-              <th style={thStyle}>部門1</th>
-              <th style={thStyle}>部門2</th>
-              <th style={thStyle}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((l, i) => (
-              <tr key={i}>
-                <td style={tdStyle}>
-                  <input value={l.product_code ?? ""} onChange={(e) => updateLine(i, { product_code: e.target.value })} style={{ ...inputStyle, width: 100 }} />
-                </td>
-                <td style={tdStyle}>
-                  <input value={l.product_name} onChange={(e) => updateLine(i, { product_name: e.target.value })} style={{ ...inputStyle, width: 140 }} />
-                </td>
-                <td style={tdStyle}>
-                  <input value={l.spec ?? ""} onChange={(e) => updateLine(i, { spec: e.target.value })} style={{ ...inputStyle, width: 100 }} />
-                </td>
-                <td style={tdStyle}>
-                  <input
-                    type="number"
-                    value={l.qty}
-                    onChange={(e) => updateLine(i, { qty: Number(e.target.value) || 0 })}
-                    style={{ ...inputStyle, width: 70 }}
-                  />
-                </td>
-                <td style={tdStyle}>
-                  <input
-                    type="number"
-                    value={l.unit_price}
-                    onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) || 0 })}
-                    style={{ ...inputStyle, width: 90 }}
-                  />
-                </td>
-                <td style={tdStyle}>
-                  <input
-                    list="unit-suggestions"
-                    value={l.unit}
-                    onChange={(e) => updateLine(i, { unit: e.target.value })}
-                    style={{ ...inputStyle, width: 70 }}
-                  />
-                </td>
-                <td style={tdStyle}>
-                  <select value={l.arrange_code} onChange={(e) => updateLine(i, { arrange_code: e.target.value })} style={inputStyle}>
-                    <option value="">選択</option>
-                    {ARRANGE_CODE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td style={tdStyle}>
-                  <input value={l.supplier_code ?? ""} onChange={(e) => updateLine(i, { supplier_code: e.target.value })} style={{ ...inputStyle, width: 100 }} />
-                </td>
-                <td style={tdStyle}>
-                  <input
-                    type="number"
-                    value={l.cost_price ?? ""}
-                    onChange={(e) => updateLine(i, { cost_price: e.target.value === "" ? null : Number(e.target.value) })}
-                    style={{ ...inputStyle, width: 90 }}
-                  />
-                </td>
-                <td style={tdStyle}>
-                  <input type="date" value={l.ship_date} onChange={(e) => updateLine(i, { ship_date: e.target.value })} style={{ ...inputStyle, width: 140 }} />
-                </td>
-                <td style={tdStyle}>
-                  <input type="date" value={l.arrival_date} onChange={(e) => updateLine(i, { arrival_date: e.target.value })} style={{ ...inputStyle, width: 140 }} />
-                </td>
-                <td style={tdStyle}>
-                  <select value={l.ship_location} onChange={(e) => updateLine(i, { ship_location: e.target.value })} style={inputStyle}>
-                    {SHIPPING_LOCATION_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td style={tdStyle}>
-                  <select value={l.delivery_method} onChange={(e) => updateLine(i, { delivery_method: e.target.value })} style={inputStyle}>
-                    {DELIVERY_METHOD_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td style={tdStyle}>
-                  <select value={l.arrival_spec} onChange={(e) => updateLine(i, { arrival_spec: e.target.value })} style={inputStyle}>
-                    {ARRIVAL_SPEC_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td style={tdStyle}>
-                  <select value={l.time_spec} onChange={(e) => updateLine(i, { time_spec: e.target.value })} style={inputStyle}>
-                    {TIME_SPEC_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td style={tdStyle}>
-                  <input value={l.department1} onChange={(e) => updateLine(i, { department1: e.target.value })} style={{ ...inputStyle, width: 70 }} />
-                </td>
-                <td style={tdStyle}>
-                  <input value={l.department2} onChange={(e) => updateLine(i, { department2: e.target.value })} style={{ ...inputStyle, width: 70 }} />
-                </td>
-                <td style={tdStyle}>
-                  <button type="button" className="btn-danger" onClick={() => removeLine(i)} disabled={lines.length <= 1}>×</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+        {lines.map((l, i) => (
+          <div
+            key={i}
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: "var(--radius-sm)",
+              padding: 14,
+              marginTop: 12,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <strong style={{ fontSize: 13 }}>明細 {i + 1}</strong>
+              <button type="button" className="btn-danger" onClick={() => removeLine(i)} disabled={lines.length <= 1}>
+                この行を削除
+              </button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+              <Field label="品目コード">
+                <input value={l.product_code ?? ""} onChange={(e) => updateLine(i, { product_code: e.target.value })} style={inputStyle} />
+              </Field>
+              <Field label="品名">
+                <input value={l.product_name} onChange={(e) => updateLine(i, { product_name: e.target.value })} style={inputStyle} />
+              </Field>
+              <Field label="仕様">
+                <input value={l.spec ?? ""} onChange={(e) => updateLine(i, { spec: e.target.value })} style={inputStyle} />
+              </Field>
+              <Field label="数量">
+                <input
+                  type="number"
+                  value={l.qty}
+                  onChange={(e) => updateLine(i, { qty: Number(e.target.value) || 0 })}
+                  style={inputStyle}
+                />
+              </Field>
+              <Field label="単価">
+                <input
+                  type="number"
+                  value={l.unit_price}
+                  onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) || 0 })}
+                  style={inputStyle}
+                />
+              </Field>
+              <Field label="単位">
+                <input
+                  list="unit-suggestions"
+                  value={l.unit}
+                  onChange={(e) => updateLine(i, { unit: e.target.value })}
+                  style={inputStyle}
+                />
+              </Field>
+              <Field label="手配コード *必須">
+                <select value={l.arrange_code} onChange={(e) => updateLine(i, { arrange_code: e.target.value })} style={inputStyle}>
+                  <option value="">選択</option>
+                  {ARRANGE_CODE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="仕入先">
+                <input value={l.supplier_code ?? ""} onChange={(e) => updateLine(i, { supplier_code: e.target.value })} style={inputStyle} />
+              </Field>
+              <Field label="仕入単価">
+                <input
+                  type="number"
+                  value={l.cost_price ?? ""}
+                  onChange={(e) => updateLine(i, { cost_price: e.target.value === "" ? null : Number(e.target.value) })}
+                  style={inputStyle}
+                />
+              </Field>
+              <Field label="出荷日">
+                <input type="date" value={l.ship_date} onChange={(e) => updateLine(i, { ship_date: e.target.value })} style={inputStyle} />
+              </Field>
+              <Field label="着日">
+                <input type="date" value={l.arrival_date} onChange={(e) => updateLine(i, { arrival_date: e.target.value })} style={inputStyle} />
+              </Field>
+              <Field label="出荷場所">
+                <select value={l.ship_location} onChange={(e) => updateLine(i, { ship_location: e.target.value })} style={inputStyle}>
+                  {SHIPPING_LOCATION_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="配送方法">
+                <select value={l.delivery_method} onChange={(e) => updateLine(i, { delivery_method: e.target.value })} style={inputStyle}>
+                  {DELIVERY_METHOD_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="着日指定">
+                <select value={l.arrival_spec} onChange={(e) => updateLine(i, { arrival_spec: e.target.value })} style={inputStyle}>
+                  {ARRIVAL_SPEC_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="時間帯指定">
+                <select value={l.time_spec} onChange={(e) => updateLine(i, { time_spec: e.target.value })} style={inputStyle}>
+                  {TIME_SPEC_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="部門1">
+                <input value={l.department1} onChange={(e) => updateLine(i, { department1: e.target.value })} style={inputStyle} />
+              </Field>
+              <Field label="部門2">
+                <input value={l.department2} onChange={(e) => updateLine(i, { department2: e.target.value })} style={inputStyle} />
+              </Field>
+            </div>
+          </div>
+        ))}
+
         <datalist id="unit-suggestions">
           {UNIT_SUGGESTIONS.map((u) => (
             <option key={u} value={u} />
@@ -413,5 +402,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const inputStyle: React.CSSProperties = { width: "100%", padding: "6px 10px" };
-const thStyle: React.CSSProperties = { textAlign: "left", padding: "6px 8px", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" };
-const tdStyle: React.CSSProperties = { padding: "4px 8px", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" };
