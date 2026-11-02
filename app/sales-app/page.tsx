@@ -35,6 +35,11 @@ const SALES_APP_LINKS: MenuLink[] = [
     title: "見積書・請求書作成",
     description: "得意先マスタ・商品マスタ・過去の売上明細から選んで見積書を作成し、そのまま請求書に転用できます。",
   },
+  {
+    href: "/sales-app/order-csv/new",
+    title: "受注CSV作成",
+    description: "販売管理の共通CSV取込(受注データ)用のCSVを作成します。見積書詳細画面からも、内容を引き継いで開けます。",
+  },
 ];
 
 export default function SalesAppMenuPage() {

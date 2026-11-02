@@ -37,6 +37,13 @@ export const DELIVERY_METHOD_OPTIONS = [
 
 export const UNIT_SUGGESTIONS = ["個", "箱", "本", "式", "枚", "台", "袋", "セット", "m", "kg"];
 
+// 全角20文字ずつ2つのフィールド(名称1/2、住所1/2)に分ける簡易ヘルパー。
+// 見積の得意先名・住所を、納入先名称1/2・住所1/2の初期値にするときなどに使う。
+export function splitZenkaku20(s: string | null | undefined): [string, string] {
+  const chars = Array.from(s ?? "");
+  return [chars.slice(0, 20).join(""), chars.slice(20, 40).join("")];
+}
+
 // 受注入力画面で実際に確認したところ、出荷場所・配送方法・着日・着日指定・時間帯指定・
 // 出荷日は明細行ごとに違う値を持てる(例: 同じ受注でも、ある行は在庫出荷、別の行は
 // メーカーからの直送、で出荷場所や着日がそれぞれ違う)。見積側にはこの情報が無いため、

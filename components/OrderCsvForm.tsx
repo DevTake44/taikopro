@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import type { DocumentWithLines } from "@/lib/quoteTypes";
 import {
   SHIPPING_LOCATION_OPTIONS,
   ARRANGE_CODE_OPTIONS,
@@ -12,12 +11,6 @@ import {
   type OrderCsvHeaderInput,
   type OrderCsvLineInput,
 } from "@/lib/orderCsvLayout";
-
-// 全角20文字ずつ2つのフィールド(名称1/2、住所1/2)に分ける簡易ヘルパー。
-function splitZenkaku20(s: string | null | undefined): [string, string] {
-  const chars = Array.from(s ?? "");
-  return [chars.slice(0, 20).join(""), chars.slice(20, 40).join("")];
-}
 
 type LineState = OrderCsvLineInput;
 
@@ -30,55 +23,67 @@ const DEFAULT_LINE_VALUES = {
   time_spec: "0",
 };
 
-export default function OrderCsvForm({
-  doc,
-  defaultPostalCode,
-  defaultPhone,
-}: {
-  doc: DocumentWithLines;
-  defaultPostalCode: string | null;
-  defaultPhone: string | null;
-}) {
-  const [name1, name2Init] = splitZenkaku20(doc.customer_name);
-  const [addr1, addr2Init] = splitZenkaku20(doc.customer_address);
+function emptyLine(): LineState {
+  return {
+    product_code: "",
+    product_name: "",
+    spec: "",
+    qty: 1,
+    unit_price: 0,
+    note: "",
+    unit: "",
+    arrange_code: "",
+    supplier_code: "",
+    cost_price: null,
+    department1: "",
+    department2: "",
+    ...DEFAULT_LINE_VALUES,
+  };
+}
 
-  const [deliveryCode, setDeliveryCode] = useState(doc.customer_code ?? "");
-  const [deliveryName1, setDeliveryName1] = useState(name1);
-  const [deliveryName2, setDeliveryName2] = useState(name2Init);
-  const [deliveryAddress1, setDeliveryAddress1] = useState(addr1);
-  const [deliveryAddress2, setDeliveryAddress2] = useState(addr2Init);
-  const [deliveryPostalCode, setDeliveryPostalCode] = useState((defaultPostalCode ?? "").replaceAll("-", ""));
-  const [deliveryTel, setDeliveryTel] = useState((defaultPhone ?? "").replaceAll("-", ""));
-  const [deliveryContact, setDeliveryContact] = useState("");
-  const [customerPoNo, setCustomerPoNo] = useState("");
-  const [customerContact, setCustomerContact] = useState("");
-  const [note, setNote] = useState(doc.note ?? "");
-  const [desiredDate, setDesiredDate] = useState(doc.due_or_valid_date ?? "");
-  const [receiveLocation, setReceiveLocation] = useState("200");
-  const [subject, setSubject] = useState(doc.subject ?? "");
+// この画面は受注CSV作成単体で完結させている(見積とは切り離してある)。
+// 見積から連動する場合は、呼び出し側(見積詳細画面など)がinitialHeader/initialLinesに
+// 見積の内容を詰めて渡すだけでよい(この画面自体は見積の存在を一切知らない)。
+export default function OrderCsvForm({
+  title,
+  backHref,
+  backLabel,
+  downloadFileNameBase,
+  initialHeader,
+  initialLines,
+}: {
+  title: string;
+  backHref: string;
+  backLabel: string;
+  downloadFileNameBase: string;
+  initialHeader?: Partial<OrderCsvHeaderInput>;
+  initialLines?: LineState[];
+}) {
+  const h = initialHeader ?? {};
+
+  const [customerCode, setCustomerCode] = useState(h.customer_code ?? "");
+  const [deliveryCode, setDeliveryCode] = useState(h.delivery_code ?? "");
+  const [deliveryName1, setDeliveryName1] = useState(h.delivery_name1 ?? "");
+  const [deliveryName2, setDeliveryName2] = useState(h.delivery_name2 ?? "");
+  const [deliveryAddress1, setDeliveryAddress1] = useState(h.delivery_address1 ?? "");
+  const [deliveryAddress2, setDeliveryAddress2] = useState(h.delivery_address2 ?? "");
+  const [deliveryPostalCode, setDeliveryPostalCode] = useState(h.delivery_postal_code ?? "");
+  const [deliveryTel, setDeliveryTel] = useState(h.delivery_tel ?? "");
+  const [deliveryContact, setDeliveryContact] = useState(h.delivery_contact ?? "");
+  const [customerPoNo, setCustomerPoNo] = useState(h.customer_po_no ?? "");
+  const [customerContact, setCustomerContact] = useState(h.customer_contact ?? "");
+  const [note, setNote] = useState(h.note ?? "");
+  const [desiredDate, setDesiredDate] = useState(h.desired_date ?? "");
+  const [receiveLocation, setReceiveLocation] = useState(h.receive_location ?? "200");
+  const [subject, setSubject] = useState(h.subject ?? "");
 
   // 出荷日・着日・出荷場所・配送方法・着日指定・時間帯指定は、受注入力画面を確認したところ
   // 明細行ごとに違う値を持てる(例: 在庫出荷の行とメーカー直送の行で出荷場所が違う)。
-  // 見積側にはその情報が無いため、ここでは「全行への初期値」として持ち、
-  // 下の明細行(lines)を実際にCSVへ書き出す値として扱う。
+  // ここでは「全行への初期値」として持ち、下の明細行(lines)を実際にCSVへ書き出す値として扱う。
   const [defaults, setDefaults] = useState(DEFAULT_LINE_VALUES);
 
   const [lines, setLines] = useState<LineState[]>(
-    doc.lines.map((l) => ({
-      product_code: l.product_code,
-      product_name: l.product_name,
-      spec: l.spec,
-      qty: l.qty,
-      unit_price: l.unit_price,
-      note: l.note,
-      unit: "",
-      arrange_code: "",
-      supplier_code: l.supplier_code,
-      cost_price: l.cost_price,
-      department1: "",
-      department2: "",
-      ...DEFAULT_LINE_VALUES,
-    }))
+    initialLines && initialLines.length > 0 ? initialLines : [emptyLine()]
   );
 
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +93,14 @@ export default function OrderCsvForm({
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
   }
 
+  function addLine() {
+    setLines((prev) => [...prev, { ...emptyLine(), ...defaults }]);
+  }
+
+  function removeLine(index: number) {
+    setLines((prev) => prev.filter((_, i) => i !== index));
+  }
+
   function applyDefaultsToAllLines() {
     setLines((prev) => prev.map((l) => ({ ...l, ...defaults })));
   }
@@ -95,7 +108,7 @@ export default function OrderCsvForm({
   async function handleDownload() {
     setError(null);
     const header: OrderCsvHeaderInput = {
-      customer_code: doc.customer_code ?? "",
+      customer_code: customerCode,
       delivery_code: deliveryCode,
       delivery_name1: deliveryName1,
       delivery_name2: deliveryName2,
@@ -126,7 +139,7 @@ export default function OrderCsvForm({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `受注_${doc.doc_no}.csv`;
+      a.download = `${downloadFileNameBase}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -139,18 +152,18 @@ export default function OrderCsvForm({
   return (
     <div style={{ maxWidth: 1300, margin: "0 auto", padding: "20px 16px" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700 }}>受注CSV作成 - {doc.doc_no}</h1>
-        <Link href={`/sales-app/quotes/${doc.id}`} className="ghost-btn-inline">
-          ← 見積書に戻る
+        <h1 style={{ fontSize: 20, fontWeight: 700 }}>{title}</h1>
+        <Link href={backHref} className="ghost-btn-inline">
+          {backLabel}
         </Link>
       </header>
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div className="cell-sub" style={{ marginBottom: 12 }}>
-          見積の得意先コード({doc.customer_code ?? "未設定"})・品番・品名・数量・単価・仕入先・仕入単価は見積からそのまま使います。
-          納入先・配送まわりの情報だけここで入力してください。
-        </div>
+        <div className="cell-sub" style={{ marginBottom: 12 }}>得意先・納入先・配送まわりの情報を入力してください。</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          <Field label="得意先コード *必須">
+            <input value={customerCode} onChange={(e) => setCustomerCode(e.target.value)} style={inputStyle} />
+          </Field>
           <Field label="納入先コード">
             <input value={deliveryCode} onChange={(e) => setDeliveryCode(e.target.value)} style={inputStyle} />
           </Field>
@@ -245,12 +258,16 @@ export default function OrderCsvForm({
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 16, overflowX: "auto" }}>
-        <div className="cell-sub" style={{ marginBottom: 8 }}>明細ごとに内容を確認・調整してください(単位・手配コードは全行必須)。</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div className="cell-sub">明細を入力してください(単位・手配コードは全行必須)。</div>
+          <button type="button" onClick={addLine}>+明細行を追加</button>
+        </div>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr>
               <th style={thStyle}>品目コード</th>
               <th style={thStyle}>品名</th>
+              <th style={thStyle}>仕様</th>
               <th style={thStyle}>数量</th>
               <th style={thStyle}>単価</th>
               <th style={thStyle}>単位</th>
@@ -265,15 +282,37 @@ export default function OrderCsvForm({
               <th style={thStyle}>時間帯指定</th>
               <th style={thStyle}>部門1</th>
               <th style={thStyle}>部門2</th>
+              <th style={thStyle}></th>
             </tr>
           </thead>
           <tbody>
             {lines.map((l, i) => (
               <tr key={i}>
-                <td style={tdStyle}>{l.product_code}</td>
-                <td style={tdStyle}>{l.product_name}</td>
-                <td style={tdStyle}>{l.qty}</td>
-                <td style={tdStyle}>{l.unit_price}</td>
+                <td style={tdStyle}>
+                  <input value={l.product_code ?? ""} onChange={(e) => updateLine(i, { product_code: e.target.value })} style={{ ...inputStyle, width: 100 }} />
+                </td>
+                <td style={tdStyle}>
+                  <input value={l.product_name} onChange={(e) => updateLine(i, { product_name: e.target.value })} style={{ ...inputStyle, width: 140 }} />
+                </td>
+                <td style={tdStyle}>
+                  <input value={l.spec ?? ""} onChange={(e) => updateLine(i, { spec: e.target.value })} style={{ ...inputStyle, width: 100 }} />
+                </td>
+                <td style={tdStyle}>
+                  <input
+                    type="number"
+                    value={l.qty}
+                    onChange={(e) => updateLine(i, { qty: Number(e.target.value) || 0 })}
+                    style={{ ...inputStyle, width: 70 }}
+                  />
+                </td>
+                <td style={tdStyle}>
+                  <input
+                    type="number"
+                    value={l.unit_price}
+                    onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) || 0 })}
+                    style={{ ...inputStyle, width: 90 }}
+                  />
+                </td>
                 <td style={tdStyle}>
                   <input
                     list="unit-suggestions"
@@ -340,6 +379,9 @@ export default function OrderCsvForm({
                 </td>
                 <td style={tdStyle}>
                   <input value={l.department2} onChange={(e) => updateLine(i, { department2: e.target.value })} style={{ ...inputStyle, width: 70 }} />
+                </td>
+                <td style={tdStyle}>
+                  <button type="button" className="btn-danger" onClick={() => removeLine(i)} disabled={lines.length <= 1}>×</button>
                 </td>
               </tr>
             ))}
