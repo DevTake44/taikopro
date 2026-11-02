@@ -21,6 +21,15 @@ function splitZenkaku20(s: string | null | undefined): [string, string] {
 
 type LineState = OrderCsvLineInput;
 
+const DEFAULT_LINE_VALUES = {
+  ship_date: "",
+  arrival_date: "",
+  ship_location: "200",
+  delivery_method: "1",
+  arrival_spec: "0",
+  time_spec: "0",
+};
+
 export default function OrderCsvForm({
   doc,
   defaultPostalCode,
@@ -44,15 +53,15 @@ export default function OrderCsvForm({
   const [customerPoNo, setCustomerPoNo] = useState("");
   const [customerContact, setCustomerContact] = useState("");
   const [note, setNote] = useState(doc.note ?? "");
-  const [shipDate, setShipDate] = useState("");
   const [desiredDate, setDesiredDate] = useState(doc.due_or_valid_date ?? "");
-  const [arrivalDate, setArrivalDate] = useState("");
-  const [shipLocation, setShipLocation] = useState("200");
   const [receiveLocation, setReceiveLocation] = useState("200");
-  const [deliveryMethod, setDeliveryMethod] = useState("1");
-  const [arrivalSpec, setArrivalSpec] = useState("0");
-  const [timeSpec, setTimeSpec] = useState("0");
   const [subject, setSubject] = useState(doc.subject ?? "");
+
+  // 出荷日・着日・出荷場所・配送方法・着日指定・時間帯指定は、受注入力画面を確認したところ
+  // 明細行ごとに違う値を持てる(例: 在庫出荷の行とメーカー直送の行で出荷場所が違う)。
+  // 見積側にはその情報が無いため、ここでは「全行への初期値」として持ち、
+  // 下の明細行(lines)を実際にCSVへ書き出す値として扱う。
+  const [defaults, setDefaults] = useState(DEFAULT_LINE_VALUES);
 
   const [lines, setLines] = useState<LineState[]>(
     doc.lines.map((l) => ({
@@ -68,6 +77,7 @@ export default function OrderCsvForm({
       cost_price: l.cost_price,
       department1: "",
       department2: "",
+      ...DEFAULT_LINE_VALUES,
     }))
   );
 
@@ -76,6 +86,10 @@ export default function OrderCsvForm({
 
   function updateLine(index: number, patch: Partial<LineState>) {
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+  }
+
+  function applyDefaultsToAllLines() {
+    setLines((prev) => prev.map((l) => ({ ...l, ...defaults })));
   }
 
   async function handleDownload() {
@@ -93,14 +107,8 @@ export default function OrderCsvForm({
       customer_po_no: customerPoNo,
       customer_contact: customerContact,
       note,
-      ship_date: shipDate,
       desired_date: desiredDate,
-      arrival_date: arrivalDate,
-      ship_location: shipLocation,
       receive_location: receiveLocation,
-      delivery_method: deliveryMethod,
-      arrival_spec: arrivalSpec,
-      time_spec: timeSpec,
       subject,
     };
     setDownloading(true);
@@ -129,7 +137,7 @@ export default function OrderCsvForm({
   }
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 16px" }}>
+    <div style={{ maxWidth: 1300, margin: "0 auto", padding: "20px 16px" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700 }}>受注CSV作成 - {doc.doc_no}</h1>
         <Link href={`/sales-app/quotes/${doc.id}`} className="ghost-btn-inline">
@@ -179,21 +187,8 @@ export default function OrderCsvForm({
           <Field label="伝票備考">
             <input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle} />
           </Field>
-          <Field label="出荷日">
-            <input type="date" value={shipDate} onChange={(e) => setShipDate(e.target.value)} style={inputStyle} />
-          </Field>
           <Field label="希望納期">
             <input type="date" value={desiredDate} onChange={(e) => setDesiredDate(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="着日">
-            <input type="date" value={arrivalDate} onChange={(e) => setArrivalDate(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="出荷場所">
-            <select value={shipLocation} onChange={(e) => setShipLocation(e.target.value)} style={inputStyle}>
-              {SHIPPING_LOCATION_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
           </Field>
           <Field label="入荷場所">
             <select value={receiveLocation} onChange={(e) => setReceiveLocation(e.target.value)} style={inputStyle}>
@@ -202,32 +197,55 @@ export default function OrderCsvForm({
               ))}
             </select>
           </Field>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <div className="cell-sub" style={{ marginBottom: 8 }}>
+          出荷日・着日・出荷場所・配送方法・着日指定・時間帯指定は、明細行(商品)ごとに違う場合があるため、下の明細表で行ごとに設定します。
+          ここではまとめて初期値を設定し、「全行に適用」で一括反映できます(行ごとに個別の調整も可能です)。
+        </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <Field label="出荷日">
+            <input type="date" value={defaults.ship_date} onChange={(e) => setDefaults((d) => ({ ...d, ship_date: e.target.value }))} style={inputStyle} />
+          </Field>
+          <Field label="着日">
+            <input type="date" value={defaults.arrival_date} onChange={(e) => setDefaults((d) => ({ ...d, arrival_date: e.target.value }))} style={inputStyle} />
+          </Field>
+          <Field label="出荷場所">
+            <select value={defaults.ship_location} onChange={(e) => setDefaults((d) => ({ ...d, ship_location: e.target.value }))} style={inputStyle}>
+              {SHIPPING_LOCATION_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </Field>
           <Field label="配送方法">
-            <select value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} style={inputStyle}>
+            <select value={defaults.delivery_method} onChange={(e) => setDefaults((d) => ({ ...d, delivery_method: e.target.value }))} style={inputStyle}>
               {DELIVERY_METHOD_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </Field>
           <Field label="着日指定">
-            <select value={arrivalSpec} onChange={(e) => setArrivalSpec(e.target.value)} style={inputStyle}>
+            <select value={defaults.arrival_spec} onChange={(e) => setDefaults((d) => ({ ...d, arrival_spec: e.target.value }))} style={inputStyle}>
               {ARRIVAL_SPEC_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </Field>
           <Field label="時間帯指定">
-            <select value={timeSpec} onChange={(e) => setTimeSpec(e.target.value)} style={inputStyle}>
+            <select value={defaults.time_spec} onChange={(e) => setDefaults((d) => ({ ...d, time_spec: e.target.value }))} style={inputStyle}>
               {TIME_SPEC_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </Field>
+          <button type="button" onClick={applyDefaultsToAllLines}>全行に適用</button>
         </div>
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 16, overflowX: "auto" }}>
-        <div className="cell-sub" style={{ marginBottom: 8 }}>明細ごとに単位・手配コードを選択してください(手配コードは全行必須)。</div>
+        <div className="cell-sub" style={{ marginBottom: 8 }}>明細ごとに内容を確認・調整してください(単位・手配コードは全行必須)。</div>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr>
@@ -239,6 +257,12 @@ export default function OrderCsvForm({
               <th style={thStyle}>手配コード *必須</th>
               <th style={thStyle}>仕入先</th>
               <th style={thStyle}>仕入単価</th>
+              <th style={thStyle}>出荷日</th>
+              <th style={thStyle}>着日</th>
+              <th style={thStyle}>出荷場所</th>
+              <th style={thStyle}>配送方法</th>
+              <th style={thStyle}>着日指定</th>
+              <th style={thStyle}>時間帯指定</th>
               <th style={thStyle}>部門1</th>
               <th style={thStyle}>部門2</th>
             </tr>
@@ -276,6 +300,40 @@ export default function OrderCsvForm({
                     onChange={(e) => updateLine(i, { cost_price: e.target.value === "" ? null : Number(e.target.value) })}
                     style={{ ...inputStyle, width: 90 }}
                   />
+                </td>
+                <td style={tdStyle}>
+                  <input type="date" value={l.ship_date} onChange={(e) => updateLine(i, { ship_date: e.target.value })} style={{ ...inputStyle, width: 140 }} />
+                </td>
+                <td style={tdStyle}>
+                  <input type="date" value={l.arrival_date} onChange={(e) => updateLine(i, { arrival_date: e.target.value })} style={{ ...inputStyle, width: 140 }} />
+                </td>
+                <td style={tdStyle}>
+                  <select value={l.ship_location} onChange={(e) => updateLine(i, { ship_location: e.target.value })} style={inputStyle}>
+                    {SHIPPING_LOCATION_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td style={tdStyle}>
+                  <select value={l.delivery_method} onChange={(e) => updateLine(i, { delivery_method: e.target.value })} style={inputStyle}>
+                    {DELIVERY_METHOD_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td style={tdStyle}>
+                  <select value={l.arrival_spec} onChange={(e) => updateLine(i, { arrival_spec: e.target.value })} style={inputStyle}>
+                    {ARRIVAL_SPEC_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td style={tdStyle}>
+                  <select value={l.time_spec} onChange={(e) => updateLine(i, { time_spec: e.target.value })} style={inputStyle}>
+                    {TIME_SPEC_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
                 </td>
                 <td style={tdStyle}>
                   <input value={l.department1} onChange={(e) => updateLine(i, { department1: e.target.value })} style={{ ...inputStyle, width: 70 }} />

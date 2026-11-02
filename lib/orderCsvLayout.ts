@@ -37,6 +37,12 @@ export const DELIVERY_METHOD_OPTIONS = [
 
 export const UNIT_SUGGESTIONS = ["個", "箱", "本", "式", "枚", "台", "袋", "セット", "m", "kg"];
 
+// 受注入力画面で実際に確認したところ、出荷場所・配送方法・着日・着日指定・時間帯指定・
+// 出荷日は明細行ごとに違う値を持てる(例: 同じ受注でも、ある行は在庫出荷、別の行は
+// メーカーからの直送、で出荷場所や着日がそれぞれ違う)。見積側にはこの情報が無いため、
+// ヘッダーには「全行に適用する初期値」だけを持たせ、CSVに書き出す実際の値は明細行
+// (OrderCsvLineInput)側を正とする。入荷場所だけは受注入力画面でも1箇所(受注伝票共通)の
+// 表示だったため、ヘッダー項目のままにしている。
 export type OrderCsvHeaderInput = {
   customer_code: string;
   delivery_code: string;
@@ -50,14 +56,8 @@ export type OrderCsvHeaderInput = {
   customer_po_no: string;
   customer_contact: string;
   note: string;
-  ship_date: string; // YYYY-MM-DD
-  desired_date: string; // YYYY-MM-DD
-  arrival_date: string; // YYYY-MM-DD
-  ship_location: string; // 200|201
-  receive_location: string; // 200|201
-  delivery_method: string;
-  arrival_spec: string; // 0|1|2
-  time_spec: string; // 0|1|2
+  desired_date: string; // YYYY-MM-DD(希望納期。受注伝票で1つ)
+  receive_location: string; // 200|201(入荷場所。受注伝票で1つ)
   subject: string;
 };
 
@@ -74,6 +74,12 @@ export type OrderCsvLineInput = {
   cost_price: number | null;
   department1: string;
   department2: string;
+  ship_date: string; // YYYY-MM-DD
+  arrival_date: string; // YYYY-MM-DD
+  ship_location: string; // 200|201
+  delivery_method: string;
+  arrival_spec: string; // 0|1|2
+  time_spec: string; // 0|1|2
 };
 
 // 全角文字数での切り詰め(サロゲートペア文字は1文字として数える簡易実装)。
@@ -118,9 +124,9 @@ export function buildOrderCsvRows(header: OrderCsvHeaderInput, lines: OrderCsvLi
     header.customer_po_no,
     truncateZenkaku(header.customer_contact, 8),
     truncateZenkaku(header.note, 20),
-    yyyymmdd(header.ship_date),
+    yyyymmdd(l.ship_date),
     yyyymmdd(header.desired_date),
-    yyyymmdd(header.arrival_date),
+    yyyymmdd(l.arrival_date),
     "", // カタログ
     "", // カタログコード
     l.product_code ?? "",
@@ -132,7 +138,7 @@ export function buildOrderCsvRows(header: OrderCsvHeaderInput, lines: OrderCsvLi
     String(l.unit_price ?? 0),
     truncateZenkaku(l.note ?? "", 20),
     "", // 発注備考
-    header.ship_location,
+    l.ship_location,
     l.arrange_code,
     l.supplier_code ?? "",
     l.cost_price != null ? String(l.cost_price) : "",
@@ -146,11 +152,11 @@ export function buildOrderCsvRows(header: OrderCsvHeaderInput, lines: OrderCsvLi
     "", // 記事2
     "", // 記事3
     "", // 社内連絡
-    header.arrival_spec,
-    header.time_spec,
+    l.arrival_spec,
+    l.time_spec,
     "0", // 申請番号
     header.receive_location,
-    header.delivery_method,
+    l.delivery_method,
   ]);
 }
 
