@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import {
   SHIPPING_LOCATION_OPTIONS,
@@ -17,11 +17,50 @@ type CustomerOption = { customer_code: string; customer_name: string; postal_cod
 type ProductOption = { product_code: string; product_name: string; spec: string | null };
 type SupplierOption = { supplier_code: string; supplier_name: string };
 
+// 販売管理の受注入力画面(罫線区切りの表形式)に合わせた、密度の高い入力マス。
+// ラベルを小さく左上に出し、入力欄は枠を持たせず背景に馴染ませる(表の1マスに見えるように)。
+function Cell({
+  label,
+  width,
+  grow,
+  children,
+}: {
+  label: string;
+  width?: number;
+  grow?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        border: "1px solid var(--line)",
+        padding: "2px 6px 3px",
+        width,
+        flex: grow ? "1 1 160px" : undefined,
+        minWidth: 0,
+        background: "#fff",
+      }}
+    >
+      <div style={{ fontSize: 10, color: "var(--ink-faint)", lineHeight: 1.3, whiteSpace: "nowrap" }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+const denseInput: React.CSSProperties = {
+  width: "100%",
+  border: "none",
+  outline: "none",
+  padding: "1px 0",
+  fontSize: 12,
+  background: "transparent",
+};
+
 // コードを直接入力してもよいし、名前で検索して候補から選んでもよい共通入力部品。
-// 得意先コード・品目コード・仕入先など、コードだけでは覚えにくい項目で使う。
 function SearchableCodeField<T>({
   label,
-  required,
+  width,
+  grow,
   value,
   onChangeValue,
   searchUrl,
@@ -29,7 +68,8 @@ function SearchableCodeField<T>({
   onSelect,
 }: {
   label: string;
-  required?: boolean;
+  width?: number;
+  grow?: boolean;
   value: string;
   onChangeValue: (v: string) => void;
   searchUrl: string;
@@ -55,27 +95,29 @@ function SearchableCodeField<T>({
   }
 
   return (
-    <Field label={label + (required ? " *必須" : "")}>
-      <input value={value} onChange={(e) => onChangeValue(e.target.value)} style={inputStyle} placeholder="コード" />
-      <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              runSearch();
-            }
-          }}
-          placeholder="名前で検索"
-          style={{ ...inputStyle, fontSize: 12, padding: "4px 8px" }}
-        />
-        <button type="button" className="btn-sm" onClick={runSearch} disabled={searching}>
-          検索
-        </button>
-      </div>
+    <div style={{ position: "relative" }}>
+      <Cell label={label} width={width} grow={grow}>
+        <div style={{ display: "flex", gap: 4 }}>
+          <input value={value} onChange={(e) => onChangeValue(e.target.value)} style={denseInput} placeholder="コード" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                runSearch();
+              }
+            }}
+            placeholder="名前で検索"
+            style={{ ...denseInput, color: "var(--ink-faint)", borderLeft: "1px solid var(--line)", paddingLeft: 4 }}
+          />
+          <button type="button" className="btn-sm" onClick={runSearch} disabled={searching} style={{ padding: "0 6px", fontSize: 11 }}>
+            検索
+          </button>
+        </div>
+      </Cell>
       {results && (
-        <div className="card" style={{ marginTop: 4, maxHeight: 160, overflowY: "auto" }}>
+        <div className="card" style={{ position: "absolute", zIndex: 20, top: "100%", left: 0, minWidth: 260, maxHeight: 180, overflowY: "auto" }}>
           {results.length === 0 && <p className="cell-sub" style={{ padding: 8 }}>見つかりません。</p>}
           {results.map((r, idx) => (
             <div
@@ -92,7 +134,7 @@ function SearchableCodeField<T>({
           ))}
         </div>
       )}
-    </Field>
+    </div>
   );
 }
 
@@ -292,24 +334,24 @@ export default function OrderCsvForm({
 
   const totalAmount = lines.reduce((sum, l) => sum + (l.qty || 0) * (l.unit_price || 0), 0);
   const yen = (n: number) => `¥${Math.round(n).toLocaleString()}`;
+  const selStyle: React.CSSProperties = { ...denseInput, padding: 0 };
+  const rowStyle: React.CSSProperties = { display: "flex", flexWrap: "wrap", marginTop: -1 };
 
   return (
-    <div style={{ maxWidth: 1300, margin: "0 auto", padding: "20px 16px" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700 }}>{title}</h1>
+    <div style={{ maxWidth: 1500, margin: "0 auto", padding: "20px 16px", fontSize: 13 }}>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h1 style={{ fontSize: 18, fontWeight: 700 }}>{title}</h1>
         <Link href={backHref} className="ghost-btn-inline">
           {backLabel}
         </Link>
       </header>
 
-      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div className="cell-sub" style={{ marginBottom: 12 }}>得意先・納入先・配送まわりの情報を入力してください。</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-          {/* 受注入力画面の並び: 得意先コード→納入先コード→TEL→郵便番号→名称→住所→担当
-              →客先注番→客先担当→件名→伝票備考→希望納期→入荷場所 */}
+      {/* 受注入力画面(販売管理)に合わせた、罫線区切りの密な表形式。 */}
+      <div style={{ marginBottom: 14, border: "1px solid var(--line)", borderBottom: "none" }}>
+        <div style={rowStyle}>
           <SearchableCodeField<CustomerOption>
-            label="得意先コード"
-            required
+            label="得意先コード *必須"
+            width={340}
             value={customerCode}
             onChangeValue={setCustomerCode}
             searchUrl="/api/quote-customer-search"
@@ -327,294 +369,295 @@ export default function OrderCsvForm({
               setDeliveryTel((c.phone_number ?? "").replaceAll("-", ""));
             }}
           />
-          <Field label="納入先コード">
-            <input value={deliveryCode} onChange={(e) => setDeliveryCode(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="納入先TEL">
-            <input value={deliveryTel} onChange={(e) => setDeliveryTel(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="納入先郵便番号">
-            <input value={deliveryPostalCode} onChange={(e) => setDeliveryPostalCode(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="納入先名称1">
-            <input value={deliveryName1} onChange={(e) => setDeliveryName1(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="納入先名称2">
-            <input value={deliveryName2} onChange={(e) => setDeliveryName2(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="納入先住所1">
-            <input value={deliveryAddress1} onChange={(e) => setDeliveryAddress1(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="納入先住所2">
-            <input value={deliveryAddress2} onChange={(e) => setDeliveryAddress2(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="納入先担当">
-            <input value={deliveryContact} onChange={(e) => setDeliveryContact(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="客先注番 *必須">
-            <input value={customerPoNo} onChange={(e) => setCustomerPoNo(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="客先担当">
-            <input value={customerContact} onChange={(e) => setCustomerContact(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="件名">
-            <input value={subject} onChange={(e) => setSubject(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="件名金額">
-            <input
-              type="number"
-              value={subjectAmount}
-              onChange={(e) => setSubjectAmount(e.target.value)}
-              style={inputStyle}
-            />
-          </Field>
-          <Field label="伝票備考">
-            <input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="社内連絡">
-            <input value={internalNote} onChange={(e) => setInternalNote(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="希望納期">
-            <input type="date" value={desiredDate} onChange={(e) => setDesiredDate(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="入荷場所">
-            <select value={receiveLocation} onChange={(e) => setReceiveLocation(e.target.value)} style={inputStyle}>
+          <Cell label="納入先コード" width={100}>
+            <input value={deliveryCode} onChange={(e) => setDeliveryCode(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="納入先TEL" width={140}>
+            <input value={deliveryTel} onChange={(e) => setDeliveryTel(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="納入先郵便番号" width={110}>
+            <input value={deliveryPostalCode} onChange={(e) => setDeliveryPostalCode(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="客先注番 *必須" grow>
+            <input value={customerPoNo} onChange={(e) => setCustomerPoNo(e.target.value)} style={denseInput} />
+          </Cell>
+        </div>
+
+        <div style={rowStyle}>
+          <Cell label="納入先名称1" width={230}>
+            <input value={deliveryName1} onChange={(e) => setDeliveryName1(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="納入先名称2" width={230}>
+            <input value={deliveryName2} onChange={(e) => setDeliveryName2(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="納入先担当" width={150}>
+            <input value={deliveryContact} onChange={(e) => setDeliveryContact(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="客先担当" width={120}>
+            <input value={customerContact} onChange={(e) => setCustomerContact(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="希望納期" width={150}>
+            <input type="date" value={desiredDate} onChange={(e) => setDesiredDate(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="入荷場所" width={100}>
+            <select value={receiveLocation} onChange={(e) => setReceiveLocation(e.target.value)} style={selStyle}>
               {SHIPPING_LOCATION_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-          </Field>
+          </Cell>
+        </div>
+
+        <div style={rowStyle}>
+          <Cell label="納入先住所1" width={230}>
+            <input value={deliveryAddress1} onChange={(e) => setDeliveryAddress1(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="納入先住所2" width={230}>
+            <input value={deliveryAddress2} onChange={(e) => setDeliveryAddress2(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="件名" width={200}>
+            <input value={subject} onChange={(e) => setSubject(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="件名金額" width={110}>
+            <input type="number" value={subjectAmount} onChange={(e) => setSubjectAmount(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="伝票備考" grow>
+            <input value={note} onChange={(e) => setNote(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="社内連絡" grow>
+            <input value={internalNote} onChange={(e) => setInternalNote(e.target.value)} style={denseInput} />
+          </Cell>
         </div>
       </div>
 
-      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div className="cell-sub" style={{ marginBottom: 8 }}>
-          出荷日・着日・出荷場所・配送方法・着日指定・時間帯指定は、明細行(商品)ごとに違う場合があるため、下の明細表で行ごとに設定します。
-          ここではまとめて初期値を設定し、「全行に適用」で一括反映できます(行ごとに個別の調整も可能です)。
+      <div style={{ marginBottom: 14, border: "1px solid var(--line)", borderBottom: "none" }}>
+        <div style={{ ...rowStyle, background: "#f6f8fb" }}>
+          <div style={{ padding: "4px 8px", fontSize: 11, color: "var(--ink-faint)" }}>
+            出荷日・着日・出荷場所・配送方法・着日指定・時間帯指定は明細行(商品)ごとに違う場合があるため、下の明細表で行ごとに設定します。ここでまとめて初期値を設定し「全行に適用」で一括反映できます。
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <Field label="出荷場所">
-            <select value={defaults.ship_location} onChange={(e) => setDefaults((d) => ({ ...d, ship_location: e.target.value }))} style={inputStyle}>
+        <div style={rowStyle}>
+          <Cell label="出荷場所" width={100}>
+            <select value={defaults.ship_location} onChange={(e) => setDefaults((d) => ({ ...d, ship_location: e.target.value }))} style={selStyle}>
               {SHIPPING_LOCATION_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-          </Field>
-          <Field label="出荷日">
-            <input type="date" value={defaults.ship_date} onChange={(e) => setDefaults((d) => ({ ...d, ship_date: e.target.value }))} style={inputStyle} />
-          </Field>
-          <Field label="着日">
-            <input type="date" value={defaults.arrival_date} onChange={(e) => setDefaults((d) => ({ ...d, arrival_date: e.target.value }))} style={inputStyle} />
-          </Field>
-          <Field label="着日指定">
-            <select value={defaults.arrival_spec} onChange={(e) => setDefaults((d) => ({ ...d, arrival_spec: e.target.value }))} style={inputStyle}>
+          </Cell>
+          <Cell label="出荷日" width={140}>
+            <input type="date" value={defaults.ship_date} onChange={(e) => setDefaults((d) => ({ ...d, ship_date: e.target.value }))} style={denseInput} />
+          </Cell>
+          <Cell label="着日" width={140}>
+            <input type="date" value={defaults.arrival_date} onChange={(e) => setDefaults((d) => ({ ...d, arrival_date: e.target.value }))} style={denseInput} />
+          </Cell>
+          <Cell label="着日指定" width={90}>
+            <select value={defaults.arrival_spec} onChange={(e) => setDefaults((d) => ({ ...d, arrival_spec: e.target.value }))} style={selStyle}>
               {ARRIVAL_SPEC_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-          </Field>
-          <Field label="時間帯指定">
-            <select value={defaults.time_spec} onChange={(e) => setDefaults((d) => ({ ...d, time_spec: e.target.value }))} style={inputStyle}>
+          </Cell>
+          <Cell label="時間帯指定" width={90}>
+            <select value={defaults.time_spec} onChange={(e) => setDefaults((d) => ({ ...d, time_spec: e.target.value }))} style={selStyle}>
               {TIME_SPEC_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-          </Field>
-          <Field label="配送方法">
-            <select value={defaults.delivery_method} onChange={(e) => setDefaults((d) => ({ ...d, delivery_method: e.target.value }))} style={inputStyle}>
+          </Cell>
+          <Cell label="配送方法" width={110}>
+            <select value={defaults.delivery_method} onChange={(e) => setDefaults((d) => ({ ...d, delivery_method: e.target.value }))} style={selStyle}>
               {DELIVERY_METHOD_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-          </Field>
-          <button type="button" onClick={applyDefaultsToAllLines}>全行に適用</button>
+          </Cell>
+          <div style={{ border: "1px solid var(--line)", display: "flex", alignItems: "center", padding: "0 10px" }}>
+            <button type="button" className="btn-sm" onClick={applyDefaultsToAllLines}>全行に適用</button>
+          </div>
         </div>
       </div>
 
-      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div className="cell-sub">明細を入力してください(単位・手配コードは全行必須)。</div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <strong style={{ fontSize: 14 }}>合計(数量×単価): {yen(totalAmount)}</strong>
-            <button type="button" onClick={() => setShowProductSearch((s) => !s)}>
-              +商品から追加
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <div className="cell-sub">明細(行ごとに売上側・仕入側の2段で入力。単位・手配コードは必須)</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <strong style={{ fontSize: 14 }}>合計(数量×単価): {yen(totalAmount)}</strong>
+          <button type="button" onClick={() => setShowProductSearch((s) => !s)}>
+            +商品から追加
+          </button>
+          <button type="button" onClick={addLine}>+明細行を追加(自由入力)</button>
+        </div>
+      </div>
+
+      {showProductSearch && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              type="text"
+              placeholder="品番・品名で検索"
+              value={productQuery}
+              onChange={(e) => setProductQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && searchProduct()}
+              style={{ flex: 1, padding: "6px 10px" }}
+            />
+            <button type="button" onClick={searchProduct} disabled={productSearching}>
+              {productSearching ? "検索中…" : "検索"}
             </button>
-            <button type="button" onClick={addLine}>+明細行を追加(自由入力)</button>
           </div>
-        </div>
-
-        {showProductSearch && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", gap: 6 }}>
-              <input
-                type="text"
-                placeholder="品番・品名で検索"
-                value={productQuery}
-                onChange={(e) => setProductQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && searchProduct()}
-                style={{ flex: 1, padding: "6px 10px" }}
-              />
-              <button type="button" onClick={searchProduct} disabled={productSearching}>
-                {productSearching ? "検索中…" : "検索"}
-              </button>
-            </div>
-            {productResults && (
-              <div className="card" style={{ marginTop: 4, maxHeight: 220, overflowY: "auto" }}>
-                {productResults.length === 0 && <p className="cell-sub" style={{ padding: 8 }}>見つかりません。</p>}
-                {productResults.map((p) => (
-                  <div key={p.product_code} className="search-item" onClick={() => addFromProduct(p)}>
-                    {p.product_code} {p.product_name} {p.spec ? `(${p.spec})` : ""}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {lines.map((l, i) => (
-          <div
-            key={i}
-            style={{
-              border: "1px solid var(--line)",
-              borderRadius: "var(--radius-sm)",
-              padding: 14,
-              marginTop: 12,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <strong style={{ fontSize: 13 }}>
-                明細 {i + 1}
-                <span className="cell-sub" style={{ marginLeft: 10, fontWeight: 400 }}>
-                  金額: {yen((l.qty || 0) * (l.unit_price || 0))}
-                </span>
-              </strong>
-              <button type="button" className="btn-danger" onClick={() => removeLine(i)} disabled={lines.length <= 1}>
-                この行を削除
-              </button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
-              {/* 受注入力画面の並びをベースに、単価のすぐ下(隣)に仕入単価・仕入先を置いて
-                  見比べやすくしている(品名は長くなりやすいため2列分広げる)。 */}
-              <Field label="品目コード">
-                <input value={l.product_code ?? ""} onChange={(e) => updateLine(i, { product_code: e.target.value })} style={inputStyle} />
-              </Field>
-              <div style={{ gridColumn: "span 2" }}>
-                <Field label="品名">
-                  <input value={l.product_name} onChange={(e) => updateLine(i, { product_name: e.target.value })} style={inputStyle} />
-                </Field>
-              </div>
-              <Field label="仕様">
-                <input value={l.spec ?? ""} onChange={(e) => updateLine(i, { spec: e.target.value })} style={inputStyle} />
-              </Field>
-              <Field label="数量">
-                <input
-                  type="number"
-                  value={l.qty}
-                  onChange={(e) => updateLine(i, { qty: Number(e.target.value) || 0 })}
-                  style={inputStyle}
-                />
-              </Field>
-              <Field label="単位">
-                <input
-                  list="unit-suggestions"
-                  value={l.unit}
-                  onChange={(e) => updateLine(i, { unit: e.target.value })}
-                  style={inputStyle}
-                />
-              </Field>
-              <Field label="単価">
-                <input
-                  type="number"
-                  value={l.unit_price}
-                  onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) || 0 })}
-                  style={inputStyle}
-                />
-              </Field>
-              <Field label="仕入単価">
-                <input
-                  type="number"
-                  value={l.cost_price ?? ""}
-                  onChange={(e) => updateLine(i, { cost_price: e.target.value === "" ? null : Number(e.target.value) })}
-                  style={inputStyle}
-                />
-              </Field>
-              <SearchableCodeField<SupplierOption>
-                label="仕入先"
-                value={l.supplier_code ?? ""}
-                onChangeValue={(v) => updateLine(i, { supplier_code: v })}
-                searchUrl="/api/supplier-search"
-                renderOption={(s) => <>{s.supplier_code} {s.supplier_name}</>}
-                onSelect={(s) => updateLine(i, { supplier_code: s.supplier_code, supplier_name: s.supplier_name })}
-              />
-              {l.supplier_name && (
-                <div className="cell-sub" style={{ gridColumn: "1 / -1", marginTop: -6 }}>
-                  選択中の仕入先: {l.supplier_code} {l.supplier_name}
+          {productResults && (
+            <div className="card" style={{ marginTop: 4, maxHeight: 220, overflowY: "auto" }}>
+              {productResults.length === 0 && <p className="cell-sub" style={{ padding: 8 }}>見つかりません。</p>}
+              {productResults.map((p) => (
+                <div key={p.product_code} className="search-item" onClick={() => addFromProduct(p)}>
+                  {p.product_code} {p.product_name} {p.spec ? `(${p.spec})` : ""}
                 </div>
-              )}
-              <Field label="備考">
-                <input value={l.note ?? ""} onChange={(e) => updateLine(i, { note: e.target.value })} style={inputStyle} />
-              </Field>
-              <Field label="発注備考">
-                <input value={l.purchase_note ?? ""} onChange={(e) => updateLine(i, { purchase_note: e.target.value })} style={inputStyle} />
-              </Field>
-              <Field label="手配コード *必須">
-                <select value={l.arrange_code} onChange={(e) => updateLine(i, { arrange_code: e.target.value })} style={inputStyle}>
-                  <option value="">選択</option>
-                  {ARRANGE_CODE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="出荷場所">
-                <select value={l.ship_location} onChange={(e) => updateLine(i, { ship_location: e.target.value })} style={inputStyle}>
-                  {SHIPPING_LOCATION_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="出荷日">
-                <input type="date" value={l.ship_date} onChange={(e) => updateLine(i, { ship_date: e.target.value })} style={inputStyle} />
-              </Field>
-              <Field label="着日">
-                <input type="date" value={l.arrival_date} onChange={(e) => updateLine(i, { arrival_date: e.target.value })} style={inputStyle} />
-              </Field>
-              <Field label="着日指定">
-                <select value={l.arrival_spec} onChange={(e) => updateLine(i, { arrival_spec: e.target.value })} style={inputStyle}>
-                  {ARRIVAL_SPEC_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="時間帯指定">
-                <select value={l.time_spec} onChange={(e) => updateLine(i, { time_spec: e.target.value })} style={inputStyle}>
-                  {TIME_SPEC_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="配送方法">
-                <select value={l.delivery_method} onChange={(e) => updateLine(i, { delivery_method: e.target.value })} style={inputStyle}>
-                  {DELIVERY_METHOD_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="部門1">
-                <input value={l.department1} onChange={(e) => updateLine(i, { department1: e.target.value })} style={inputStyle} />
-              </Field>
-              <Field label="部門2">
-                <input value={l.department2} onChange={(e) => updateLine(i, { department2: e.target.value })} style={inputStyle} />
-              </Field>
+              ))}
             </div>
-          </div>
-        ))}
+          )}
+        </div>
+      )}
 
-        <datalist id="unit-suggestions">
-          {UNIT_SUGGESTIONS.map((u) => (
-            <option key={u} value={u} />
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 16 }}>
+        <thead>
+          <tr style={{ background: "#f6f8fb" }}>
+            <th style={th} rowSpan={2}>No.</th>
+            <th style={th}>品目コード</th>
+            <th style={th}>品名</th>
+            <th style={th}>仕様</th>
+            <th style={th}>数量</th>
+            <th style={th}>単位</th>
+            <th style={th}>単価</th>
+            <th style={th}>備考</th>
+            <th style={th}>手配コード</th>
+            <th style={th}>出荷場所</th>
+            <th style={th}>出荷日</th>
+            <th style={th} rowSpan={2}></th>
+          </tr>
+          <tr style={{ background: "#f6f8fb" }}>
+            <th style={th}>仕入先</th>
+            <th style={th}>部門1/部門2</th>
+            <th style={th}>発注備考</th>
+            <th style={thSub} colSpan={2}></th>
+            <th style={th}>仕入単価</th>
+            <th style={thSub}></th>
+            <th style={th}>配送方法</th>
+            <th style={th}>着日指定/時間帯</th>
+            <th style={th}>着日</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((l, i) => (
+            <Fragment key={i}>
+              <tr>
+                <td style={td} rowSpan={2}>{i + 1}</td>
+                <td style={td}>
+                  <input value={l.product_code ?? ""} onChange={(e) => updateLine(i, { product_code: e.target.value })} style={denseInput} />
+                </td>
+                <td style={{ ...td, minWidth: 160 }}>
+                  <input value={l.product_name} onChange={(e) => updateLine(i, { product_name: e.target.value })} style={denseInput} />
+                </td>
+                <td style={td}>
+                  <input value={l.spec ?? ""} onChange={(e) => updateLine(i, { spec: e.target.value })} style={denseInput} />
+                </td>
+                <td style={{ ...td, width: 60 }}>
+                  <input type="number" value={l.qty} onChange={(e) => updateLine(i, { qty: Number(e.target.value) || 0 })} style={denseInput} />
+                </td>
+                <td style={{ ...td, width: 60 }}>
+                  <input list="unit-suggestions" value={l.unit} onChange={(e) => updateLine(i, { unit: e.target.value })} style={denseInput} />
+                </td>
+                <td style={{ ...td, width: 80 }}>
+                  <input type="number" value={l.unit_price} onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) || 0 })} style={denseInput} />
+                </td>
+                <td style={td}>
+                  <input value={l.note ?? ""} onChange={(e) => updateLine(i, { note: e.target.value })} style={denseInput} />
+                </td>
+                <td style={{ ...td, width: 90 }}>
+                  <select value={l.arrange_code} onChange={(e) => updateLine(i, { arrange_code: e.target.value })} style={selStyle}>
+                    <option value="">選択</option>
+                    {ARRANGE_CODE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td style={{ ...td, width: 70 }}>
+                  <select value={l.ship_location} onChange={(e) => updateLine(i, { ship_location: e.target.value })} style={selStyle}>
+                    {SHIPPING_LOCATION_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td style={{ ...td, width: 130 }}>
+                  <input type="date" value={l.ship_date} onChange={(e) => updateLine(i, { ship_date: e.target.value })} style={denseInput} />
+                </td>
+                <td style={td} rowSpan={2}>
+                  <button type="button" className="btn-danger" onClick={() => removeLine(i)} disabled={lines.length <= 1} style={{ fontSize: 11, padding: "2px 6px" }}>
+                    削除
+                  </button>
+                </td>
+              </tr>
+              <tr style={{ background: "#fafbfd" }}>
+                <td style={{ ...td, position: "relative" }} colSpan={2}>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <input value={l.supplier_code ?? ""} onChange={(e) => updateLine(i, { supplier_code: e.target.value })} style={{ ...denseInput, width: 70 }} placeholder="コード" />
+                    <SupplierInlineSearch
+                      onSelect={(s) => updateLine(i, { supplier_code: s.supplier_code, supplier_name: s.supplier_name })}
+                    />
+                    {l.supplier_name && <span className="cell-sub" style={{ fontSize: 11 }}>{l.supplier_name}</span>}
+                  </div>
+                </td>
+                <td style={td}>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <input value={l.department1} onChange={(e) => updateLine(i, { department1: e.target.value })} style={{ ...denseInput, width: "50%" }} placeholder="部門1" />
+                    <input value={l.department2} onChange={(e) => updateLine(i, { department2: e.target.value })} style={{ ...denseInput, width: "50%" }} placeholder="部門2" />
+                  </div>
+                </td>
+                <td style={td}>
+                  <input value={l.purchase_note ?? ""} onChange={(e) => updateLine(i, { purchase_note: e.target.value })} style={denseInput} />
+                </td>
+                <td style={td} colSpan={2}></td>
+                <td style={td}>
+                  <input
+                    type="number"
+                    value={l.cost_price ?? ""}
+                    onChange={(e) => updateLine(i, { cost_price: e.target.value === "" ? null : Number(e.target.value) })}
+                    style={denseInput}
+                  />
+                </td>
+                <td style={td}></td>
+                <td style={td}>
+                  <select value={l.delivery_method} onChange={(e) => updateLine(i, { delivery_method: e.target.value })} style={selStyle}>
+                    {DELIVERY_METHOD_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td style={td}>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <select value={l.arrival_spec} onChange={(e) => updateLine(i, { arrival_spec: e.target.value })} style={{ ...selStyle, width: "50%" }}>
+                      {ARRIVAL_SPEC_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    <select value={l.time_spec} onChange={(e) => updateLine(i, { time_spec: e.target.value })} style={{ ...selStyle, width: "50%" }}>
+                      {TIME_SPEC_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </td>
+                <td style={td}>
+                  <input type="date" value={l.arrival_date} onChange={(e) => updateLine(i, { arrival_date: e.target.value })} style={denseInput} />
+                </td>
+              </tr>
+            </Fragment>
           ))}
-        </datalist>
-      </div>
+        </tbody>
+      </table>
+
+      <datalist id="unit-suggestions">
+        {UNIT_SUGGESTIONS.map((u) => (
+          <option key={u} value={u} />
+        ))}
+      </datalist>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
 
@@ -625,13 +668,68 @@ export default function OrderCsvForm({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+// 明細テーブルの仕入先セルは幅が狭いため、専用の小さな検索ポップオーバーにする。
+function SupplierInlineSearch({ onSelect }: { onSelect: (s: SupplierOption) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SupplierOption[] | null>(null);
+  const [searching, setSearching] = useState(false);
+
+  async function runSearch() {
+    if (!query.trim()) return;
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/supplier-search?query=${encodeURIComponent(query.trim())}`);
+      const json = await res.json();
+      setResults(json.rows ?? []);
+    } finally {
+      setSearching(false);
+    }
+  }
+
   return (
-    <div>
-      <label style={{ fontSize: 12, color: "var(--ink-faint)" }}>{label}</label>
-      {children}
+    <div style={{ position: "relative" }}>
+      <button type="button" className="btn-sm" onClick={() => setOpen((o) => !o)} style={{ fontSize: 11, padding: "0 4px" }}>
+        検索
+      </button>
+      {open && (
+        <div className="card" style={{ position: "absolute", zIndex: 20, top: "100%", left: 0, width: 260, padding: 6 }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && runSearch()}
+              placeholder="仕入先名で検索"
+              style={{ flex: 1, padding: "2px 6px", fontSize: 12 }}
+              autoFocus
+            />
+            <button type="button" className="btn-sm" onClick={runSearch} disabled={searching}>検索</button>
+          </div>
+          {results && (
+            <div style={{ maxHeight: 160, overflowY: "auto", marginTop: 4 }}>
+              {results.length === 0 && <p className="cell-sub" style={{ padding: 6 }}>見つかりません。</p>}
+              {results.map((s) => (
+                <div
+                  key={s.supplier_code}
+                  className="search-item"
+                  onClick={() => {
+                    onSelect(s);
+                    setOpen(false);
+                    setQuery("");
+                    setResults(null);
+                  }}
+                >
+                  {s.supplier_code} {s.supplier_name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-const inputStyle: React.CSSProperties = { width: "100%", padding: "6px 10px" };
+const th: React.CSSProperties = { border: "1px solid var(--line)", padding: "3px 6px", fontSize: 11, color: "var(--ink-faint)", fontWeight: 500, whiteSpace: "nowrap" };
+const thSub: React.CSSProperties = { border: "1px solid var(--line)" };
+const td: React.CSSProperties = { border: "1px solid var(--line)", padding: "2px 4px" };
