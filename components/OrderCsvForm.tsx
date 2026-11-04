@@ -533,10 +533,10 @@ export default function OrderCsvForm({
             <th style={th} rowSpan={2}></th>
           </tr>
           <tr style={{ background: "#f6f8fb" }}>
-            <th style={th}>仕入先</th>
+            <th style={th} colSpan={2}>仕入先</th>
             <th style={th}>部門1/部門2</th>
             <th style={th}>発注備考</th>
-            <th style={thSub} colSpan={2}></th>
+            <th style={thSub}></th>
             <th style={th}>仕入単価</th>
             <th style={thSub}></th>
             <th style={th}>配送方法</th>
@@ -613,7 +613,7 @@ export default function OrderCsvForm({
                 <td style={td}>
                   <input value={l.purchase_note ?? ""} onChange={(e) => updateLine(i, { purchase_note: e.target.value })} style={denseInput} />
                 </td>
-                <td style={td} colSpan={2}></td>
+                <td style={td}></td>
                 <td style={td}>
                   <input
                     type="number"
