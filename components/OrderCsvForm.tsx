@@ -8,9 +8,93 @@ import {
   TIME_SPEC_OPTIONS,
   DELIVERY_METHOD_OPTIONS,
   UNIT_SUGGESTIONS,
+  splitZenkaku20,
   type OrderCsvHeaderInput,
   type OrderCsvLineInput,
 } from "@/lib/orderCsvLayout";
+
+type CustomerOption = { customer_code: string; customer_name: string; postal_code: string | null; address: string | null; phone_number: string | null };
+type ProductOption = { product_code: string; product_name: string; spec: string | null };
+type SupplierOption = { supplier_code: string; supplier_name: string };
+
+// コードを直接入力してもよいし、名前で検索して候補から選んでもよい共通入力部品。
+// 得意先コード・品目コード・仕入先など、コードだけでは覚えにくい項目で使う。
+function SearchableCodeField<T>({
+  label,
+  required,
+  value,
+  onChangeValue,
+  searchUrl,
+  renderOption,
+  onSelect,
+}: {
+  label: string;
+  required?: boolean;
+  value: string;
+  onChangeValue: (v: string) => void;
+  searchUrl: string;
+  renderOption: (row: T) => React.ReactNode;
+  onSelect: (row: T) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<T[] | null>(null);
+  const [searching, setSearching] = useState(false);
+
+  async function runSearch() {
+    if (!query.trim()) return;
+    setSearching(true);
+    try {
+      const res = await fetch(`${searchUrl}?query=${encodeURIComponent(query.trim())}`);
+      const json = await res.json();
+      setResults(json.rows ?? []);
+    } catch {
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  return (
+    <Field label={label + (required ? " *必須" : "")}>
+      <input value={value} onChange={(e) => onChangeValue(e.target.value)} style={inputStyle} placeholder="コード" />
+      <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              runSearch();
+            }
+          }}
+          placeholder="名前で検索"
+          style={{ ...inputStyle, fontSize: 12, padding: "4px 8px" }}
+        />
+        <button type="button" className="btn-sm" onClick={runSearch} disabled={searching}>
+          検索
+        </button>
+      </div>
+      {results && (
+        <div className="card" style={{ marginTop: 4, maxHeight: 160, overflowY: "auto", padding: 0 }}>
+          {results.length === 0 && <p className="cell-sub" style={{ padding: 8, margin: 0 }}>見つかりません。</p>}
+          {results.map((r, idx) => (
+            <div
+              key={idx}
+              onClick={() => {
+                onSelect(r);
+                setResults(null);
+                setQuery("");
+              }}
+              style={{ padding: "6px 8px", cursor: "pointer", fontSize: 12, borderBottom: "1px solid var(--line)" }}
+            >
+              {renderOption(r)}
+            </div>
+          ))}
+        </div>
+      )}
+    </Field>
+  );
+}
 
 type LineState = OrderCsvLineInput;
 
@@ -163,9 +247,26 @@ export default function OrderCsvForm({
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
           {/* 受注入力画面の並び: 得意先コード→納入先コード→TEL→郵便番号→名称→住所→担当
               →客先注番→客先担当→件名→伝票備考→希望納期→入荷場所 */}
-          <Field label="得意先コード *必須">
-            <input value={customerCode} onChange={(e) => setCustomerCode(e.target.value)} style={inputStyle} />
-          </Field>
+          <SearchableCodeField<CustomerOption>
+            label="得意先コード"
+            required
+            value={customerCode}
+            onChangeValue={setCustomerCode}
+            searchUrl="/api/quote-customer-search"
+            renderOption={(c) => <>{c.customer_code} {c.customer_name}</>}
+            onSelect={(c) => {
+              setCustomerCode(c.customer_code);
+              setDeliveryCode(c.customer_code);
+              const [n1, n2] = splitZenkaku20(c.customer_name);
+              setDeliveryName1(n1);
+              setDeliveryName2(n2);
+              const [a1, a2] = splitZenkaku20(c.address);
+              setDeliveryAddress1(a1);
+              setDeliveryAddress2(a2);
+              setDeliveryPostalCode((c.postal_code ?? "").replaceAll("-", ""));
+              setDeliveryTel((c.phone_number ?? "").replaceAll("-", ""));
+            }}
+          />
           <Field label="納入先コード">
             <input value={deliveryCode} onChange={(e) => setDeliveryCode(e.target.value)} style={inputStyle} />
           </Field>
@@ -285,9 +386,14 @@ export default function OrderCsvForm({
               {/* 受注入力画面の並び: コード→品名→仕様→数量→単位→単価→備考→手配コード
                   →出荷場所→出荷日→仕入先→仕入単価→着日→着日指定→時間帯指定
                   (配送方法・部門はこの画面に無いため末尾に置く) */}
-              <Field label="品目コード">
-                <input value={l.product_code ?? ""} onChange={(e) => updateLine(i, { product_code: e.target.value })} style={inputStyle} />
-              </Field>
+              <SearchableCodeField<ProductOption>
+                label="品目コード"
+                value={l.product_code ?? ""}
+                onChangeValue={(v) => updateLine(i, { product_code: v })}
+                searchUrl="/api/quote-product-search"
+                renderOption={(p) => <>{p.product_code} {p.product_name}{p.spec ? `(${p.spec})` : ""}</>}
+                onSelect={(p) => updateLine(i, { product_code: p.product_code, product_name: p.product_name, spec: p.spec ?? "" })}
+              />
               <Field label="品名">
                 <input value={l.product_name} onChange={(e) => updateLine(i, { product_name: e.target.value })} style={inputStyle} />
               </Field>
@@ -339,9 +445,14 @@ export default function OrderCsvForm({
               <Field label="出荷日">
                 <input type="date" value={l.ship_date} onChange={(e) => updateLine(i, { ship_date: e.target.value })} style={inputStyle} />
               </Field>
-              <Field label="仕入先">
-                <input value={l.supplier_code ?? ""} onChange={(e) => updateLine(i, { supplier_code: e.target.value })} style={inputStyle} />
-              </Field>
+              <SearchableCodeField<SupplierOption>
+                label="仕入先"
+                value={l.supplier_code ?? ""}
+                onChangeValue={(v) => updateLine(i, { supplier_code: v })}
+                searchUrl="/api/supplier-search"
+                renderOption={(s) => <>{s.supplier_code} {s.supplier_name}</>}
+                onSelect={(s) => updateLine(i, { supplier_code: s.supplier_code })}
+              />
               <Field label="仕入単価">
                 <input
                   type="number"
