@@ -200,6 +200,7 @@ export default function OrderCsvForm({
   }
 
   function addFromProduct(p: ProductOption) {
+    const index = lines.length;
     setLines((prev) => [
       ...prev,
       { ...emptyLine(), ...defaults, product_code: p.product_code, product_name: p.product_name, spec: p.spec ?? "" },
@@ -207,6 +208,25 @@ export default function OrderCsvForm({
     setShowProductSearch(false);
     setProductQuery("");
     setProductResults(null);
+    refreshLineCost(index, p.product_code);
+  }
+
+  // 見積画面と同じく、品番がセットされたら直近の仕入値・仕入先を自動で取得して埋める
+  // (quote-product-cost: 仕入実績(purchases)があればその直近1件、無ければ商品マスタの
+  // 登録仕入単価にフォールバックする、既存ロジックそのまま)。
+  async function refreshLineCost(index: number, productCode: string) {
+    if (!productCode.trim()) return;
+    try {
+      const res = await fetch(`/api/quote-product-cost?product_code=${encodeURIComponent(productCode.trim())}`);
+      const json = await res.json();
+      if (json.cost_price == null && !json.cost_supplier_code) return;
+      updateLine(index, {
+        cost_price: json.cost_price ?? null,
+        supplier_code: json.cost_supplier_code ?? null,
+      });
+    } catch {
+      // 参考情報の取得失敗は無視する(仕入先・仕入単価は手動でも入力できるため)。
+    }
   }
 
   function removeLine(index: number) {
