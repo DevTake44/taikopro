@@ -75,17 +75,17 @@ function SearchableCodeField<T>({
         </button>
       </div>
       {results && (
-        <div className="card" style={{ marginTop: 4, maxHeight: 160, overflowY: "auto", padding: 0 }}>
-          {results.length === 0 && <p className="cell-sub" style={{ padding: 8, margin: 0 }}>見つかりません。</p>}
+        <div className="card" style={{ marginTop: 4, maxHeight: 160, overflowY: "auto" }}>
+          {results.length === 0 && <p className="cell-sub" style={{ padding: 8 }}>見つかりません。</p>}
           {results.map((r, idx) => (
             <div
               key={idx}
+              className="search-item"
               onClick={() => {
                 onSelect(r);
                 setResults(null);
                 setQuery("");
               }}
-              style={{ padding: "6px 8px", cursor: "pointer", fontSize: 12, borderBottom: "1px solid var(--line)" }}
             >
               {renderOption(r)}
             </div>
@@ -173,12 +173,40 @@ export default function OrderCsvForm({
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
 
+  // 「+商品から追加」は見積画面と同じ入力方法(検索→選んだ商品をそのまま1行追加)。
+  const [showProductSearch, setShowProductSearch] = useState(false);
+  const [productQuery, setProductQuery] = useState("");
+  const [productResults, setProductResults] = useState<ProductOption[] | null>(null);
+  const [productSearching, setProductSearching] = useState(false);
+
   function updateLine(index: number, patch: Partial<LineState>) {
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
   }
 
   function addLine() {
     setLines((prev) => [...prev, { ...emptyLine(), ...defaults }]);
+  }
+
+  async function searchProduct() {
+    if (!productQuery.trim()) return;
+    setProductSearching(true);
+    try {
+      const res = await fetch(`/api/quote-product-search?query=${encodeURIComponent(productQuery.trim())}`);
+      const json = await res.json();
+      setProductResults(json.rows ?? []);
+    } finally {
+      setProductSearching(false);
+    }
+  }
+
+  function addFromProduct(p: ProductOption) {
+    setLines((prev) => [
+      ...prev,
+      { ...emptyLine(), ...defaults, product_code: p.product_code, product_name: p.product_name, spec: p.spec ?? "" },
+    ]);
+    setShowProductSearch(false);
+    setProductQuery("");
+    setProductResults(null);
   }
 
   function removeLine(index: number) {
@@ -363,8 +391,41 @@ export default function OrderCsvForm({
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <div className="cell-sub">明細を入力してください(単位・手配コードは全行必須)。</div>
-          <button type="button" onClick={addLine}>+明細行を追加</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" onClick={() => setShowProductSearch((s) => !s)}>
+              +商品から追加
+            </button>
+            <button type="button" onClick={addLine}>+明細行を追加(自由入力)</button>
+          </div>
         </div>
+
+        {showProductSearch && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                type="text"
+                placeholder="品番・品名で検索"
+                value={productQuery}
+                onChange={(e) => setProductQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && searchProduct()}
+                style={{ flex: 1, padding: "6px 10px" }}
+              />
+              <button type="button" onClick={searchProduct} disabled={productSearching}>
+                {productSearching ? "検索中…" : "検索"}
+              </button>
+            </div>
+            {productResults && (
+              <div className="card" style={{ marginTop: 4, maxHeight: 220, overflowY: "auto" }}>
+                {productResults.length === 0 && <p className="cell-sub" style={{ padding: 8 }}>見つかりません。</p>}
+                {productResults.map((p) => (
+                  <div key={p.product_code} className="search-item" onClick={() => addFromProduct(p)}>
+                    {p.product_code} {p.product_name} {p.spec ? `(${p.spec})` : ""}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {lines.map((l, i) => (
           <div
@@ -386,14 +447,9 @@ export default function OrderCsvForm({
               {/* 受注入力画面の並び: コード→品名→仕様→数量→単位→単価→備考→手配コード
                   →出荷場所→出荷日→仕入先→仕入単価→着日→着日指定→時間帯指定
                   (配送方法・部門はこの画面に無いため末尾に置く) */}
-              <SearchableCodeField<ProductOption>
-                label="品目コード"
-                value={l.product_code ?? ""}
-                onChangeValue={(v) => updateLine(i, { product_code: v })}
-                searchUrl="/api/quote-product-search"
-                renderOption={(p) => <>{p.product_code} {p.product_name}{p.spec ? `(${p.spec})` : ""}</>}
-                onSelect={(p) => updateLine(i, { product_code: p.product_code, product_name: p.product_name, spec: p.spec ?? "" })}
-              />
+              <Field label="品目コード">
+                <input value={l.product_code ?? ""} onChange={(e) => updateLine(i, { product_code: e.target.value })} style={inputStyle} />
+              </Field>
               <Field label="品名">
                 <input value={l.product_name} onChange={(e) => updateLine(i, { product_name: e.target.value })} style={inputStyle} />
               </Field>
