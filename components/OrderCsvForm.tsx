@@ -549,13 +549,13 @@ export default function OrderCsvForm({
             <Fragment key={i}>
               <tr>
                 <td style={td} rowSpan={2}>{i + 1}</td>
-                <td style={td}>
+                <td style={{ ...td, width: 90 }}>
                   <input value={l.product_code ?? ""} onChange={(e) => updateLine(i, { product_code: e.target.value })} style={denseInput} />
                 </td>
-                <td style={{ ...td, minWidth: 160 }}>
+                <td style={{ ...td, minWidth: 280 }}>
                   <input value={l.product_name} onChange={(e) => updateLine(i, { product_name: e.target.value })} style={denseInput} />
                 </td>
-                <td style={td}>
+                <td style={{ ...td, width: 110 }}>
                   <input value={l.spec ?? ""} onChange={(e) => updateLine(i, { spec: e.target.value })} style={denseInput} />
                 </td>
                 <td style={{ ...td, width: 60 }}>
@@ -567,7 +567,7 @@ export default function OrderCsvForm({
                 <td style={{ ...td, width: 80 }}>
                   <input type="number" value={l.unit_price} onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) || 0 })} style={denseInput} />
                 </td>
-                <td style={td}>
+                <td style={{ ...td, width: 100 }}>
                   <input value={l.note ?? ""} onChange={(e) => updateLine(i, { note: e.target.value })} style={denseInput} />
                 </td>
                 <td style={{ ...td, width: 90 }}>
