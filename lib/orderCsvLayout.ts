@@ -66,6 +66,8 @@ export type OrderCsvHeaderInput = {
   desired_date: string; // YYYY-MM-DD(希望納期。受注伝票で1つ)
   receive_location: string; // 200|201(入荷場所。受注伝票で1つ)
   subject: string;
+  subject_amount: string; // 件名金額(任意。件名に紐づく金額)
+  internal_note: string; // 社内連絡(伝票備考と同様、受注伝票で1つ)
 };
 
 export type OrderCsvLineInput = {
@@ -79,6 +81,7 @@ export type OrderCsvLineInput = {
   arrange_code: string; // 0|10|80|99
   supplier_code: string | null;
   cost_price: number | null;
+  purchase_note: string; // 発注備考
   department1: string;
   department2: string;
   ship_date: string; // YYYY-MM-DD
@@ -144,21 +147,21 @@ export function buildOrderCsvRows(header: OrderCsvHeaderInput, lines: OrderCsvLi
     l.unit ?? "",
     String(l.unit_price ?? 0),
     truncateZenkaku(l.note ?? "", 20),
-    "", // 発注備考
+    truncateZenkaku(l.purchase_note ?? "", 30),
     l.ship_location,
     l.arrange_code,
     l.supplier_code ?? "",
     l.cost_price != null ? String(l.cost_price) : "",
     "0", // 件名コード
     truncateZenkaku(header.subject, 50),
-    "", // 件名金額
+    header.subject_amount ?? "",
     l.department1 || "",
     l.department2 || "",
     "", // 申請理由
     "", // 記事1
     "", // 記事2
     "", // 記事3
-    "", // 社内連絡
+    truncateZenkaku(header.internal_note, 20),
     l.arrival_spec,
     l.time_spec,
     "0", // 申請番号

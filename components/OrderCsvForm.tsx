@@ -96,7 +96,9 @@ function SearchableCodeField<T>({
   );
 }
 
-type LineState = OrderCsvLineInput;
+// supplier_nameはCSVには出さない(仕入先コードのみ)が、選んだ仕入先が合っているか
+// 画面上で確認できるよう、表示専用でlineの中に持たせておく。
+type LineState = OrderCsvLineInput & { supplier_name?: string };
 
 const DEFAULT_LINE_VALUES = {
   ship_date: "",
@@ -118,7 +120,9 @@ function emptyLine(): LineState {
     unit: "",
     arrange_code: "",
     supplier_code: "",
+    supplier_name: "",
     cost_price: null,
+    purchase_note: "",
     department1: "",
     department2: "",
     ...DEFAULT_LINE_VALUES,
@@ -160,6 +164,8 @@ export default function OrderCsvForm({
   const [desiredDate, setDesiredDate] = useState(h.desired_date ?? "");
   const [receiveLocation, setReceiveLocation] = useState(h.receive_location ?? "200");
   const [subject, setSubject] = useState(h.subject ?? "");
+  const [subjectAmount, setSubjectAmount] = useState(h.subject_amount ?? "");
+  const [internalNote, setInternalNote] = useState(h.internal_note ?? "");
 
   // 出荷日・着日・出荷場所・配送方法・着日指定・時間帯指定は、受注入力画面を確認したところ
   // 明細行ごとに違う値を持てる(例: 在庫出荷の行とメーカー直送の行で出荷場所が違う)。
@@ -223,6 +229,7 @@ export default function OrderCsvForm({
       updateLine(index, {
         cost_price: json.cost_price ?? null,
         supplier_code: json.cost_supplier_code ?? null,
+        supplier_name: json.cost_supplier_name ?? "",
       });
     } catch {
       // 参考情報の取得失敗は無視する(仕入先・仕入単価は手動でも入力できるため)。
@@ -255,6 +262,8 @@ export default function OrderCsvForm({
       desired_date: desiredDate,
       receive_location: receiveLocation,
       subject,
+      subject_amount: subjectAmount,
+      internal_note: internalNote,
     };
     setDownloading(true);
     try {
@@ -280,6 +289,9 @@ export default function OrderCsvForm({
       setDownloading(false);
     }
   }
+
+  const totalAmount = lines.reduce((sum, l) => sum + (l.qty || 0) * (l.unit_price || 0), 0);
+  const yen = (n: number) => `¥${Math.round(n).toLocaleString()}`;
 
   return (
     <div style={{ maxWidth: 1300, margin: "0 auto", padding: "20px 16px" }}>
@@ -348,8 +360,19 @@ export default function OrderCsvForm({
           <Field label="件名">
             <input value={subject} onChange={(e) => setSubject(e.target.value)} style={inputStyle} />
           </Field>
+          <Field label="件名金額">
+            <input
+              type="number"
+              value={subjectAmount}
+              onChange={(e) => setSubjectAmount(e.target.value)}
+              style={inputStyle}
+            />
+          </Field>
           <Field label="伝票備考">
             <input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle} />
+          </Field>
+          <Field label="社内連絡">
+            <input value={internalNote} onChange={(e) => setInternalNote(e.target.value)} style={inputStyle} />
           </Field>
           <Field label="希望納期">
             <input type="date" value={desiredDate} onChange={(e) => setDesiredDate(e.target.value)} style={inputStyle} />
@@ -411,7 +434,8 @@ export default function OrderCsvForm({
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <div className="cell-sub">明細を入力してください(単位・手配コードは全行必須)。</div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <strong style={{ fontSize: 14 }}>合計(数量×単価): {yen(totalAmount)}</strong>
             <button type="button" onClick={() => setShowProductSearch((s) => !s)}>
               +商品から追加
             </button>
@@ -458,21 +482,27 @@ export default function OrderCsvForm({
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <strong style={{ fontSize: 13 }}>明細 {i + 1}</strong>
+              <strong style={{ fontSize: 13 }}>
+                明細 {i + 1}
+                <span className="cell-sub" style={{ marginLeft: 10, fontWeight: 400 }}>
+                  金額: {yen((l.qty || 0) * (l.unit_price || 0))}
+                </span>
+              </strong>
               <button type="button" className="btn-danger" onClick={() => removeLine(i)} disabled={lines.length <= 1}>
                 この行を削除
               </button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
-              {/* 受注入力画面の並び: コード→品名→仕様→数量→単位→単価→備考→手配コード
-                  →出荷場所→出荷日→仕入先→仕入単価→着日→着日指定→時間帯指定
-                  (配送方法・部門はこの画面に無いため末尾に置く) */}
+              {/* 受注入力画面の並びをベースに、単価のすぐ下(隣)に仕入単価・仕入先を置いて
+                  見比べやすくしている(品名は長くなりやすいため2列分広げる)。 */}
               <Field label="品目コード">
                 <input value={l.product_code ?? ""} onChange={(e) => updateLine(i, { product_code: e.target.value })} style={inputStyle} />
               </Field>
-              <Field label="品名">
-                <input value={l.product_name} onChange={(e) => updateLine(i, { product_name: e.target.value })} style={inputStyle} />
-              </Field>
+              <div style={{ gridColumn: "span 2" }}>
+                <Field label="品名">
+                  <input value={l.product_name} onChange={(e) => updateLine(i, { product_name: e.target.value })} style={inputStyle} />
+                </Field>
+              </div>
               <Field label="仕様">
                 <input value={l.spec ?? ""} onChange={(e) => updateLine(i, { spec: e.target.value })} style={inputStyle} />
               </Field>
@@ -500,8 +530,32 @@ export default function OrderCsvForm({
                   style={inputStyle}
                 />
               </Field>
+              <Field label="仕入単価">
+                <input
+                  type="number"
+                  value={l.cost_price ?? ""}
+                  onChange={(e) => updateLine(i, { cost_price: e.target.value === "" ? null : Number(e.target.value) })}
+                  style={inputStyle}
+                />
+              </Field>
+              <SearchableCodeField<SupplierOption>
+                label="仕入先"
+                value={l.supplier_code ?? ""}
+                onChangeValue={(v) => updateLine(i, { supplier_code: v })}
+                searchUrl="/api/supplier-search"
+                renderOption={(s) => <>{s.supplier_code} {s.supplier_name}</>}
+                onSelect={(s) => updateLine(i, { supplier_code: s.supplier_code, supplier_name: s.supplier_name })}
+              />
+              {l.supplier_name && (
+                <div className="cell-sub" style={{ gridColumn: "1 / -1", marginTop: -6 }}>
+                  選択中の仕入先: {l.supplier_code} {l.supplier_name}
+                </div>
+              )}
               <Field label="備考">
                 <input value={l.note ?? ""} onChange={(e) => updateLine(i, { note: e.target.value })} style={inputStyle} />
+              </Field>
+              <Field label="発注備考">
+                <input value={l.purchase_note ?? ""} onChange={(e) => updateLine(i, { purchase_note: e.target.value })} style={inputStyle} />
               </Field>
               <Field label="手配コード *必須">
                 <select value={l.arrange_code} onChange={(e) => updateLine(i, { arrange_code: e.target.value })} style={inputStyle}>
@@ -520,22 +574,6 @@ export default function OrderCsvForm({
               </Field>
               <Field label="出荷日">
                 <input type="date" value={l.ship_date} onChange={(e) => updateLine(i, { ship_date: e.target.value })} style={inputStyle} />
-              </Field>
-              <SearchableCodeField<SupplierOption>
-                label="仕入先"
-                value={l.supplier_code ?? ""}
-                onChangeValue={(v) => updateLine(i, { supplier_code: v })}
-                searchUrl="/api/supplier-search"
-                renderOption={(s) => <>{s.supplier_code} {s.supplier_name}</>}
-                onSelect={(s) => updateLine(i, { supplier_code: s.supplier_code })}
-              />
-              <Field label="仕入単価">
-                <input
-                  type="number"
-                  value={l.cost_price ?? ""}
-                  onChange={(e) => updateLine(i, { cost_price: e.target.value === "" ? null : Number(e.target.value) })}
-                  style={inputStyle}
-                />
               </Field>
               <Field label="着日">
                 <input type="date" value={l.arrival_date} onChange={(e) => updateLine(i, { arrival_date: e.target.value })} style={inputStyle} />

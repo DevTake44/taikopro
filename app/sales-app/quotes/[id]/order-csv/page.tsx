@@ -63,6 +63,7 @@ export default async function QuoteOrderCsvPage({ params }: { params: { id: stri
     arrange_code: "",
     supplier_code: l.supplier_code,
     cost_price: l.cost_price,
+    purchase_note: "",
     department1: "",
     department2: "",
     ship_date: "",
