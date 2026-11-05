@@ -70,6 +70,11 @@ const TOOLS: ToolLink[] = [
     title: "集計・明細 対比",
     description: "売上ダッシュボード(集計)と売上ダッシュボード明細を、拠点別・月別に突き合わせて差を確認します。",
   },
+  {
+    href: "/dx/print-usage",
+    title: "複合機利用集計",
+    description: "複合機の部門ID別利用量Excelをアップロードし、部門(ユーザー)ごとの利用量一覧を表示します。",
+  },
 ];
 
 export default function DxMenuPage() {
