@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Papa from "papaparse";
 
 /**
  * 複合機(プリンタ)利用量集計
@@ -161,6 +162,51 @@ function csvEscape(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+// 複合機の利用者管理CSV(userData.csv、uid・cn(実名)・dept_id等の列を持つ)を文字コード
+// 自動判定でデコードする。UTF-8 BOM付きでなければShift-JIS(このCSVの既定の文字コード)
+// として読む。
+async function readCsvSmart(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return new TextDecoder("utf-8").decode(buf);
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    return new TextDecoder("shift_jis").decode(buf);
+  }
+}
+
+type NameMappingResult = {
+  mapping: Record<string, string>;
+  appliedCount: number;
+  conflictDeptIds: string[];
+};
+
+// userData.csvのdept_id列は "[0000011]" のように角括弧+ゼロ埋めで入っているため、
+// 括弧を外し数値として正規化してから突き合わせる(複合機側のExcelは素の数値)。
+function parseUserDataCsv(text: string): NameMappingResult {
+  const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
+  const byDept = new Map<string, Set<string>>();
+  for (const row of parsed.data) {
+    const deptRaw = (row["dept_id"] ?? "").trim().replace(/^\[0*|\]$/g, "");
+    const cn = (row["cn"] ?? "").trim();
+    if (!deptRaw || !/^\d+$/.test(deptRaw) || !cn) continue;
+    const deptId = String(Number(deptRaw));
+    if (!byDept.has(deptId)) byDept.set(deptId, new Set());
+    byDept.get(deptId)!.add(cn);
+  }
+
+  const mapping: Record<string, string> = {};
+  const conflictDeptIds: string[] = [];
+  for (const [deptId, names] of byDept) {
+    mapping[deptId] = Array.from(names)[0];
+    if (names.size > 1) conflictDeptIds.push(deptId);
+  }
+  return { mapping, appliedCount: byDept.size, conflictDeptIds };
+}
+
 export default function PrintUsageSummary() {
   const [fileState, setFileState] = useState<FileState>(initialFileState());
   const [rows, setRows] = useState<UsageRow[]>([]);
@@ -170,10 +216,32 @@ export default function PrintUsageSummary() {
   const [colorRate, setColorRate] = useState(7);
   const [monoRate, setMonoRate] = useState(0.7);
   const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
+  const [mappingState, setMappingState] = useState<{ fileName: string; loading: boolean; error: string | null; result: NameMappingResult | null }>({
+    fileName: "",
+    loading: false,
+    error: null,
+    result: null,
+  });
 
   useEffect(() => {
     setNameOverrides(loadNameOverrides());
   }, []);
+
+  async function handleMappingFile(f: File) {
+    setMappingState({ fileName: f.name, loading: true, error: null, result: null });
+    try {
+      const text = await readCsvSmart(f);
+      const result = parseUserDataCsv(text);
+      setNameOverrides((prev) => {
+        const next = { ...prev, ...result.mapping };
+        saveNameOverrides(next);
+        return next;
+      });
+      setMappingState({ fileName: f.name, loading: false, error: null, result });
+    } catch (e) {
+      setMappingState({ fileName: f.name, loading: false, error: e instanceof Error ? e.message : String(e), result: null });
+    }
+  }
 
   function updateNameOverride(deptId: string, value: string) {
     setNameOverrides((prev) => {
@@ -357,8 +425,45 @@ export default function PrintUsageSummary() {
           <p style={{ fontSize: 15, fontWeight: 700, padding: "0 20px 2px" }}>
             コスト小計: {fmtYen(totals.cost)}(表示中 {visibleRows.length.toLocaleString("ja-JP")}件 / 全{rows.length.toLocaleString("ja-JP")}件)
           </p>
+          <div style={{ margin: "0 20px 14px", padding: 12, border: "1px dashed var(--rk-direct)", borderRadius: 8 }}>
+            <div style={{ fontSize: 12.5, marginBottom: 6 }}>
+              ユーザー名が「*****」等でマスクされている場合、複合機の利用者管理CSV(userData.csv、uid・cn・dept_id列を持つもの)を取り込むと、部門IDに対応する実名を一括で当てられます。
+            </div>
+            <input
+              type="file"
+              accept=".csv"
+              disabled={mappingState.loading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleMappingFile(f);
+                e.target.value = "";
+              }}
+            />
+            {mappingState.fileName && (
+              <div style={{ marginTop: 6, fontSize: 12.5 }}>
+                {mappingState.loading && (
+                  <div style={{ color: "var(--rk-direct)" }}>
+                    <span className="spinner" />
+                    読み込み中…
+                  </div>
+                )}
+                {mappingState.error && <div style={{ color: "var(--rk-critical)" }}>{mappingState.error}</div>}
+                {mappingState.result && (
+                  <div style={{ color: "var(--rk-good)" }}>
+                    {mappingState.result.appliedCount.toLocaleString("ja-JP")}件の部門IDに実名を当てました。
+                    {mappingState.result.conflictDeptIds.length > 0 && (
+                      <span style={{ color: "var(--rk-warning)" }}>
+                        {" "}
+                        部門ID {mappingState.result.conflictDeptIds.join("・")} は同じ部門IDに複数の異なる実名が見つかったため、どれか1つを仮で当てています。下の表で確認・修正してください。
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <p className="cell-sub" style={{ padding: "0 20px 12px" }}>
-            ユーザー名が「*****」等でマスクされている場合は、クリックして実名を入力できます(この端末のブラウザに記憶され、次回も引き継がれます)。
+            ユーザー名はクリックして直接修正できます(この端末のブラウザに記憶され、次回も引き継がれます)。
           </p>
           <div className="matwrap">
             <table className="mat">
