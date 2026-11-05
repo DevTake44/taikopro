@@ -184,25 +184,55 @@ type NameMappingResult = {
   conflictDeptIds: string[];
 };
 
+// 末尾の「(hyasumi)」「（tada）」のような注記を外した「素の名前」で同一人物とみなす
+// (同じ人の複数アカウントで、cnにuid等の注記だけ付け足されているケースがあるため)。
+function baseName(cn: string): string {
+  return cn.replace(/[\s　]*[（(][^）)]*[）)]\s*$/, "").trim();
+}
+
 // userData.csvのdept_id列は "[0000011]" のように角括弧+ゼロ埋めで入っているため、
 // 括弧を外し数値として正規化してから突き合わせる(複合機側のExcelは素の数値)。
 function parseUserDataCsv(text: string): NameMappingResult {
   const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
-  const byDept = new Map<string, Set<string>>();
+  const byDept = new Map<string, { uid: string; cn: string }[]>();
   for (const row of parsed.data) {
     const deptRaw = (row["dept_id"] ?? "").trim().replace(/^\[0*|\]$/g, "");
+    const uid = (row["uid"] ?? "").trim();
     const cn = (row["cn"] ?? "").trim();
     if (!deptRaw || !/^\d+$/.test(deptRaw) || !cn) continue;
     const deptId = String(Number(deptRaw));
-    if (!byDept.has(deptId)) byDept.set(deptId, new Set());
-    byDept.get(deptId)!.add(cn);
+    if (!byDept.has(deptId)) byDept.set(deptId, []);
+    byDept.get(deptId)!.push({ uid, cn });
   }
 
   const mapping: Record<string, string> = {};
   const conflictDeptIds: string[] = [];
-  for (const [deptId, names] of byDept) {
-    mapping[deptId] = Array.from(names)[0];
-    if (names.size > 1) conflictDeptIds.push(deptId);
+  for (const [deptId, entries] of byDept) {
+    // cnが漢字・かなを含む行を優先する(例: uid=akitoの行はcn="odagiriakito"と
+    // ローマ字のuidをそのまま入れているだけで実名ではなく、別アカウントの
+    // cn="小田切"の方が実名のため、こちらを優先したい)。
+    const japaneseEntries = entries.filter((e) => /[぀-ヿ一-鿿]/.test(e.cn));
+    const nonEchoEntries = (japaneseEntries.length > 0 ? japaneseEntries : entries).filter(
+      (e) => e.cn.toLowerCase() !== e.uid.toLowerCase()
+    );
+    const candidates = nonEchoEntries.length > 0 ? nonEchoEntries : japaneseEntries.length > 0 ? japaneseEntries : entries;
+
+    // 注記違いの表記ゆれ(安見(hyasumi)・安見（tada）・安見)は同じ人として1つにまとめ、
+    // 代表値には注記の無い一番短い表記を選ぶ。
+    const byBase = new Map<string, string[]>();
+    for (const { cn } of candidates) {
+      const base = baseName(cn) || cn;
+      if (!byBase.has(base)) byBase.set(base, []);
+      byBase.get(base)!.push(cn);
+    }
+
+    const chosen = Array.from(byBase.entries()).map(([base, variants]) => {
+      const shortest = variants.reduce((a, b) => (b.length < a.length ? b : a));
+      return shortest === base ? base : variants.includes(base) ? base : shortest;
+    });
+
+    mapping[deptId] = chosen[0];
+    if (byBase.size > 1) conflictDeptIds.push(deptId);
   }
   return { mapping, appliedCount: byDept.size, conflictDeptIds };
 }
