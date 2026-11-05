@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 /**
@@ -9,8 +9,20 @@ import Link from "next/link";
  * 複合機の管理ツールから出力される「部門ID別利用量」のExcel(pdeptidシート、
  * 部門ID・ユーザー名・トータルプリント・カラー/白黒トータル・カラー/白黒の
  * コピー/スキャン/プリント内訳、の11列構成)をこの画面にアップロードすると、
- * その場で(サーバーに送らず、ブラウザ内だけで)読みやすい一覧表にする。
- * データはどこにも保存しない(今回アップロードした1回分だけを見る用途)。
+ * その場で(サーバーに送らず、ブラウザ内だけで)実際に使われている「集計表」の
+ * フォーマットに合わせて集計する。
+ *
+ * 集計表フォーマット(サンプルのExcelの「集計表」シートから確認):
+ * 部門ID・ユーザー名・カラートータル・白黒トータル・カラーコピー・カラープリント・
+ * 白黒コピー・白黒プリント・コスト(円)の9列。コストは
+ * カラートータル×カラー単価(既定7円) + 白黒トータル×白黒単価(既定0.7円) で、
+ * この値の多い順に並べる(サンプルの数値と完全一致することを確認済み)。
+ * トータルプリント・カラースキャン・白黒スキャンはこの集計表には含めない。
+ * 最終行は表示対象行の小計。
+ *
+ * ユーザー名は複合機側で「*****」のようにマスクされていることがあり、サンプルでは
+ * 手作業で実名に置き換えられていた。この画面でも部門IDごとに表示名を上書きできるようにし、
+ * ブラウザのlocalStorageに保存して次回アップロード時も引き継ぐ(サーバーには送らない)。
  */
 
 const EXPECTED_HEADERS = [
@@ -26,6 +38,8 @@ const EXPECTED_HEADERS = [
   "白黒スキャン",
   "白黒プリント",
 ];
+
+const NAME_OVERRIDE_STORAGE_KEY = "taikopro_print_usage_name_overrides";
 
 type UsageRow = {
   deptId: string;
@@ -65,6 +79,23 @@ function toStr(v: unknown): string {
   return String(v).trim();
 }
 
+function loadNameOverrides(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(NAME_OVERRIDE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveNameOverrides(overrides: Record<string, string>) {
+  try {
+    localStorage.setItem(NAME_OVERRIDE_STORAGE_KEY, JSON.stringify(overrides));
+  } catch {
+    // 保存できなくても集計自体には影響させない(プライベートブラウズ等)。
+  }
+}
+
 async function parseWorkbook(file: File): Promise<{ rows: UsageRow[]; warnings: string[] }> {
   // exceljsは動的import(このツールを開いた時だけ読み込む)。
   const ExcelJS = (await import("exceljs")).default;
@@ -73,12 +104,16 @@ async function parseWorkbook(file: File): Promise<{ rows: UsageRow[]; warnings: 
   await workbook.xlsx.load(buf);
   const warnings: string[] = [];
 
-  const sheet = workbook.worksheets[0];
+  // 複数シートの場合(サンプルのように「集計表」シートが付いていることがある)、
+  // 元データの列構成(pdeptid)に一致するシートを優先して探す。
+  const sheet =
+    workbook.worksheets.find((ws) => {
+      const headerCells = (ws.getRow(1).values as unknown[]).slice(1).map((v) => toStr(v));
+      return EXPECTED_HEADERS.every((h, i) => headerCells[i] === h);
+    }) ?? workbook.worksheets[0];
   if (!sheet) return { rows: [], warnings: ["シートが見つかりませんでした。"] };
 
-  const headerRow = sheet.getRow(1).values as unknown[];
-  // ExcelJSの行.valuesは先頭(index 0)が空になる1始まりの配列。
-  const headerCells = headerRow.slice(1).map((v) => toStr(v));
+  const headerCells = (sheet.getRow(1).values as unknown[]).slice(1).map((v) => toStr(v));
   const headerOk = EXPECTED_HEADERS.every((h, i) => headerCells[i] === h);
   if (!headerOk) {
     warnings.push(
@@ -114,7 +149,11 @@ async function parseWorkbook(file: File): Promise<{ rows: UsageRow[]; warnings: 
 }
 
 function fmt(n: number): string {
-  return n.toLocaleString("ja-JP");
+  return Math.round(n).toLocaleString("ja-JP");
+}
+
+function fmtYen(n: number): string {
+  return `¥${n.toLocaleString("ja-JP", { maximumFractionDigits: 1 })}`;
 }
 
 function csvEscape(v: unknown): string {
@@ -122,15 +161,33 @@ function csvEscape(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-type SortKey = "total" | "deptId";
-
 export default function PrintUsageSummary() {
   const [fileState, setFileState] = useState<FileState>(initialFileState());
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [showZero, setShowZero] = useState(false);
-  const [sortKey, setSortKey] = useState<SortKey>("total");
+  const [colorRate, setColorRate] = useState(7);
+  const [monoRate, setMonoRate] = useState(0.7);
+  const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setNameOverrides(loadNameOverrides());
+  }, []);
+
+  function updateNameOverride(deptId: string, value: string) {
+    setNameOverrides((prev) => {
+      const next = { ...prev };
+      if (value.trim()) next[deptId] = value;
+      else delete next[deptId];
+      saveNameOverrides(next);
+      return next;
+    });
+  }
+
+  function displayName(r: UsageRow): string {
+    return nameOverrides[r.deptId] ?? r.userName;
+  }
 
   async function handleFile(f: File) {
     setFileState({ fileName: f.name, loading: true, error: null });
@@ -146,46 +203,49 @@ export default function PrintUsageSummary() {
     }
   }
 
-  // ユーザー名が無く利用量もすべて0の行は、使われていない部門IDの空き枠に過ぎないため
-  // 既定では隠す(チェックボックスで表示に切り替え可能)。
+  function cost(r: UsageRow): number {
+    return r.colorTotal * colorRate + r.monoTotal * monoRate;
+  }
+
+  // ユーザー名(表示名)が無く利用量もすべて0の行は、使われていない部門IDの空き枠に
+  // 過ぎないため既定では隠す(チェックボックスで表示に切り替え可能)。
   const visibleRows = useMemo(() => {
-    const filtered = rows.filter((r) => showZero || r.userName || r.totalPrint > 0);
-    const sorted = [...filtered].sort((a, b) =>
-      sortKey === "total" ? b.totalPrint - a.totalPrint : Number(a.deptId) - Number(b.deptId)
-    );
-    return sorted;
-  }, [rows, showZero, sortKey]);
+    const filtered = rows.filter((r) => showZero || displayName(r) || r.totalPrint > 0);
+    return [...filtered].sort((a, b) => cost(b) - cost(a));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, showZero, nameOverrides, colorRate, monoRate]);
 
   const totals = useMemo(() => {
-    const t = {
-      totalPrint: 0, colorTotal: 0, monoTotal: 0, colorCopy: 0, colorScan: 0,
-      colorPrint: 0, monoCopy: 0, monoScan: 0, monoPrint: 0,
-    };
+    const t = { colorTotal: 0, monoTotal: 0, colorCopy: 0, colorPrint: 0, monoCopy: 0, monoPrint: 0, cost: 0 };
     for (const r of visibleRows) {
-      t.totalPrint += r.totalPrint;
       t.colorTotal += r.colorTotal;
       t.monoTotal += r.monoTotal;
       t.colorCopy += r.colorCopy;
-      t.colorScan += r.colorScan;
       t.colorPrint += r.colorPrint;
       t.monoCopy += r.monoCopy;
-      t.monoScan += r.monoScan;
       t.monoPrint += r.monoPrint;
+      t.cost += cost(r);
     }
     return t;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleRows]);
 
   function downloadCsv() {
     if (visibleRows.length === 0) return;
-    const header = ["部門ID", "ユーザー名", ...EXPECTED_HEADERS.slice(2)];
+    const header = ["部門ID", "ユーザー名", "カラートータル", "白黒トータル", "カラーコピー", "カラープリント", "白黒コピー", "白黒プリント", "コスト(円)"];
     const lines = [header.map(csvEscape).join(",")];
     visibleRows.forEach((r) => {
       lines.push(
-        [r.deptId, r.userName, r.totalPrint, r.colorTotal, r.monoTotal, r.colorCopy, r.colorScan, r.colorPrint, r.monoCopy, r.monoScan, r.monoPrint]
+        [r.deptId, displayName(r), r.colorTotal, r.monoTotal, r.colorCopy, r.colorPrint, r.monoCopy, r.monoPrint, Math.round(cost(r) * 10) / 10]
           .map(csvEscape)
           .join(",")
       );
     });
+    lines.push(
+      ["", "小計", totals.colorTotal, totals.monoTotal, totals.colorCopy, totals.colorPrint, totals.monoCopy, totals.monoPrint, Math.round(totals.cost * 10) / 10]
+        .map(csvEscape)
+        .join(",")
+    );
     const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -201,7 +261,7 @@ export default function PrintUsageSummary() {
         <div>
           <h1>複合機利用集計</h1>
           <p className="subtitle">
-            複合機の部門ID別利用量Excel(pdeptidシート)をアップロードすると、その場で(サーバーに送らず)部門(ユーザー)ごとの利用量一覧を表示します。データはどこにも保存しません。
+            複合機の部門ID別利用量Excel(pdeptidシート)をアップロードすると、その場で(サーバーに送らず)集計表(部門ID・ユーザー名・カラー/白黒トータル・コピー/プリント内訳・コスト)を作成します。データはどこにも保存しません(ユーザー名の表示名だけ、この端末のブラウザに記憶します)。
           </p>
         </div>
         <Link href="/dx" className="ghost-btn" style={{ textDecoration: "none" }}>
@@ -263,25 +323,42 @@ export default function PrintUsageSummary() {
       {rows.length > 0 && (
         <div className="card">
           <div className="card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <h2>部門(ユーザー)別利用量</h2>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5 }}>
+            <h2>集計表(コストの多い順)</h2>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, flexWrap: "wrap" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                カラー単価
+                <input
+                  type="number"
+                  value={colorRate}
+                  onChange={(e) => setColorRate(Number(e.target.value) || 0)}
+                  style={{ width: 50, padding: "2px 4px" }}
+                />
+                円
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                白黒単価
+                <input
+                  type="number"
+                  value={monoRate}
+                  onChange={(e) => setMonoRate(Number(e.target.value) || 0)}
+                  style={{ width: 50, padding: "2px 4px" }}
+                />
+                円
+              </label>
               <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
                 <input type="checkbox" checked={showZero} onChange={(e) => setShowZero(e.target.checked)} />
                 利用0件の部門も表示
               </label>
-              <button
-                className="ghost-btn"
-                onClick={() => setSortKey((k) => (k === "total" ? "deptId" : "total"))}
-              >
-                並び順: {sortKey === "total" ? "トータルプリント順" : "部門ID順"}
-              </button>
               <button className="ghost-btn" onClick={downloadCsv}>
                 CSVダウンロード
               </button>
             </div>
           </div>
           <p style={{ fontSize: 15, fontWeight: 700, padding: "0 20px 2px" }}>
-            トータルプリント合計: {fmt(totals.totalPrint)}枚(表示中 {visibleRows.length.toLocaleString("ja-JP")}件 / 全{rows.length.toLocaleString("ja-JP")}件)
+            コスト小計: {fmtYen(totals.cost)}(表示中 {visibleRows.length.toLocaleString("ja-JP")}件 / 全{rows.length.toLocaleString("ja-JP")}件)
+          </p>
+          <p className="cell-sub" style={{ padding: "0 20px 12px" }}>
+            ユーザー名が「*****」等でマスクされている場合は、クリックして実名を入力できます(この端末のブラウザに記憶され、次回も引き継がれます)。
           </p>
           <div className="matwrap">
             <table className="mat">
@@ -289,45 +366,46 @@ export default function PrintUsageSummary() {
                 <tr>
                   <th className="codecol">部門ID</th>
                   <th className="namecol">ユーザー名</th>
-                  <th>トータル</th>
                   <th>カラー計</th>
                   <th>白黒計</th>
                   <th>カラーコピー</th>
-                  <th>カラースキャン</th>
                   <th>カラープリント</th>
                   <th>白黒コピー</th>
-                  <th>白黒スキャン</th>
                   <th>白黒プリント</th>
+                  <th>コスト</th>
                 </tr>
               </thead>
               <tbody>
-                <tr style={{ fontWeight: 700, background: "#f5f7fb" }}>
-                  <td className="codecol" colSpan={2}>合計</td>
-                  <td><span className="cell-s">{fmt(totals.totalPrint)}</span></td>
-                  <td><span className="cell-s">{fmt(totals.colorTotal)}</span></td>
-                  <td><span className="cell-s">{fmt(totals.monoTotal)}</span></td>
-                  <td><span className="cell-s">{fmt(totals.colorCopy)}</span></td>
-                  <td><span className="cell-s">{fmt(totals.colorScan)}</span></td>
-                  <td><span className="cell-s">{fmt(totals.colorPrint)}</span></td>
-                  <td><span className="cell-s">{fmt(totals.monoCopy)}</span></td>
-                  <td><span className="cell-s">{fmt(totals.monoScan)}</span></td>
-                  <td><span className="cell-s">{fmt(totals.monoPrint)}</span></td>
-                </tr>
                 {visibleRows.map((r) => (
                   <tr key={r.deptId}>
                     <td className="codecol">{r.deptId}</td>
-                    <td className="namecol">{r.userName || "(未設定)"}</td>
-                    <td><span className="cell-s">{fmt(r.totalPrint)}</span></td>
+                    <td className="namecol">
+                      <input
+                        value={nameOverrides[r.deptId] ?? r.userName}
+                        onChange={(e) => updateNameOverride(r.deptId, e.target.value)}
+                        placeholder={r.userName || "(未設定)"}
+                        style={{ width: "100%", border: "none", background: "transparent", font: "inherit", padding: "2px 0" }}
+                      />
+                    </td>
                     <td><span className="cell-s">{fmt(r.colorTotal)}</span></td>
                     <td><span className="cell-s">{fmt(r.monoTotal)}</span></td>
                     <td><span className="cell-s">{fmt(r.colorCopy)}</span></td>
-                    <td><span className="cell-s">{fmt(r.colorScan)}</span></td>
                     <td><span className="cell-s">{fmt(r.colorPrint)}</span></td>
                     <td><span className="cell-s">{fmt(r.monoCopy)}</span></td>
-                    <td><span className="cell-s">{fmt(r.monoScan)}</span></td>
                     <td><span className="cell-s">{fmt(r.monoPrint)}</span></td>
+                    <td><span className="cell-s">{fmtYen(cost(r))}</span></td>
                   </tr>
                 ))}
+                <tr style={{ fontWeight: 700, background: "#f5f7fb" }}>
+                  <td className="codecol" colSpan={2}>小計</td>
+                  <td><span className="cell-s">{fmt(totals.colorTotal)}</span></td>
+                  <td><span className="cell-s">{fmt(totals.monoTotal)}</span></td>
+                  <td><span className="cell-s">{fmt(totals.colorCopy)}</span></td>
+                  <td><span className="cell-s">{fmt(totals.colorPrint)}</span></td>
+                  <td><span className="cell-s">{fmt(totals.monoCopy)}</span></td>
+                  <td><span className="cell-s">{fmt(totals.monoPrint)}</span></td>
+                  <td><span className="cell-s">{fmtYen(totals.cost)}</span></td>
+                </tr>
               </tbody>
             </table>
           </div>
