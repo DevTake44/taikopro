@@ -516,6 +516,13 @@ export default function OrderCsvForm({
         </div>
       )}
 
+      {/* 実際の受注入力画面のヘッダー(行No./取引/区分/コード/品名/仕様/倉庫/バラ数/単位/単価/
+          備考/手配コード/出荷場所/出荷日 ・ 2段目=仕入先/申請理由/申請番号/上代/入数/在庫/
+          総数量/原価/発注備考/着日/着日指定/時間帯指定)と列位置を合わせている。
+          倉庫・バラ数(総数量)・在庫・上代・入数・申請理由・申請番号は参照しない項目のため
+          省略し、区分+コードの位置に品目コード、その下に仕入先を置く。配送方法だけは
+          実画面の12列に無い項目(受注CSVの新レイアウトでのみ必須)のため、全行共通の
+          列として右端に別途追加している。 */}
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, marginBottom: 16 }}>
         <thead>
           <tr style={{ background: "#f6f8fb" }}>
@@ -530,18 +537,19 @@ export default function OrderCsvForm({
             <th style={th}>手配コード</th>
             <th style={th}>出荷場所</th>
             <th style={th}>出荷日</th>
+            <th style={th} rowSpan={2}>配送方法</th>
             <th style={th} rowSpan={2}></th>
           </tr>
           <tr style={{ background: "#f6f8fb" }}>
             <th style={th} colSpan={2}>仕入先</th>
             <th style={th}>部門1/部門2</th>
+            <th style={thSub}></th>
+            <th style={thSub}></th>
+            <th style={th}>仕入単価(原価)</th>
             <th style={th}>発注備考</th>
-            <th style={thSub}></th>
-            <th style={th}>仕入単価</th>
-            <th style={thSub}></th>
-            <th style={th}>配送方法</th>
-            <th style={th}>着日指定/時間帯</th>
             <th style={th}>着日</th>
+            <th style={th}>着日指定</th>
+            <th style={th}>時間帯指定</th>
           </tr>
         </thead>
         <tbody>
@@ -588,6 +596,13 @@ export default function OrderCsvForm({
                 <td style={{ ...td, width: 130 }}>
                   <input type="date" value={l.ship_date} onChange={(e) => updateLine(i, { ship_date: e.target.value })} style={denseInput} />
                 </td>
+                <td style={{ ...td, width: 90 }} rowSpan={2}>
+                  <select value={l.delivery_method} onChange={(e) => updateLine(i, { delivery_method: e.target.value })} style={selStyle}>
+                    {DELIVERY_METHOD_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </td>
                 <td style={td} rowSpan={2}>
                   <button type="button" className="btn-danger" onClick={() => removeLine(i)} disabled={lines.length <= 1} style={{ fontSize: 11, padding: "2px 6px" }}>
                     削除
@@ -610,9 +625,7 @@ export default function OrderCsvForm({
                     <input value={l.department2} onChange={(e) => updateLine(i, { department2: e.target.value })} style={{ ...denseInput, width: "50%" }} placeholder="部門2" />
                   </div>
                 </td>
-                <td style={td}>
-                  <input value={l.purchase_note ?? ""} onChange={(e) => updateLine(i, { purchase_note: e.target.value })} style={denseInput} />
-                </td>
+                <td style={td}></td>
                 <td style={td}></td>
                 <td style={td}>
                   <input
@@ -622,30 +635,25 @@ export default function OrderCsvForm({
                     style={denseInput}
                   />
                 </td>
-                <td style={td}></td>
                 <td style={td}>
-                  <select value={l.delivery_method} onChange={(e) => updateLine(i, { delivery_method: e.target.value })} style={selStyle}>
-                    {DELIVERY_METHOD_OPTIONS.map((o) => (
+                  <input value={l.purchase_note ?? ""} onChange={(e) => updateLine(i, { purchase_note: e.target.value })} style={denseInput} />
+                </td>
+                <td style={td}>
+                  <input type="date" value={l.arrival_date} onChange={(e) => updateLine(i, { arrival_date: e.target.value })} style={denseInput} />
+                </td>
+                <td style={td}>
+                  <select value={l.arrival_spec} onChange={(e) => updateLine(i, { arrival_spec: e.target.value })} style={selStyle}>
+                    {ARRIVAL_SPEC_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
                 </td>
                 <td style={td}>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    <select value={l.arrival_spec} onChange={(e) => updateLine(i, { arrival_spec: e.target.value })} style={{ ...selStyle, width: "50%" }}>
-                      {ARRIVAL_SPEC_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                    <select value={l.time_spec} onChange={(e) => updateLine(i, { time_spec: e.target.value })} style={{ ...selStyle, width: "50%" }}>
-                      {TIME_SPEC_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </td>
-                <td style={td}>
-                  <input type="date" value={l.arrival_date} onChange={(e) => updateLine(i, { arrival_date: e.target.value })} style={denseInput} />
+                  <select value={l.time_spec} onChange={(e) => updateLine(i, { time_spec: e.target.value })} style={selStyle}>
+                    {TIME_SPEC_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
                 </td>
               </tr>
             </Fragment>
