@@ -23,7 +23,8 @@ import Papa from "papaparse";
  *
  * ユーザー名は複合機側で「*****」のようにマスクされていることがあり、サンプルでは
  * 手作業で実名に置き換えられていた。この画面でも部門IDごとに表示名を上書きできるようにし、
- * ブラウザのlocalStorageに保存して次回アップロード時も引き継ぐ(サーバーには送らない)。
+ * print_dept_names テーブル(dept_id・display_name)に保存する。全員で共有され、
+ * 誰がどの端末で開いても同じ表示名になる。
  */
 
 const EXPECTED_HEADERS = [
@@ -39,8 +40,6 @@ const EXPECTED_HEADERS = [
   "白黒スキャン",
   "白黒プリント",
 ];
-
-const NAME_OVERRIDE_STORAGE_KEY = "taikopro_print_usage_name_overrides";
 
 type UsageRow = {
   deptId: string;
@@ -80,21 +79,35 @@ function toStr(v: unknown): string {
   return String(v).trim();
 }
 
-function loadNameOverrides(): Record<string, string> {
+async function loadNameOverrides(): Promise<Record<string, string>> {
   try {
-    const raw = localStorage.getItem(NAME_OVERRIDE_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const res = await fetch("/api/print-dept-names");
+    if (!res.ok) return {};
+    const data = await res.json();
+    return data.mapping ?? {};
   } catch {
     return {};
   }
 }
 
-function saveNameOverrides(overrides: Record<string, string>) {
+async function saveNameOverride(deptId: string, displayName: string) {
   try {
-    localStorage.setItem(NAME_OVERRIDE_STORAGE_KEY, JSON.stringify(overrides));
+    await fetch("/api/print-dept-names", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dept_id: deptId, display_name: displayName }),
+    });
   } catch {
-    // 保存できなくても集計自体には影響させない(プライベートブラウズ等)。
+    // 保存に失敗しても画面上の表示は変えたままにする(通信断など)。
   }
+}
+
+async function saveNameOverridesBulk(mapping: Record<string, string>) {
+  await fetch("/api/print-dept-names", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mapping }),
+  });
 }
 
 async function parseWorkbook(file: File): Promise<{ rows: UsageRow[]; warnings: string[] }> {
@@ -254,7 +267,7 @@ export default function PrintUsageSummary() {
   });
 
   useEffect(() => {
-    setNameOverrides(loadNameOverrides());
+    loadNameOverrides().then(setNameOverrides);
   }, []);
 
   async function handleMappingFile(f: File) {
@@ -262,25 +275,27 @@ export default function PrintUsageSummary() {
     try {
       const text = await readCsvSmart(f);
       const result = parseUserDataCsv(text);
-      setNameOverrides((prev) => {
-        const next = { ...prev, ...result.mapping };
-        saveNameOverrides(next);
-        return next;
-      });
+      await saveNameOverridesBulk(result.mapping);
+      setNameOverrides((prev) => ({ ...prev, ...result.mapping }));
       setMappingState({ fileName: f.name, loading: false, error: null, result });
     } catch (e) {
       setMappingState({ fileName: f.name, loading: false, error: e instanceof Error ? e.message : String(e), result: null });
     }
   }
 
+  // 入力中は画面表示だけ更新し、キー入力ごとの通信は行わない。
+  // 実際の保存(DB反映)はフォーカスが外れたタイミング(onBlur)でまとめて行う。
   function updateNameOverride(deptId: string, value: string) {
     setNameOverrides((prev) => {
       const next = { ...prev };
       if (value.trim()) next[deptId] = value;
       else delete next[deptId];
-      saveNameOverrides(next);
       return next;
     });
+  }
+
+  function commitNameOverride(deptId: string, value: string) {
+    saveNameOverride(deptId, value);
   }
 
   function displayName(r: UsageRow): string {
@@ -359,7 +374,7 @@ export default function PrintUsageSummary() {
         <div>
           <h1>複合機利用集計</h1>
           <p className="subtitle">
-            複合機の部門ID別利用量Excel(pdeptidシート)をアップロードすると、その場で(サーバーに送らず)集計表(部門ID・ユーザー名・カラー/白黒トータル・コピー/プリント内訳・コスト)を作成します。データはどこにも保存しません(ユーザー名の表示名だけ、この端末のブラウザに記憶します)。
+            複合機の部門ID別利用量Excel(pdeptidシート)をアップロードすると、その場で(サーバーに送らず)集計表(部門ID・ユーザー名・カラー/白黒トータル・コピー/プリント内訳・コスト)を作成します。利用量データ自体はどこにも保存しませんが、部門IDの表示名(実名)は共有のデータベースに保存され、次回以降は誰が開いても同じ表示名になります。
           </p>
         </div>
         <Link href="/dx" className="ghost-btn" style={{ textDecoration: "none" }}>
@@ -493,7 +508,7 @@ export default function PrintUsageSummary() {
             )}
           </div>
           <p className="cell-sub" style={{ padding: "0 20px 12px" }}>
-            ユーザー名はクリックして直接修正できます(この端末のブラウザに記憶され、次回も引き継がれます)。
+            ユーザー名はクリックして直接修正できます(共有のデータベースに保存され、次回以降は誰が開いても同じ表示名になります)。
           </p>
           <div className="matwrap">
             <table className="mat">
@@ -518,6 +533,7 @@ export default function PrintUsageSummary() {
                       <input
                         value={nameOverrides[r.deptId] ?? r.userName}
                         onChange={(e) => updateNameOverride(r.deptId, e.target.value)}
+                        onBlur={(e) => commitNameOverride(r.deptId, e.target.value)}
                         placeholder={r.userName || "(未設定)"}
                         style={{ width: "100%", border: "none", background: "transparent", font: "inherit", padding: "2px 0" }}
                       />
