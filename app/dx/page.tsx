@@ -23,7 +23,7 @@ const TOOLS: ToolLink[] = [
   {
     href: "/dx/order-supplier-summary",
     title: "受注 仕入先別発注金額",
-    description: "受注出力CSVから、仕入先ごとの発注金額(受注総数量×原価)を多い順に集計します(手配区分が空白・在庫の行は対象外)。",
+    description: "受注出力CSVから、仕入先ごとの発注金額(受注総数量×原価)を多い順に集計します(手配区分が空白・在庫の行は対象外)。朝の在庫CSVも読み込めば、内訳に在庫数を並べて確認できます。",
   },
   {
     href: "/dx/receivables-report",
@@ -69,6 +69,11 @@ const TOOLS: ToolLink[] = [
     href: "/dx/detail-check",
     title: "集計・明細 対比",
     description: "売上ダッシュボード(集計)と売上ダッシュボード明細を、拠点別・月別に突き合わせて差を確認します。",
+  },
+  {
+    href: "/dx/print-usage",
+    title: "複合機利用集計",
+    description: "複合機の部門ID別利用量Excelをアップロードし、部門(ユーザー)ごとの利用量一覧を表示します。",
   },
 ];
 
