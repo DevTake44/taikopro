@@ -15,6 +15,12 @@ import Link from "next/link";
  * 列49(0始まり、Excel AX列)の手配区分が空白または「在庫」の行は対象外とし、
  * 残りの行だけ 列34(受注総数量)×列53(原価) を仕入先コード(列50、AY列)ごとに合計する。
  * 仕入先名は列51(AZ列)から拾う。結果は発注金額の多い順に並べる。
+ *
+ * 2026-11-16追加: 「朝の在庫CSV」(仕入先コード・仕入先名上段/下段・品番・品名・仕様・
+ * 朝の在庫数、の7列)を追加でアップロードできるようにし、品番で突き合わせて、仕入先の
+ * 内訳(受注番号ごとの商品一覧)に「在庫数」列を加える。拠点(鳴尾・土浦等)ごとに
+ * ファイルが分かれているが、ファイル側に拠点列が無いため区別せず、複数ファイルを
+ * アップロードした場合は品番ごとに合算する(会社全体の在庫数として見たいため)。
  */
 
 const MIN_COLS = 54;
@@ -41,6 +47,12 @@ type OrderLine = {
   productCode: string;
   productName: string;
   amount: number;
+};
+
+// 朝の在庫CSV1件分の読み込み状況(ファイル名・件数)。
+type StockFileInfo = {
+  fileName: string;
+  rowCount: number;
 };
 
 type FileState = {
@@ -148,6 +160,28 @@ function parseOrderCsv(text: string): { rows: SupplierRow[]; lines: OrderLine[];
   return { rows, lines, warnings };
 }
 
+// 朝の在庫CSV(仕入先コード,仕入先名上段,仕入先名下段,品番,品名,仕様,朝の在庫数)を読み込み、
+// 品番→在庫数のMapを作る。同じ品番が複数行にあれば合算する。
+function parseStockCsv(text: string): { stockByProduct: Map<string, number>; rowCount: number; warnings: string[] } {
+  const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true });
+  const warnings: string[] = [];
+  const header = parsed.meta.fields ?? [];
+  if (!header.includes("品番") || !header.includes("朝の在庫数")) {
+    warnings.push("1行目の見出しに「品番」「朝の在庫数」が見つかりません。朝の在庫CSVで間違いないか確認してください。");
+  }
+
+  const stockByProduct = new Map<string, number>();
+  let rowCount = 0;
+  for (const row of parsed.data) {
+    const productCode = (row["品番"] ?? "").trim();
+    if (!productCode) continue;
+    const qty = toNum(row["朝の在庫数"]);
+    stockByProduct.set(productCode, (stockByProduct.get(productCode) ?? 0) + qty);
+    rowCount++;
+  }
+  return { stockByProduct, rowCount, warnings };
+}
+
 type OrderGroup = { orderNo: string; amount: number; lines: OrderLine[] };
 
 // 仕入先1件分の明細を、受注番号単位(発注金額の多い順)にまとめる。
@@ -177,6 +211,11 @@ export default function OrderSupplierSummary() {
   const [isDragging, setIsDragging] = useState(false);
   const [openSupplier, setOpenSupplier] = useState<string | null>(null);
 
+  const [stockFiles, setStockFiles] = useState<StockFileInfo[]>([]);
+  const [stockByProduct, setStockByProduct] = useState<Map<string, number>>(new Map());
+  const [stockWarnings, setStockWarnings] = useState<string[]>([]);
+  const [isStockDragging, setIsStockDragging] = useState(false);
+
   async function handleFile(f: File) {
     setFileState({ fileName: f.name, loading: true, error: null });
     setRows([]);
@@ -193,6 +232,38 @@ export default function OrderSupplierSummary() {
     } catch (e) {
       setFileState({ fileName: f.name, loading: false, error: String(e) });
     }
+  }
+
+  // 朝の在庫CSV(複数可・拠点ごとにファイルが分かれている想定)を1件ずつ読み込み、
+  // 品番ごとの在庫数に加算していく(ファイルを増やすたびに積み上がる。やり直したい場合は
+  // 「在庫データをクリア」でリセットしてから入れ直す)。
+  async function handleStockFiles(files: FileList) {
+    const newWarnings: string[] = [];
+    let nextMap = stockByProduct;
+    const newFileInfos: StockFileInfo[] = [];
+    for (const f of Array.from(files)) {
+      try {
+        const text = await readFileSmart(f);
+        const { stockByProduct: parsed, rowCount, warnings: parsedWarnings } = parseStockCsv(text);
+        nextMap = new Map(nextMap);
+        for (const [code, qty] of parsed) {
+          nextMap.set(code, (nextMap.get(code) ?? 0) + qty);
+        }
+        newFileInfos.push({ fileName: f.name, rowCount });
+        newWarnings.push(...parsedWarnings.map((w) => `${f.name}: ${w}`));
+      } catch (e) {
+        newWarnings.push(`${f.name}: 読み込みに失敗しました(${String(e)})`);
+      }
+    }
+    setStockByProduct(nextMap);
+    setStockFiles((prev) => [...prev, ...newFileInfos]);
+    setStockWarnings(newWarnings);
+  }
+
+  function clearStock() {
+    setStockByProduct(new Map());
+    setStockFiles([]);
+    setStockWarnings([]);
   }
 
   const total = useMemo(() => rows.reduce((s, r) => s + r.amount, 0), [rows]);
@@ -281,6 +352,55 @@ export default function OrderSupplierSummary() {
         )}
       </div>
 
+      <div
+        className="card"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsStockDragging(true);
+        }}
+        onDragLeave={() => setIsStockDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsStockDragging(false);
+          if (e.dataTransfer.files.length > 0) handleStockFiles(e.dataTransfer.files);
+        }}
+        style={{ marginBottom: 20, ...(isStockDragging ? { outline: "2px dashed var(--rk-direct)", outlineOffset: -2 } : {}) }}
+      >
+        <h2 style={{ marginTop: 0, fontSize: 16 }}>朝の在庫CSV(任意・複数可)</h2>
+        <p className="cell-sub" style={{ margin: "0 0 8px" }}>
+          仕入先コード・仕入先名・品番・品名・仕様・朝の在庫数の列を持つCSVです。拠点(鳴尾・土浦など)ごとに分かれていても、まとめてドラッグ&ドロップまたは選択すれば品番ごとに合算します。読み込むと、下の内訳一覧に「在庫数」列が表示されます。
+        </p>
+        <input
+          type="file"
+          accept=".csv"
+          multiple
+          onChange={(e) => {
+            if (e.target.files && e.target.files.length > 0) handleStockFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        {stockFiles.length > 0 && (
+          <div style={{ marginTop: 10, fontSize: 12.5 }}>
+            {stockFiles.map((s, i) => (
+              <div key={i}>
+                ファイル: {s.fileName}(品番{s.rowCount.toLocaleString("ja-JP")}件)
+              </div>
+            ))}
+            <div style={{ color: "var(--rk-good)" }}>
+              合計{stockByProduct.size.toLocaleString("ja-JP")}品番の在庫数を読み込みました。
+            </div>
+            <button className="ghost-btn" style={{ marginTop: 6 }} onClick={clearStock}>
+              在庫データをクリア
+            </button>
+          </div>
+        )}
+        {stockWarnings.map((w, i) => (
+          <div key={i} style={{ color: "var(--rk-warning)", fontSize: 12.5, marginTop: 6 }}>
+            {w}
+          </div>
+        ))}
+      </div>
+
       {rows.length > 0 && (
         <div className="card">
           <div className="card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -344,16 +464,25 @@ export default function OrderSupplierSummary() {
                                     <th className="codecol">品番</th>
                                     <th className="namecol">品名</th>
                                     <th>金額</th>
+                                    {stockByProduct.size > 0 && <th title="朝の在庫CSVとの突き合わせ結果">在庫数</th>}
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {g.lines.map((l, i) => (
-                                    <tr key={i}>
-                                      <td className="codecol">{l.productCode || "―"}</td>
-                                      <td className="namecol">{l.productName || "―"}</td>
-                                      <td><span className="cell-s">{fmtYen(l.amount)}</span></td>
-                                    </tr>
-                                  ))}
+                                  {g.lines.map((l, i) => {
+                                    const stockQty = l.productCode ? stockByProduct.get(l.productCode) : undefined;
+                                    return (
+                                      <tr key={i}>
+                                        <td className="codecol">{l.productCode || "―"}</td>
+                                        <td className="namecol">{l.productName || "―"}</td>
+                                        <td><span className="cell-s">{fmtYen(l.amount)}</span></td>
+                                        {stockByProduct.size > 0 && (
+                                          <td>
+                                            <span className="cell-s">{stockQty !== undefined ? stockQty.toLocaleString("ja-JP") : "―"}</span>
+                                          </td>
+                                        )}
+                                      </tr>
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </div>

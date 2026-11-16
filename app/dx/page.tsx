@@ -23,7 +23,7 @@ const TOOLS: ToolLink[] = [
   {
     href: "/dx/order-supplier-summary",
     title: "受注 仕入先別発注金額",
-    description: "受注出力CSVから、仕入先ごとの発注金額(受注総数量×原価)を多い順に集計します(手配区分が空白・在庫の行は対象外)。",
+    description: "受注出力CSVから、仕入先ごとの発注金額(受注総数量×原価)を多い順に集計します(手配区分が空白・在庫の行は対象外)。朝の在庫CSVも読み込めば、内訳に在庫数を並べて確認できます。",
   },
   {
     href: "/dx/receivables-report",
