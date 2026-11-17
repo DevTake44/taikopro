@@ -18,9 +18,12 @@ import Link from "next/link";
  *
  * 2026-11-16追加: 「朝の在庫CSV」(仕入先コード・仕入先名上段/下段・品番・品名・仕様・
  * 朝の在庫数、の7列)を追加でアップロードできるようにし、品番で突き合わせて、仕入先の
- * 内訳(受注番号ごとの商品一覧)に「在庫数」列を加える。拠点(鳴尾・土浦等)ごとに
- * ファイルが分かれているが、ファイル側に拠点列が無いため区別せず、複数ファイルを
- * アップロードした場合は品番ごとに合算する(会社全体の在庫数として見たいため)。
+ * 内訳(受注番号ごとの商品一覧)に「在庫数」列を加える。在庫CSV自体には拠点列が無いため、
+ * 鳴尾(90)・土浦(91)の2つの枠に分けて読み込み、内訳の在庫数はその合計を表示する。
+ *
+ * 2026-11-17追加: 営業所コードを指定して、その営業所の注文明細を「在庫照合CSV」として
+ * 出力する(発注金額・鳴尾/土浦在庫・在庫合計・差引(在庫合計-発注数)・判定・
+ * 直近3か月の全拠点売上数)。売上数はサーバー(/api/recent-sales-qty)から取得する。
  */
 
 const MIN_COLS = 54;
@@ -32,6 +35,11 @@ const QTY_COL = 34; // AI列: 受注総数量
 const COST_COL = 53; // BB列: 原価
 const SUPPLIER_CODE_COL = 50; // AY列: 仕入先コード
 const SUPPLIER_NAME_COL = 51; // AZ列: 仕入先名1
+const LINE_NO_COL = 12; // 受注行番号
+const ORDER_DATE_COL = 21; // 受注年月日
+const BRANCH_COL = 23; // 営業所コード
+const SPEC_COL = 30; // 仕様
+const UNIT_COL = 38; // 単位名
 
 type SupplierRow = {
   code: string;
@@ -47,12 +55,28 @@ type OrderLine = {
   productCode: string;
   productName: string;
   amount: number;
+  branchCode: string;
+  lineNo: string;
+  orderDate: string;
+  spec: string;
+  unit: string;
+  supplierName: string;
+  cost: number;
+  qty: number;
 };
 
-// 朝の在庫CSV1件分の読み込み状況(ファイル名・件数)。
-type StockFileInfo = {
+type StockSlotKey = "naruo" | "tsuchiura";
+const STOCK_SLOTS: { key: StockSlotKey; label: string }[] = [
+  { key: "naruo", label: "鳴尾(90)" },
+  { key: "tsuchiura", label: "土浦(91)" },
+];
+
+// 在庫CSV1件分(拠点1つ分)の読み込み結果。
+type StockSlot = {
   fileName: string;
   rowCount: number;
+  stockByProduct: Map<string, number>;
+  warnings: string[];
 };
 
 type FileState = {
@@ -82,6 +106,11 @@ async function readFileSmart(file: File): Promise<string> {
 // 相当の処理)。
 function cleanHandType(v: string | undefined): string {
   return (v ?? "").replace(/[　 ]/g, "").trim();
+}
+
+// 固定長出力の全角スペース埋めを除く(語中の全角スペースは半角1つにする)。
+function cleanText(v: string | undefined): string {
+  return (v ?? "").replace(/\u3000/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function toNum(s: string | undefined): number {
@@ -148,8 +177,16 @@ function parseOrderCsv(text: string): { rows: SupplierRow[]; lines: OrderLine[];
       supplierCode: code,
       orderNo: (cols[ORDER_NO_COL] || "").trim(),
       productCode: (cols[PRODUCT_CODE_COL] || "").trim(),
-      productName: (cols[PRODUCT_NAME_COL] || "").trim(),
+      productName: cleanText(cols[PRODUCT_NAME_COL]),
       amount,
+      branchCode: (cols[BRANCH_COL] || "").trim(),
+      lineNo: (cols[LINE_NO_COL] || "").trim(),
+      orderDate: (cols[ORDER_DATE_COL] || "").trim(),
+      spec: cleanText(cols[SPEC_COL]),
+      unit: cleanText(cols[UNIT_COL]),
+      supplierName: cleanText(name),
+      cost: toNum(cols[COST_COL]),
+      qty: toNum(cols[QTY_COL]),
     });
   }
 
@@ -211,10 +248,25 @@ export default function OrderSupplierSummary() {
   const [isDragging, setIsDragging] = useState(false);
   const [openSupplier, setOpenSupplier] = useState<string | null>(null);
 
-  const [stockFiles, setStockFiles] = useState<StockFileInfo[]>([]);
-  const [stockByProduct, setStockByProduct] = useState<Map<string, number>>(new Map());
-  const [stockWarnings, setStockWarnings] = useState<string[]>([]);
-  const [isStockDragging, setIsStockDragging] = useState(false);
+  const [stockSlots, setStockSlots] = useState<Record<StockSlotKey, StockSlot | null>>({ naruo: null, tsuchiura: null });
+  const [stockErrors, setStockErrors] = useState<Record<StockSlotKey, string | null>>({ naruo: null, tsuchiura: null });
+  const [branchCode, setBranchCode] = useState("90");
+  const [exportState, setExportState] = useState<{ busy: boolean; message: string | null; error: string | null }>({
+    busy: false,
+    message: null,
+    error: null,
+  });
+
+  // 内訳に出す在庫数は鳴尾・土浦の合計。
+  const stockByProduct = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const { key } of STOCK_SLOTS) {
+      const slot = stockSlots[key];
+      if (!slot) continue;
+      for (const [code, qty] of slot.stockByProduct) m.set(code, (m.get(code) ?? 0) + qty);
+    }
+    return m;
+  }, [stockSlots]);
 
   async function handleFile(f: File) {
     setFileState({ fileName: f.name, loading: true, error: null });
@@ -234,36 +286,81 @@ export default function OrderSupplierSummary() {
     }
   }
 
-  // 朝の在庫CSV(複数可・拠点ごとにファイルが分かれている想定)を1件ずつ読み込み、
-  // 品番ごとの在庫数に加算していく(ファイルを増やすたびに積み上がる。やり直したい場合は
-  // 「在庫データをクリア」でリセットしてから入れ直す)。
-  async function handleStockFiles(files: FileList) {
-    const newWarnings: string[] = [];
-    let nextMap = stockByProduct;
-    const newFileInfos: StockFileInfo[] = [];
-    for (const f of Array.from(files)) {
-      try {
-        const text = await readFileSmart(f);
-        const { stockByProduct: parsed, rowCount, warnings: parsedWarnings } = parseStockCsv(text);
-        nextMap = new Map(nextMap);
-        for (const [code, qty] of parsed) {
-          nextMap.set(code, (nextMap.get(code) ?? 0) + qty);
-        }
-        newFileInfos.push({ fileName: f.name, rowCount });
-        newWarnings.push(...parsedWarnings.map((w) => `${f.name}: ${w}`));
-      } catch (e) {
-        newWarnings.push(`${f.name}: 読み込みに失敗しました(${String(e)})`);
-      }
+  async function handleStockFile(key: StockSlotKey, f: File) {
+    try {
+      const text = await readFileSmart(f);
+      const { stockByProduct: parsed, rowCount, warnings: parsedWarnings } = parseStockCsv(text);
+      setStockSlots((prev) => ({ ...prev, [key]: { fileName: f.name, rowCount, stockByProduct: parsed, warnings: parsedWarnings } }));
+      setStockErrors((prev) => ({ ...prev, [key]: null }));
+    } catch (e) {
+      setStockErrors((prev) => ({ ...prev, [key]: `読み込みに失敗しました(${String(e)})` }));
     }
-    setStockByProduct(nextMap);
-    setStockFiles((prev) => [...prev, ...newFileInfos]);
-    setStockWarnings(newWarnings);
   }
 
-  function clearStock() {
-    setStockByProduct(new Map());
-    setStockFiles([]);
-    setStockWarnings([]);
+  function clearStock(key: StockSlotKey) {
+    setStockSlots((prev) => ({ ...prev, [key]: null }));
+    setStockErrors((prev) => ({ ...prev, [key]: null }));
+  }
+
+  const branchLines = useMemo(() => lines.filter((l) => l.branchCode === branchCode.trim()), [lines, branchCode]);
+
+  async function downloadBranchCheckCsv() {
+    if (branchLines.length === 0) return;
+    setExportState({ busy: true, message: null, error: null });
+    let salesQty: Record<string, number> = {};
+    try {
+      const codes = Array.from(new Set(branchLines.map((l) => l.productCode).filter(Boolean)));
+      const res = await fetch("/api/recent-sales-qty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codes, months: 3 }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? res.statusText);
+      salesQty = json.qtyByCode ?? {};
+    } catch (e) {
+      setExportState({ busy: false, message: null, error: `直近3か月の売上数を取得できませんでした: ${e instanceof Error ? e.message : String(e)}` });
+      return;
+    }
+
+    const naruo = stockSlots.naruo?.stockByProduct;
+    const tsuchiura = stockSlots.tsuchiura?.stockByProduct;
+    const header = [
+      "受注番号", "行", "受注日", "品番", "品名", "仕様", "単位", "仕入先コード", "仕入先名",
+      "原価", "発注金額", "発注数", "鳴尾在庫(90)", "土浦在庫(91)", "在庫合計", "差引", "判定", "直近3か月売上数",
+    ];
+    const out = [header.map(csvEscape).join(",")];
+    let totalAmount = 0;
+    for (const l of branchLines) {
+      const n = naruo?.get(l.productCode);
+      const t = tsuchiura?.get(l.productCode);
+      const hasStock = n !== undefined || t !== undefined;
+      const stockTotal = (n ?? 0) + (t ?? 0);
+      const diff = stockTotal - l.qty;
+      const judge = !hasStock ? "在庫データなし" : diff >= 0 ? "在庫で足りる" : stockTotal > 0 ? "一部不足" : "在庫なし";
+      totalAmount += l.amount;
+      out.push(
+        [
+          l.orderNo, l.lineNo, l.orderDate, l.productCode, l.productName, l.spec, l.unit, l.supplierCode, l.supplierName,
+          l.cost, Math.round(l.amount), l.qty, n ?? "", t ?? "", hasStock ? stockTotal : "", hasStock ? diff : "", judge,
+          salesQty[l.productCode] ?? 0,
+        ]
+          .map(csvEscape)
+          .join(",")
+      );
+    }
+    out.push(["合計", "", "", "", "", "", "", "", "", "", Math.round(totalAmount), "", "", "", "", "", "", ""].map(csvEscape).join(","));
+
+    const blob = new Blob(["\ufeff" + out.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `営業所${branchCode.trim()}_注文明細_在庫照合_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setExportState({ busy: false, message: `${branchLines.length.toLocaleString("ja-JP")}件を出力しました。`, error: null });
   }
 
   const total = useMemo(() => rows.reduce((s, r) => s + r.amount, 0), [rows]);
@@ -352,54 +449,79 @@ export default function OrderSupplierSummary() {
         )}
       </div>
 
-      <div
-        className="card"
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsStockDragging(true);
-        }}
-        onDragLeave={() => setIsStockDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setIsStockDragging(false);
-          if (e.dataTransfer.files.length > 0) handleStockFiles(e.dataTransfer.files);
-        }}
-        style={{ marginBottom: 20, ...(isStockDragging ? { outline: "2px dashed var(--rk-direct)", outlineOffset: -2 } : {}) }}
-      >
-        <h2 style={{ marginTop: 0, fontSize: 16 }}>朝の在庫CSV(任意・複数可)</h2>
+      <div className="card" style={{ marginBottom: 20 }}>
+        <h2 style={{ marginTop: 0, fontSize: 16 }}>朝の在庫CSV(任意)</h2>
         <p className="cell-sub" style={{ margin: "0 0 8px" }}>
-          仕入先コード・仕入先名・品番・品名・仕様・朝の在庫数の列を持つCSVです。拠点(鳴尾・土浦など)ごとに分かれていても、まとめてドラッグ&ドロップまたは選択すれば品番ごとに合算します。読み込むと、下の内訳一覧に「在庫数」列が表示されます。
+          仕入先コード・仕入先名・品番・品名・仕様・朝の在庫数の列を持つCSVを、拠点ごとに選んでください。読み込むと、下の内訳一覧に在庫数(鳴尾+土浦の合計)が表示されます。
         </p>
-        <input
-          type="file"
-          accept=".csv"
-          multiple
-          onChange={(e) => {
-            if (e.target.files && e.target.files.length > 0) handleStockFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
-        {stockFiles.length > 0 && (
-          <div style={{ marginTop: 10, fontSize: 12.5 }}>
-            {stockFiles.map((s, i) => (
-              <div key={i}>
-                ファイル: {s.fileName}(品番{s.rowCount.toLocaleString("ja-JP")}件)
-              </div>
-            ))}
-            <div style={{ color: "var(--rk-good)" }}>
-              合計{stockByProduct.size.toLocaleString("ja-JP")}品番の在庫数を読み込みました。
+        {STOCK_SLOTS.map(({ key, label }) => {
+          const slot = stockSlots[key];
+          return (
+            <div key={key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5, marginBottom: 8 }}>
+              <span style={{ width: 70, fontWeight: 600 }}>{label}</span>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleStockFile(key, f);
+                  e.target.value = "";
+                }}
+              />
+              {slot && (
+                <>
+                  <span style={{ color: "var(--rk-good)" }}>
+                    {slot.fileName}(品番{slot.rowCount.toLocaleString("ja-JP")}件)
+                  </span>
+                  <button className="ghost-btn" onClick={() => clearStock(key)}>
+                    クリア
+                  </button>
+                </>
+              )}
+              {slot?.warnings.map((w, i) => (
+                <span key={i} style={{ color: "var(--rk-warning)" }}>
+                  {w}
+                </span>
+              ))}
+              {stockErrors[key] && <span style={{ color: "var(--rk-critical)" }}>{stockErrors[key]}</span>}
             </div>
-            <button className="ghost-btn" style={{ marginTop: 6 }} onClick={clearStock}>
-              在庫データをクリア
-            </button>
-          </div>
-        )}
-        {stockWarnings.map((w, i) => (
-          <div key={i} style={{ color: "var(--rk-warning)", fontSize: 12.5, marginTop: 6 }}>
-            {w}
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {rows.length > 0 && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <h2 style={{ marginTop: 0, fontSize: 16 }}>営業所の注文明細を在庫照合してCSV出力</h2>
+          <p className="cell-sub" style={{ margin: "0 0 8px" }}>
+            指定した営業所コードの注文明細(手配区分が空白・在庫の行は除く)に、発注金額・鳴尾/土浦の在庫数・在庫合計・差引(在庫合計−発注数)・判定・直近3か月の売上数(全拠点・納品日基準)を付けてCSVで出力します。最終行は発注合計金額です。
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              営業所コード
+              <input value={branchCode} onChange={(e) => setBranchCode(e.target.value)} style={{ width: 60, padding: "2px 6px" }} />
+            </label>
+            <span>
+              対象 {branchLines.length.toLocaleString("ja-JP")}件・発注金額{" "}
+              {fmtYen(branchLines.reduce((s, l) => s + l.amount, 0))}
+            </span>
+            <button className="ghost-btn" onClick={downloadBranchCheckCsv} disabled={branchLines.length === 0 || exportState.busy}>
+              {exportState.busy ? (
+                <>
+                  <span className="spinner" />
+                  作成中…
+                </>
+              ) : (
+                "在庫照合CSVをダウンロード"
+              )}
+            </button>
+            {!stockSlots.naruo && !stockSlots.tsuchiura && (
+              <span style={{ color: "var(--rk-warning)" }}>在庫CSVが未読み込みのため、判定はすべて「在庫データなし」になります。</span>
+            )}
+          </div>
+          {exportState.message && <div style={{ color: "var(--rk-good)", fontSize: 12.5, marginTop: 6 }}>{exportState.message}</div>}
+          {exportState.error && <div style={{ color: "var(--rk-critical)", fontSize: 12.5, marginTop: 6 }}>{exportState.error}</div>}
+        </div>
+      )}
 
       {rows.length > 0 && (
         <div className="card">
