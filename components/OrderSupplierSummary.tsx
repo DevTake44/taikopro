@@ -22,7 +22,7 @@ import Link from "next/link";
  * 鳴尾(90)・土浦(91)の2つの枠に分けて読み込み、内訳の在庫数はその合計を表示する。
  *
  * 2026-11-17追加: 営業所コードを指定して、その営業所の注文明細を「在庫照合CSV」として
- * 出力する(発注金額・鳴尾/土浦在庫・在庫合計・差引(在庫合計-発注数)・判定・
+ * 出力する(発注金額・鳴尾/土浦在庫・在庫合計・判定(在庫合計と発注数の比較)・
  * 直近3か月の全拠点売上数)。売上数はサーバー(/api/recent-sales-qty)から取得する。
  */
 
@@ -327,8 +327,8 @@ export default function OrderSupplierSummary() {
     const naruo = stockSlots.naruo?.stockByProduct;
     const tsuchiura = stockSlots.tsuchiura?.stockByProduct;
     const header = [
-      "受注番号", "行", "受注日", "品番", "品名", "仕様", "単位", "仕入先コード", "仕入先名",
-      "原価", "発注金額", "発注数", "鳴尾在庫(90)", "土浦在庫(91)", "在庫合計", "差引", "判定", "直近3か月売上数",
+      "受注番号", "行", "受注日", "品番", "品名", "仕様", "仕入先名",
+      "原価", "発注金額", "発注数", "鳴尾在庫(90)", "土浦在庫(91)", "在庫合計", "判定", "直近3か月売上数",
     ];
     const out = [header.map(csvEscape).join(",")];
     let totalAmount = 0;
@@ -342,15 +342,15 @@ export default function OrderSupplierSummary() {
       totalAmount += l.amount;
       out.push(
         [
-          l.orderNo, l.lineNo, l.orderDate, l.productCode, l.productName, l.spec, l.unit, l.supplierCode, l.supplierName,
-          l.cost, Math.round(l.amount), l.qty, n ?? "", t ?? "", hasStock ? stockTotal : "", hasStock ? diff : "", judge,
+          l.orderNo, l.lineNo, l.orderDate, l.productCode, l.productName, l.spec, l.supplierName,
+          l.cost, Math.round(l.amount), l.qty, n ?? "", t ?? "", hasStock ? stockTotal : "", judge,
           salesQty[l.productCode] ?? 0,
         ]
           .map(csvEscape)
           .join(",")
       );
     }
-    out.push(["合計", "", "", "", "", "", "", "", "", "", Math.round(totalAmount), "", "", "", "", "", "", ""].map(csvEscape).join(","));
+    out.push(["合計", "", "", "", "", "", "", "", Math.round(totalAmount), "", "", "", "", "", ""].map(csvEscape).join(","));
 
     const blob = new Blob(["\ufeff" + out.join("\r\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -518,7 +518,7 @@ export default function OrderSupplierSummary() {
         <div className="card" style={{ marginBottom: 20 }}>
           <h2 style={{ marginTop: 0, fontSize: 16 }}>営業所の注文明細を在庫照合してCSV出力</h2>
           <p className="cell-sub" style={{ margin: "0 0 8px" }}>
-            指定した営業所コードの注文明細(手配区分が空白・在庫の行は除く)に、発注金額・鳴尾/土浦の在庫数・在庫合計・差引(在庫合計−発注数)・判定・直近3か月の売上数(全拠点・納品日基準)を付けてCSVで出力します。最終行は発注合計金額です。
+            指定した営業所コードの注文明細(手配区分が空白・在庫の行は除く)に、発注金額・鳴尾/土浦の在庫数・在庫合計・判定(在庫合計と発注数の比較)・直近3か月の売上数(全拠点・納品日基準)を付けてCSVで出力します。最終行は発注合計金額です。
           </p>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
