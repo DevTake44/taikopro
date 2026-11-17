@@ -140,7 +140,7 @@ function SearchableCodeField<T>({
 
 // supplier_nameはCSVには出さない(仕入先コードのみ)が、選んだ仕入先が合っているか
 // 画面上で確認できるよう、表示専用でlineの中に持たせておく。
-type LineState = OrderCsvLineInput & { supplier_name?: string };
+export type LineState = OrderCsvLineInput & { supplier_name?: string };
 
 const DEFAULT_LINE_VALUES = {
   ship_date: "",
@@ -208,6 +208,7 @@ export default function OrderCsvForm({
   const [subject, setSubject] = useState(h.subject ?? "");
   const [subjectAmount, setSubjectAmount] = useState(h.subject_amount ?? "");
   const [internalNote, setInternalNote] = useState(h.internal_note ?? "");
+  const [article1, setArticle1] = useState(h.article1 ?? "");
 
   // 出荷日・着日・出荷場所・配送方法・着日指定・時間帯指定は、受注入力画面を確認したところ
   // 明細行ごとに違う値を持てる(例: 在庫出荷の行とメーカー直送の行で出荷場所が違う)。
@@ -306,6 +307,7 @@ export default function OrderCsvForm({
       subject,
       subject_amount: subjectAmount,
       internal_note: internalNote,
+      article1,
     };
     setDownloading(true);
     try {
@@ -426,6 +428,9 @@ export default function OrderCsvForm({
           </Cell>
           <Cell label="社内連絡" grow>
             <input value={internalNote} onChange={(e) => setInternalNote(e.target.value)} style={denseInput} />
+          </Cell>
+          <Cell label="記事１" width={120}>
+            <input value={article1} onChange={(e) => setArticle1(e.target.value)} style={denseInput} />
           </Cell>
         </div>
       </div>

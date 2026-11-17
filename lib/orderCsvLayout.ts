@@ -68,6 +68,7 @@ export type OrderCsvHeaderInput = {
   subject: string;
   subject_amount: string; // 件名金額(任意。件名に紐づく金額)
   internal_note: string; // 社内連絡(伝票備考と同様、受注伝票で1つ)
+  article1?: string; // 記事１(例: SMAPSの「11/10着」)
 };
 
 export type OrderCsvLineInput = {
@@ -158,7 +159,7 @@ export function buildOrderCsvRows(header: OrderCsvHeaderInput, lines: OrderCsvLi
     l.department1 || "",
     l.department2 || "",
     "", // 申請理由
-    "", // 記事1
+    truncateZenkaku(header.article1 ?? "", 20),
     "", // 記事2
     "", // 記事3
     truncateZenkaku(header.internal_note, 20),
