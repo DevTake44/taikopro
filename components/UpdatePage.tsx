@@ -13,6 +13,7 @@ import { transformPurchasesCsv } from "@/lib/purchasesTransform";
 import { transformProductMasterCsv } from "@/lib/productMasterTransform";
 import { transformSupplierMasterCsv } from "@/lib/supplierMasterTransform";
 import { transformCustomerMasterCsv } from "@/lib/customerMasterTransform";
+import { isOrderOutputHeader, transformOrderHistoryCsv } from "@/lib/orderHistoryTransform";
 import { loadFileHandle, saveFileHandle } from "@/lib/fileHandleStore";
 
 const CHUNK_SIZE = 1000;
@@ -414,6 +415,49 @@ function SupplierMasterUploadBox() {
   );
 }
 
+function OrderHistoryUploadBox() {
+  const [file, setFile] = useState<File | null>(null);
+  const [progress, setProgress] = useState<Progress>({ stage: "idle" });
+  const [result, setResult] = useState<FinalResult | null>(null);
+
+  async function handleUpload() {
+    if (!file) return;
+    setResult(null);
+    try {
+      setProgress({ stage: "reading" });
+      const text = decodeCsvBuffer(await file.arrayBuffer());
+      const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
+      if (!isOrderOutputHeader(parsed.data[0] ?? [])) {
+        throw new Error("1行目の見出しが受注出力CSV(得意先コード…受注番号・受注行番号…)の形になっていません。");
+      }
+      const { rows, skipped } = transformOrderHistoryCsv(parsed.data);
+      if (rows.length === 0) throw new Error("有効なデータ行がありませんでした。");
+      setProgress({ stage: "uploading", sentCount: 0, totalCount: rows.length });
+      await uploadRowsInChunks(rows, "/api/upload/order-history", (sent, total) =>
+        setProgress({ stage: "uploading", sentCount: sent, totalCount: total })
+      );
+      setProgress({ stage: "done" });
+      setResult({ rowCount: rows.length, skippedCount: skipped, extraInfo: "受注番号+行番号が同じ明細は上書きされます。" });
+    } catch (e) {
+      setProgress({ stage: "error" });
+      setResult({ error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return (
+    <UploadBoxShell
+      title="⑥ 受注データ(過去の受注明細・PDF発注書取込の照合用)"
+      description="販売管理の受注出力CSV(得意先コード〜原価の54列)を、そのままアップロードしてください。受注番号・行番号が無い行(小計・空行)は自動で除外します。PDF発注書を取り込むとき、ここに登録された過去の受注から品番・仕入先・原価などの候補を出します。"
+      file={file}
+      setFile={setFile}
+      progress={progress}
+      result={result}
+      onUpload={handleUpload}
+      accept=".csv"
+    />
+  );
+}
+
 function CustomerMasterUploadBox() {
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState<Progress>({ stage: "idle" });
@@ -672,6 +716,7 @@ export default function UpdatePage({
         <ProductMasterUploadBox />
         <SupplierMasterUploadBox />
         <CustomerMasterUploadBox />
+        <OrderHistoryUploadBox />
         <RiekiUploadBoxes />
       </div>
     </div>

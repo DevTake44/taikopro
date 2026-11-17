@@ -40,6 +40,11 @@ const SALES_APP_LINKS: MenuLink[] = [
     title: "受注CSV作成",
     description: "販売管理の共通CSV取込(受注データ)用のCSVを作成します。見積書詳細画面からも、内容を引き継いで開けます。",
   },
+  {
+    href: "/sales-app/order-csv/smaps",
+    title: "SMAPS 受注取込",
+    description: "SMAPSの取引詳細画面のPDFを読み込み、過去の受注を参考に品番・仕入先を選んで受注取込CSVを作成します。",
+  },
 ];
 
 export default function SalesAppMenuPage() {
