@@ -250,6 +250,7 @@ export default function OrderSupplierSummary() {
 
   const [stockSlots, setStockSlots] = useState<Record<StockSlotKey, StockSlot | null>>({ naruo: null, tsuchiura: null });
   const [stockErrors, setStockErrors] = useState<Record<StockSlotKey, string | null>>({ naruo: null, tsuchiura: null });
+  const [stockDragOver, setStockDragOver] = useState<StockSlotKey | null>(null);
   const [branchCode, setBranchCode] = useState("90");
   const [exportState, setExportState] = useState<{ busy: boolean; message: string | null; error: string | null }>({
     busy: false,
@@ -452,12 +453,36 @@ export default function OrderSupplierSummary() {
       <div className="card" style={{ marginBottom: 20 }}>
         <h2 style={{ marginTop: 0, fontSize: 16 }}>朝の在庫CSV(任意)</h2>
         <p className="cell-sub" style={{ margin: "0 0 8px" }}>
-          仕入先コード・仕入先名・品番・品名・仕様・朝の在庫数の列を持つCSVを、拠点ごとに選んでください。読み込むと、下の内訳一覧に在庫数(鳴尾+土浦の合計)が表示されます。
+          仕入先コード・仕入先名・品番・品名・仕様・朝の在庫数の列を持つCSVを、拠点ごとの行にドラッグ&ドロップするか、ボタンで選んでください。読み込むと、下の内訳一覧に在庫数(鳴尾+土浦の合計)が表示されます。
         </p>
         {STOCK_SLOTS.map(({ key, label }) => {
           const slot = stockSlots[key];
           return (
-            <div key={key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5, marginBottom: 8 }}>
+            <div
+              key={key}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setStockDragOver(key);
+              }}
+              onDragLeave={() => setStockDragOver(null)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setStockDragOver(null);
+                const f = e.dataTransfer.files?.[0];
+                if (f) handleStockFile(key, f);
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                flexWrap: "wrap",
+                fontSize: 12.5,
+                marginBottom: 8,
+                padding: "6px 8px",
+                borderRadius: 8,
+                border: stockDragOver === key ? "2px dashed var(--rk-direct)" : "2px dashed transparent",
+              }}
+            >
               <span style={{ width: 70, fontWeight: 600 }}>{label}</span>
               <input
                 type="file"
