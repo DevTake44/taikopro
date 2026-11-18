@@ -9,6 +9,7 @@ import {
   setSalesDashboardCache,
   clearSalesDashboardCache,
   type SalesDashboardPayload,
+  type SalesDashboardVariant,
 } from "@/lib/sales-dashboard-cache";
 
 // 経営レポート(/sales)・売上ダッシュボード明細(/sales-detail)の読み込みを行う。
@@ -18,8 +19,13 @@ import {
 // サーバー側のunstable_cacheと違い、ここでの読み込みは「ページを開く」動作そのものを
 // 待たせない(page.tsxは何も待たずに即座にこのコンポーネントを描画するため、
 // Next.jsのloading.tsxが挟まらない)。
-export default function SalesDashboardLoader({ variant }: { variant: "monthly" | "detail" }) {
-  const apiPath = variant === "detail" ? "/api/sales-dashboard-detail" : "/api/sales-dashboard";
+export default function SalesDashboardLoader({ variant }: { variant: SalesDashboardVariant }) {
+  const apiPath =
+    variant === "detail"
+      ? "/api/sales-dashboard-detail"
+      : variant === "direct"
+        ? "/api/sales-dashboard-direct"
+        : "/api/sales-dashboard";
 
   const [payload, setPayload] = useState<SalesDashboardPayload | null>(null);
   const [initialError, setInitialError] = useState<string | null>(null);
@@ -90,7 +96,7 @@ export default function SalesDashboardLoader({ variant }: { variant: "monthly" |
         </div>
       );
     }
-    return <PageLoading label={variant === "detail" ? "明細データを読み込んでいます…" : "データを読み込んでいます…"} />;
+    return <PageLoading label={variant === "monthly" ? "データを読み込んでいます…" : "明細データを読み込んでいます…"} />;
   }
 
   return (

@@ -40,7 +40,8 @@ export default function SalesDashboardClient({
   // "detail"=売上ダッシュボード明細(profit_summary、明細=sales_lines由来。
   // 原価は仕入・在庫出荷・運送会社の実費まで含む)。表示する画面(タブ構成・見た目)は
   // 完全に同じで、データの集計元と見出し・説明文だけが違う。
-  variant?: "monthly" | "detail";
+  // "direct"=経営報告(メーカー直送のみ)。メーカー直送・手配の商品行だけで、在庫出荷・運賃は含まない。
+  variant?: "monthly" | "detail" | "direct";
   // 「表示基準月」を切り替えた時に呼ばれる(nullは「自動(最新月まで)」)。
   // データの取得・再計算は呼び出し元(SalesDashboardLoader)が行う。
   onUntilChange: (until: string | null) => void;
@@ -52,6 +53,7 @@ export default function SalesDashboardClient({
   const S = data.summary;
   const [mainTab, setMainTab] = useState<MainTab>("report");
   const isDetail = variant === "detail";
+  const isDirect = variant === "direct";
 
   function handleUntilChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value;
@@ -63,11 +65,12 @@ export default function SalesDashboardClient({
       <header className="top">
         <div className="title">
           <h1>
-            売上ダッシュボード{isDetail ? "明細" : ""} <span className="badge-demo">実データ</span>
+            {isDirect ? "経営報告(メーカー直送のみ)" : `売上ダッシュボード${isDetail ? "明細" : ""}`} <span className="badge-demo">実データ</span>
           </h1>
           <p>
             今期 {S.CUR}年10月度〜(最新 {monL(data.latest_ym)}度まで)
             {isDetail && "・売上は明細(sales_lines)、原価は仕入・在庫出荷・運送会社の実費まで含めて集計"}
+            {isDirect && "・手配区分がメーカー直送・手配の商品だけを集計(在庫出荷・運賃・値引・運送会社の実費は含まない。原価は仕入実績)"}
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -93,7 +96,7 @@ export default function SalesDashboardClient({
         {switching && <span>読み込み中…</span>}
         {selectedUntil && <span>※ {monL(selectedUntil)}度までのデータで表示中です(それより後の月は含まれていません)</span>}
         <div className="toolbar-links">
-          {isDetail ? (
+          {isDetail || isDirect ? (
             <Link href="/sales" className="btn btn-sm">
               売上ダッシュボード(集計版)
             </Link>
@@ -118,14 +121,16 @@ export default function SalesDashboardClient({
         <button className={mainTab === "matrix" ? "active" : ""} onClick={() => setMainTab("matrix")}>
           月別マトリクス
         </button>
-        <button className={mainTab === "stock" ? "active" : ""} onClick={() => setMainTab("stock")}>
-          在庫
-        </button>
+        {!isDirect && (
+          <button className={mainTab === "stock" ? "active" : ""} onClick={() => setMainTab("stock")}>
+            在庫
+          </button>
+        )}
       </div>
 
-      {mainTab === "report" && <ReportPage data={data} />}
+      {mainTab === "report" && <ReportPage data={data} hideStock={isDirect} />}
       {mainTab === "matrix" && <MatrixPage data={data} />}
-      {mainTab === "stock" && (
+      {mainTab === "stock" && !isDirect && (
         <StockTab
           data={data}
           stockDetailByYear={stockDetailByYear}
@@ -141,7 +146,7 @@ export default function SalesDashboardClient({
 }
 
 /* ============ 経営レポート(役員向け1画面) ============ */
-function ReportPage({ data }: { data: DashboardData }) {
+function ReportPage({ data, hideStock = false }: { data: DashboardData; hideStock?: boolean }) {
   const trueCUR = data.summary.CUR;
   const years = useMemo(
     () => Array.from(new Set([trueCUR, ...data.fiscalYears])).sort((a, b) => a - b),
@@ -205,12 +210,16 @@ function ReportPage({ data }: { data: DashboardData }) {
             {marginUp ? "+" : ""}{marginDiff}pt
           </b>
           {marginUp ? "改善" : "低下"}しています({S.cur_margin}% ← {S.prev_margin_same}%)。
+          {!hideStock && (
+          <>
           <br />
           在庫仕入(拠点90・91)は前期同期より{" "}
           <b style={{ color: stockUp ? "var(--neg)" : "var(--pos)" }}>
             {stockUp ? "+" : ""}{yen(stockDiff)}
           </b>
           {stockUp ? "増加" : "減少"}しています。
+          </>
+          )}
         </p>
       </div>
 
@@ -247,12 +256,14 @@ function ReportPage({ data }: { data: DashboardData }) {
                 <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{S.prev_margin_same}%</span></td>
                 <td><span className={`cell-s ${marginUp ? "val-pos" : "val-neg"}`}>{marginUp ? "+" : ""}{marginDiff}pt</span></td>
               </tr>
+              {!hideStock && (
               <tr>
                 <td className="namecol">在庫仕入(90・91)</td>
                 <td><span className="cell-s">{yen(st.cur_total)}</span></td>
                 <td><span className="cell-s" style={{ color: "var(--ink-faint)" }}>{yen(st.prev_same)}</span></td>
                 <td><span className={`cell-s ${stockUp ? "val-neg" : "val-pos"}`}>{stockUp ? "+" : ""}{yen(stockDiff)}</span></td>
               </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -292,6 +303,7 @@ function ReportPage({ data }: { data: DashboardData }) {
         </div>
       </div>
 
+      {!hideStock && (
       <div className="card">
         <div className="card-head">
           <h2>月別推移:在庫仕入(今期 vs 前期)</h2>
@@ -304,9 +316,12 @@ function ReportPage({ data }: { data: DashboardData }) {
           <TrendChart config={stockConfig} />
         </div>
       </div>
+      )}
 
       <p style={{ fontSize: 11, color: "var(--ink-faint)", padding: "0 20px 16px" }}>
-        詳しい拠点別・担当者別の内訳は「月別マトリクス」タブ、在庫仕入の商品別・仕入先別の内訳や不動在庫チェックは「在庫」タブでご覧いただけます。
+        {hideStock
+          ? "詳しい拠点別・担当者別の内訳は「月別マトリクス」タブでご覧いただけます。"
+          : "詳しい拠点別・担当者別の内訳は「月別マトリクス」タブ、在庫仕入の商品別・仕入先別の内訳や不動在庫チェックは「在庫」タブでご覧いただけます。"}
       </p>
     </div>
   );

@@ -21,21 +21,24 @@ export type SalesDashboardPayload = {
 
 type Entry = { payload: SalesDashboardPayload; loadedAt: number };
 
-const cache: Partial<Record<"monthly" | "detail", Entry>> = {};
+export type SalesDashboardVariant = "monthly" | "detail" | "direct";
 
-export function getSalesDashboardCache(variant: "monthly" | "detail"): Entry | null {
+const cache: Partial<Record<SalesDashboardVariant, Entry>> = {};
+
+export function getSalesDashboardCache(variant: SalesDashboardVariant): Entry | null {
   return cache[variant] ?? null;
 }
 
-export function setSalesDashboardCache(variant: "monthly" | "detail", payload: SalesDashboardPayload): void {
+export function setSalesDashboardCache(variant: SalesDashboardVariant, payload: SalesDashboardPayload): void {
   cache[variant] = { payload, loadedAt: Date.now() };
 }
 
-export function clearSalesDashboardCache(variant?: "monthly" | "detail"): void {
+export function clearSalesDashboardCache(variant?: SalesDashboardVariant): void {
   if (variant) {
     delete cache[variant];
   } else {
     delete cache.monthly;
     delete cache.detail;
+    delete cache.direct;
   }
 }
