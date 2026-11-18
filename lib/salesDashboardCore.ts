@@ -8,6 +8,7 @@
 import { unstable_cache } from "next/cache";
 import { fetchAllMonthlyRows, fetchStockOnlyMonthlyRows } from "./fetchMonthly";
 import { fetchAllProfitSummaryRows } from "./fetchProfitSummaryAll";
+import { fetchDirectMonthlyRows } from "./fetchDirectMonthly";
 import { profitSummaryToMonthlyRows } from "./profitSummaryToMonthlyRows";
 import { fetchStockDetailRows } from "./fetchStockDetail";
 import { fetchPurchaseLots, fetchStockShipments, fetchProductAliasGroups } from "./fetchStockMovement";
@@ -128,6 +129,40 @@ export const getSalesDetailDashboardCore = unstable_cache(
 // buildDashboard.tsのprofitRowsコメント参照。2026-09-30に二重控除と判明し修正)。
 export async function buildSalesDetailDashboardFor(until: string): Promise<DashboardData> {
   const rows = await buildDetailRows();
+  return buildDashboard(
+    rows.filter((r) => ymFromDate(r.month) <= until),
+    { includeStockInProfit: false }
+  );
+}
+
+// ---- 経営報告(メーカー直送のみ、/sales/direct、v_direct_monthly由来) ----
+// メーカー直送・手配の商品行だけ(在庫出荷・運賃・値引・運送会社の実費は含まない)。
+// 在庫タブは使わないため、在庫関連(在庫仕入・不動在庫)の集計は行わない。
+
+function availableMonthsOf(rows: MonthlyRow[]): string[] {
+  return Array.from(new Set(rows.filter((r) => r.sales_amount > 0).map((r) => ymFromDate(r.month))))
+    .sort()
+    .slice(-12);
+}
+
+async function computeSalesDirectDashboardCore(): Promise<SalesDashboardCore> {
+  const rows = await fetchDirectMonthlyRows();
+  return {
+    fullDataset: buildDashboard(rows, { includeStockInProfit: false }),
+    availableMonths: availableMonthsOf(rows),
+    stockDetailByYear: {},
+    stockMovementByYear: {},
+    stockMovementError: null,
+  };
+}
+export const getSalesDirectDashboardCore = unstable_cache(
+  computeSalesDirectDashboardCore,
+  ["sales-direct-dashboard-core"],
+  { tags: [SALES_DATA_CACHE_TAG], revalidate: false }
+);
+
+export async function buildSalesDirectDashboardFor(until: string): Promise<DashboardData> {
+  const rows = await fetchDirectMonthlyRows();
   return buildDashboard(
     rows.filter((r) => ymFromDate(r.month) <= until),
     { includeStockInProfit: false }

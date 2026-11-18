@@ -16,6 +16,11 @@ const MANAGEMENT_LINKS: MenuLink[] = [
     description: "売上・利益の全社状況を確認します。",
   },
   {
+    href: "/sales/direct",
+    title: "経営報告(メーカー直送のみ)",
+    description: "経営報告と同じ画面で、手配区分がメーカー直送・手配の商品だけを集計します。在庫出荷・運賃・値引・運送会社の実費は含みません。",
+  },
+  {
     href: "/sales-detail",
     title: "売上ダッシュボード明細",
     description: "上と同じ画面構成で、売上は明細(sales_lines)、原価は仕入・在庫出荷・運送会社の実費まで含めて集計します。",
