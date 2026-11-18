@@ -7,6 +7,7 @@ const nextConfig = {
     serverComponentsExternalPackages: ["pdfjs-dist"],
     outputFileTracingIncludes: {
       "/api/smaps-pdf": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.js"],
+      "/api/smaps-master/match": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.js"],
     },
   },
 };

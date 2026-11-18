@@ -239,3 +239,10 @@ input[type="file"]::file-selector-button:hover{background:#e3e6ec}
 .rk .record-line{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;font-size:12.5px;padding:2px 0}
 .rk .record-line .rf-value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rk .record-line .rf-value.num{text-align:right}
+
+/* SMAPS商品マスタの表 */
+table.smaps-tbl{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+table.smaps-tbl th{font-size:11.5px;color:var(--ink-faint);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;background:var(--card);position:sticky;top:0;z-index:1}
+table.smaps-tbl td{font-size:12.5px;padding:7px 10px;border-bottom:1px solid #f2f4f7;text-align:left;vertical-align:top}
+table.smaps-tbl tr:hover td{background:#fafbfc}
+table.smaps-tbl td.nw{white-space:nowrap}

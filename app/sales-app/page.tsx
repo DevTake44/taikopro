@@ -45,6 +45,11 @@ const SALES_APP_LINKS: MenuLink[] = [
     title: "SMAPS 受注取込",
     description: "SMAPSの取引詳細画面のPDFを読み込み、過去の受注を参考に品番・仕入先を選んで受注取込CSVを作成します。",
   },
+  {
+    href: "/sales-app/smaps-master",
+    title: "SMAPS商品マスタ",
+    description: "発注書(取引詳細PDF)を受注データと照合し、イオン品番と自社商品コード・仕入先・原価の対応一覧を作ります。",
+  },
 ];
 
 export default function SalesAppMenuPage() {
