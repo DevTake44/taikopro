@@ -11,6 +11,7 @@ import {
   type MasterPdfItem,
   type ObsRow,
 } from "@/lib/smapsMasterMatch";
+import { isDiscontinued, parseAeonItemSheet, type AeonItemRow } from "@/lib/smapsAeonItems";
 
 /**
  * SMAPS商品マスタ(イオン品番 ↔ 自社商品コード)。
@@ -521,35 +522,186 @@ function matches(r: MasterRow, q: string): boolean {
     .every((w) => s.includes(w));
 }
 
+type AeonItem = AeonItemRow & { source_file?: string | null; updated_at?: string };
+type MasterStatus = "登録済み" | "未登録" | "廃番" | "リスト外";
+type Group = { aeon_code: string; status: MasterStatus; item: AeonItem | null; rows: MasterRow[] };
+type MasterFilter = "all" | "登録済み" | "未登録" | "廃番" | "リスト外" | "changed" | "generic";
+
+const STATUS_COLOR: Record<MasterStatus, string> = {
+  登録済み: "var(--pos, #15803d)",
+  未登録: "var(--neg)",
+  廃番: "var(--ink-faint)",
+  リスト外: "#b45309",
+};
+
+function codeSortKey(c: string): string {
+  return /^\d+$/.test(c) ? c.padStart(12, "0") : `~${c}`;
+}
+
+function groupMatches(g: Group, q: string): boolean {
+  if (!q) return true;
+  const s = [
+    g.aeon_code,
+    g.item?.name,
+    g.item?.supplier,
+    g.item?.model,
+    g.item?.maker_code,
+    g.item?.components,
+    ...g.rows.flatMap((r) => [r.pdf_name, r.pdf_model, r.our_code, r.our_name, r.spec, r.supplier_name, r.trade_no, r.order_no]),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return q
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((w) => s.includes(w));
+}
+
 function MasterTab() {
   const { rows, error } = useRows("master");
+  const [items, setItems] = useState<AeonItem[] | null>(null);
+  const [itemsError, setItemsError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<"all" | "changed" | "generic" | "own">("all");
+  const [filter, setFilter] = useState<MasterFilter>("all");
 
-  const filtered = useMemo(() => {
-    if (!rows) return [];
-    const codesByAeon = new Map<string, string[]>();
-    for (const r of rows) codesByAeon.set(r.aeon_code, [...(codesByAeon.get(r.aeon_code) ?? []), r.our_code ?? ""]);
-    const okAeon = new Set(
-      Array.from(new Set(rows.map((r) => r.aeon_code))).filter((a) => {
-        const group = rows.filter((r) => r.aeon_code === a);
-        if (!group.some((r) => matches(r, q))) return false;
-        const codes = codesByAeon.get(a) ?? [];
-        if (filter === "changed") return group.some((r) => r.code_changed);
-        if (filter === "generic") return codes.includes(GENERIC_CODE);
-        if (filter === "own") return codes.some((c) => c && c !== GENERIC_CODE);
-        return true;
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/smaps-master/aeon-items")
+      .then(async (res) => {
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error ?? res.statusText);
+        if (alive) setItems(json.rows ?? []);
       })
-    );
-    return rows.filter((r) => okAeon.has(r.aeon_code));
-  }, [rows, q, filter]);
+      .catch((e) => alive && setItemsError(e instanceof Error ? e.message : String(e)));
+    return () => {
+      alive = false;
+    };
+  }, [reload]);
 
-  if (error) return <div className="alert alert-error">読み込みに失敗しました: {error}</div>;
-  if (!rows) return <div className="card" style={{ padding: 20 }}><span className="spinner" /> 読み込み中…</div>;
+  async function importExcel(file: File) {
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null }) as (string | number | null)[][];
+      const parsed = parseAeonItemSheet(sheetRows);
+      const res = await fetch("/api/smaps-master/aeon-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: file.name, items: parsed.items }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? res.statusText);
+      const disc = parsed.items.filter((i) => isDiscontinued(i.status)).length;
+      setImportMsg({ ok: true, text: `${file.name} を取り込みました(イオン品番 ${json.saved} 件・うち廃番 ${disc} 件)。` });
+      setItems(null);
+      setReload((n) => n + 1);
+    } catch (e) {
+      setImportMsg({ ok: false, text: `取り込みに失敗しました: ${e instanceof Error ? e.message : String(e)}` });
+    } finally {
+      setImporting(false);
+    }
+  }
 
-  const aeonCount = new Set(filtered.map((r) => r.aeon_code)).size;
+  const groups = useMemo<Group[]>(() => {
+    if (!rows || !items) return [];
+    const rowsBy = new Map<string, MasterRow[]>();
+    for (const r of rows) rowsBy.set(r.aeon_code, [...(rowsBy.get(r.aeon_code) ?? []), r]);
+    const out: Group[] = items.map((it) => {
+      const rs = rowsBy.get(it.aeon_code) ?? [];
+      const status: MasterStatus = isDiscontinued(it.status) ? "廃番" : rs.length > 0 ? "登録済み" : "未登録";
+      return { aeon_code: it.aeon_code, status, item: it, rows: rs };
+    });
+    const known = new Set(items.map((i) => i.aeon_code));
+    for (const [code, rs] of rowsBy) if (!known.has(code)) out.push({ aeon_code: code, status: "リスト外", item: null, rows: rs });
+    return out.sort((a, b) => codeSortKey(a.aeon_code).localeCompare(codeSortKey(b.aeon_code)));
+  }, [rows, items]);
+
+  const counts = useMemo(() => {
+    const c: Record<MasterStatus, number> = { 登録済み: 0, 未登録: 0, 廃番: 0, リスト外: 0 };
+    for (const g of groups) c[g.status]++;
+    return c;
+  }, [groups]);
+
+  const filtered = useMemo(
+    () =>
+      groups.filter((g) => {
+        if (!groupMatches(g, q)) return false;
+        if (filter === "all") return true;
+        if (filter === "changed") return g.rows.some((r) => r.code_changed);
+        if (filter === "generic") return g.rows.some((r) => r.our_code === GENERIC_CODE);
+        return g.status === filter;
+      }),
+    [groups, q, filter]
+  );
+
+  const err = error ?? itemsError;
+  if (err) return <div className="alert alert-error">読み込みに失敗しました: {err}</div>;
+  if (!rows || !items) return <div className="card" style={{ padding: 20 }}><span className="spinner" /> 読み込み中…</div>;
+
+  const lastImport = items.reduce<AeonItem | null>((a, b) => (!a || (b.updated_at ?? "") > (a.updated_at ?? "") ? b : a), null);
+  const csvHeader = [
+    "状態", "イオン品番", "Excel通番", "Excel品名", "Excel新価格", "Excel現価格", "Excel状態", "Excel仕入先", "Excel型番",
+    "Excel最新仕入価格", "Excelセット構成", ...MASTER_CSV_HEADER.slice(1), "観測数", "商品コード変更あり",
+  ];
+  const csvRows = filtered.flatMap((g) => {
+    const head = [
+      g.status, g.aeon_code, g.item?.list_no, g.item?.name, g.item?.new_price, g.item?.current_price, g.item?.status,
+      g.item?.supplier, g.item?.model, g.item?.new_cost, g.item?.components,
+    ];
+    if (g.rows.length === 0) return [[...head, ...Array(MASTER_CSV_HEADER.length - 1).fill(""), "", ""]];
+    return g.rows.map((r) => [...head, ...masterCsvRow(r).slice(1), r.obs_count ?? "", r.code_changed ? "あり" : ""]);
+  });
+
   return (
     <div className="card" style={{ padding: 20 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+        <label className="ghost-btn" style={{ cursor: importing ? "wait" : "pointer" }}>
+          {importing ? "取り込み中…" : "SMAPS登録 全商品(Excel)を取り込む"}
+          <input
+            type="file"
+            accept=".xls,.xlsx"
+            style={{ display: "none" }}
+            disabled={importing}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importExcel(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        <span style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>
+          {items.length > 0
+            ? `取込済み: ${lastImport?.source_file ?? ""}(${lastImport?.updated_at ? new Date(lastImport.updated_at).toLocaleDateString("ja-JP") : ""})`
+            : "まだExcelを取り込んでいません。取り込むと未登録のイオン品番が分かります。"}
+        </span>
+      </div>
+      {importMsg && (
+        <div className={importMsg.ok ? "alert" : "alert alert-error"} style={{ marginBottom: 10 }}>
+          {importMsg.text}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", margin: "6px 0 12px", fontSize: 13 }}>
+        <span>SMAPS登録商品 <b>{items.length}</b> 件</span>
+        {(Object.keys(counts) as MasterStatus[]).map((s) => (
+          <button
+            key={s}
+            className="ghost-btn"
+            style={{ padding: "2px 10px", color: STATUS_COLOR[s], fontWeight: 600, outline: filter === s ? "2px solid currentColor" : undefined }}
+            onClick={() => setFilter(filter === s ? "all" : s)}
+          >
+            {s} {counts[s]} 件
+          </button>
+        ))}
+      </div>
+
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
         <input
           type="search"
@@ -558,79 +710,91 @@ function MasterTab() {
           onChange={(e) => setQ(e.target.value)}
           style={{ minWidth: 320 }}
         />
-        <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+        <select value={filter} onChange={(e) => setFilter(e.target.value as MasterFilter)}>
           <option value="all">すべて</option>
-          <option value="own">自社商品コードあり</option>
+          <option value="登録済み">登録済み</option>
+          <option value="未登録">未登録</option>
+          <option value="廃番">廃番</option>
+          <option value="リスト外">リスト外(Excelに無い)</option>
           <option value="generic">共通コード(77700)</option>
           <option value="changed">商品コード変更あり</option>
         </select>
-        <span style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>
-          イオン品番 {aeonCount} 件({filtered.length} 行)
-        </span>
+        <span style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>{filtered.length} 件</span>
         <button
           className="ghost-btn"
           disabled={filtered.length === 0}
-          onClick={() =>
-            downloadCsv(`SMAPS商品マスタ_${today()}.csv`, [...MASTER_CSV_HEADER, "観測数", "商品コード変更あり"], filtered.map((r) => [
-              ...masterCsvRow(r),
-              r.obs_count ?? "",
-              r.code_changed ? "あり" : "",
-            ]))
-          }
+          onClick={() => downloadCsv(`SMAPS商品マスタ_${today()}.csv`, csvHeader, csvRows)}
         >
           CSV出力
         </button>
       </div>
-      {rows.length === 0 ? (
-        <p style={{ fontSize: 13 }}>まだ登録がありません。「発注書照合」タブで発注書PDFを登録してください。</p>
-      ) : (
-        <div className="table-scroll table-scroll-v" style={{ maxHeight: "70vh" }}>
-          <table className="smaps-tbl">
-            <thead>
-              <tr>
-                <th>イオン品番</th>
-                <th>発注書品名</th>
-                <th>自社商品コード</th>
-                <th>品名</th>
-                <th>仕様</th>
-                <th>仕入先</th>
-                <th>手配</th>
-                <th style={{ textAlign: "right" }}>原価</th>
-                <th style={{ textAlign: "right" }}>売価</th>
-                <th>受注日</th>
-                <th>通番</th>
-                <th style={{ textAlign: "right" }}>観測数</th>
-                <th>変更</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r, i) => {
-                const first = i === 0 || filtered[i - 1].aeon_code !== r.aeon_code;
+
+      <div className="table-scroll table-scroll-v" style={{ maxHeight: "70vh" }}>
+        <table className="smaps-tbl">
+          <thead>
+            <tr>
+              <th>状態</th>
+              <th>イオン品番</th>
+              <th>品名(Excel / 発注書)</th>
+              <th style={{ textAlign: "right" }}>Excel価格</th>
+              <th>Excel仕入先</th>
+              <th>自社商品コード</th>
+              <th>品名・仕様</th>
+              <th>仕入先</th>
+              <th>手配</th>
+              <th style={{ textAlign: "right" }}>原価</th>
+              <th style={{ textAlign: "right" }}>売価</th>
+              <th>受注日</th>
+              <th>通番</th>
+              <th style={{ textAlign: "right" }}>観測数</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((g) => {
+              const lines: (MasterRow | null)[] = g.rows.length > 0 ? g.rows : [null];
+              return lines.map((r, i) => {
+                const first = i === 0;
                 return (
-                  <tr key={`${r.aeon_code}-${r.order_no}-${r.order_line}`} style={first ? undefined : { borderTop: "none" }}>
-                    <td style={{ fontWeight: 600 }}>{first ? r.aeon_code : ""}</td>
-                    <td>{first ? r.pdf_name : ""}</td>
-                    <td className="nw">{codeLabel(r.our_code)}</td>
-                    <td>{r.our_name}</td>
-                    <td>{r.spec}</td>
-                    <td>{r.supplier_name}</td>
-                    <td>{r.hand_type}</td>
-                    <td className="nw" style={{ textAlign: "right" }}>
-                      {yen(r.cost)}
-                      {r.cost_source ? <span className="cell-sub">({r.cost_source})</span> : null}
+                  <tr key={`${g.aeon_code}-${i}`}>
+                    <td className="nw" style={{ color: STATUS_COLOR[g.status], fontWeight: 600 }}>
+                      {first ? g.status : ""}
+                      {first && g.status === "廃番" && g.item?.status && g.item.status !== "廃番" ? (
+                        <span className="cell-sub" style={{ fontWeight: 400 }}>({g.item.status})</span>
+                      ) : null}
                     </td>
-                    <td className="nw" style={{ textAlign: "right" }}>{yen(r.sell_price)}</td>
-                    <td className="nw">{first ? r.order_date : ""}</td>
-                    <td>{first ? r.trade_no : ""}</td>
-                    <td className="nw" style={{ textAlign: "right" }}>{first ? r.obs_count : ""}</td>
-                    <td style={{ color: "var(--neg)", fontWeight: 600 }}>{first && r.code_changed ? "変更あり" : ""}</td>
+                    <td className="nw" style={{ fontWeight: 600 }}>{first ? g.aeon_code : ""}</td>
+                    <td>
+                      {first ? (
+                        <>
+                          {g.item?.name ?? r?.pdf_name ?? ""}
+                          {g.item?.components ? <div className="cell-sub">セット: {g.item.components}</div> : null}
+                        </>
+                      ) : null}
+                    </td>
+                    <td className="nw" style={{ textAlign: "right" }}>{first && g.item ? yen(g.item.new_price ?? g.item.current_price) : ""}</td>
+                    <td>{first ? g.item?.supplier ?? "" : ""}</td>
+                    <td className="nw">{r ? codeLabel(r.our_code) : "―"}</td>
+                    <td>{r ? `${r.our_name ?? ""} ${r.spec ?? ""}` : ""}</td>
+                    <td>{r?.supplier_name ?? ""}</td>
+                    <td className="nw">{r?.hand_type ?? ""}</td>
+                    <td className="nw" style={{ textAlign: "right" }}>
+                      {r ? yen(r.cost) : ""}
+                      {r?.cost_source ? <span className="cell-sub">({r.cost_source})</span> : null}
+                    </td>
+                    <td className="nw" style={{ textAlign: "right" }}>{r ? yen(r.sell_price) : ""}</td>
+                    <td className="nw">{first && r ? r.order_date : ""}</td>
+                    <td>{first && r ? r.trade_no : ""}</td>
+                    <td className="nw" style={{ textAlign: "right" }}>
+                      {first && r ? r.obs_count : ""}
+                      {first && r?.code_changed ? <div style={{ color: "var(--neg)", fontWeight: 600 }}>変更あり</div> : null}
+                    </td>
                   </tr>
                 );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+              });
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
