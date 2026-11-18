@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabaseServer";
 import { fetchAllPagesConcurrent } from "@/lib/fetchPaged";
-import { parseSmapsPdf, type PdfPage } from "@/lib/smapsPdf";
+import { parseSmapsPdf } from "@/lib/smapsPdf";
+import { readPdfPages } from "@/lib/pdfText";
 import { findCandidates, guessCustomerContact, guessReceiverName, type HistoryLine } from "@/lib/smapsMatch";
 
 export const runtime = "nodejs";
@@ -9,23 +10,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const SMAPS_CUSTOMER_CODE = "210960444";
-
-async function readPdfPages(data: Uint8Array): Promise<PdfPage[]> {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const pdfjs = require("pdfjs-dist/legacy/build/pdf.js");
-  const doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;
-  const pages: PdfPage[] = [];
-  for (let p = 1; p <= doc.numPages; p++) {
-    const tc = await (await doc.getPage(p)).getTextContent();
-    pages.push(
-      (tc.items as { str?: string; transform?: number[] }[])
-        .filter((i) => typeof i.str === "string" && Array.isArray(i.transform))
-        .map((i) => ({ str: i.str as string, x: (i.transform as number[])[4], y: (i.transform as number[])[5] }))
-    );
-  }
-  await doc.destroy();
-  return pages;
-}
 
 // SMAPSの取引詳細PDFを読み取り、過去の受注(order_history_lines)から明細ごとの候補・
 // 同じ取引通番の既存受注・客先担当の推定を付けて返す。

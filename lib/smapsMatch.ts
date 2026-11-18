@@ -51,7 +51,7 @@ function bigrams(s: string): Set<string> {
   return out;
 }
 
-function dice(a: string, b: string): number {
+export function dice(a: string, b: string): number {
   if (!a || !b) return 0;
   const A = bigrams(a);
   const B = bigrams(b);
