@@ -35,6 +35,9 @@ export async function GET(req: NextRequest) {
     .from("purchases")
     .select("order_no, order_line, unit_price, supplier_code, supplier_name, purchase_date")
     .in("order_no", orderNos)
+    // 単価0円の仕入(センター一括仕入分をメーカー保管から出荷した時など)は仕入値として使わない。
+    // 0円しか無い行は「見つからない」扱いにして、画面側の別の探し方(品番の直近仕入など)に回す。
+    .gt("unit_price", 0)
     .order("purchase_date", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
