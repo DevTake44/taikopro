@@ -172,6 +172,11 @@ export function buildOrderCsvRows(header: OrderCsvHeaderInput, lines: OrderCsvLi
 }
 
 export function buildOrderCsvText(header: OrderCsvHeaderInput, lines: OrderCsvLineInput[]): string {
-  const rows = [HEADER_COLUMNS, ...buildOrderCsvRows(header, lines)];
+  return buildOrderCsvTextMulti([{ header, lines }]);
+}
+
+// 複数の受注(伝票)を1つのCSVにまとめる(見出しは先頭に1回だけ)。
+export function buildOrderCsvTextMulti(orders: { header: OrderCsvHeaderInput; lines: OrderCsvLineInput[] }[]): string {
+  const rows = [HEADER_COLUMNS, ...orders.flatMap((o) => buildOrderCsvRows(o.header, o.lines))];
   return rows.map((row) => row.map(csvField).join(",")).join("\r\n");
 }
