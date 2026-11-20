@@ -46,6 +46,11 @@ const SALES_APP_LINKS: MenuLink[] = [
     description: "SMAPSの取引詳細画面のPDFを読み込み、過去の受注を参考に品番・仕入先を選んで受注取込CSVを作成します。",
   },
   {
+    href: "/sales-app/order-csv/joytec",
+    title: "ジョイテック受注CSV作成",
+    description: "ベルク各店の発注データCSV(setYYYYMMDD.csv)から、商品マスタで品番・単価・仕入先を当てて受注取込CSVを作成します(運賃・刃付け代も自動追加)。",
+  },
+  {
     href: "/sales-app/smaps-master",
     title: "SMAPS商品マスタ",
     description: "発注書(取引詳細PDF)を受注データと照合し、イオン品番と自社商品コード・仕入先・原価の対応一覧を作ります。",
