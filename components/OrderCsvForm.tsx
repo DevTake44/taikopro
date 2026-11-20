@@ -380,7 +380,7 @@ export default function OrderCsvForm({
           <Cell label="納入先郵便番号" width={110}>
             <input value={deliveryPostalCode} onChange={(e) => setDeliveryPostalCode(e.target.value)} style={denseInput} />
           </Cell>
-          <Cell label="客先注番 *必須" grow>
+          <Cell label="客先注番" grow>
             <input value={customerPoNo} onChange={(e) => setCustomerPoNo(e.target.value)} style={denseInput} />
           </Cell>
         </div>

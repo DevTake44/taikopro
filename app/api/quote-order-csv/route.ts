@@ -21,9 +21,6 @@ export async function POST(req: NextRequest) {
     if (!header.customer_code?.trim()) {
       return NextResponse.json({ error: "得意先コードが未設定です。" }, { status: 400 });
     }
-    if (!header.customer_po_no?.trim()) {
-      return NextResponse.json({ error: "客先注番は必須です。" }, { status: 400 });
-    }
     const missingArrange = lines.findIndex((l) => !l.arrange_code);
     if (missingArrange >= 0) {
       return NextResponse.json({ error: `${missingArrange + 1}行目の手配コードが未選択です。` }, { status: 400 });
