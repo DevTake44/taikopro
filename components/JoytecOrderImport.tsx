@@ -635,6 +635,47 @@ function MasterEditor({
   return (
     <div className="card" style={{ padding: 20, marginBottom: 16, outline: "2px solid var(--brand)" }}>
       <h2 style={{ marginTop: 0, fontSize: 16 }}>{exists ? `商品マスタの修正(${m.own_code})` : "商品マスタに追加"}</h2>
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 14 }}>
+        <SearchPicker<ProductOption>
+          label="商品を検索(品番・品名)"
+          placeholder="品番または品名"
+          url={(q) => `/api/quote-product-search?query=${encodeURIComponent(q)}`}
+          rowKey={(r) => r.product_code}
+          render={(r) => (
+            <>
+              <b>{r.product_code}</b> {r.product_name} {r.spec ?? ""}
+              {r.primary_supplier_price != null && <span className="cell-sub"> 仕入 {yen(r.primary_supplier_price)}</span>}
+            </>
+          )}
+          onPick={async (r) => {
+            setM((cur) => ({ ...cur, product_code: r.product_code, product_name: r.product_name, spec: r.spec ?? "" }));
+            // 見積書作成と同じく、直近の仕入値・仕入先を引いて入れる
+            try {
+              const res = await fetch(`/api/quote-product-cost?product_code=${encodeURIComponent(r.product_code)}`);
+              const json = await res.json();
+              setM((cur) => ({
+                ...cur,
+                ...(json.cost_price != null ? { cost: Number(json.cost_price) } : {}),
+                ...(json.cost_supplier_code ? { supplier_code: json.cost_supplier_code, supplier_name: json.cost_supplier_name ?? "" } : {}),
+              }));
+            } catch {
+              // 仕入値が取れなくても、品番・品名だけは入れる
+            }
+          }}
+        />
+        <SearchPicker<SupplierOption>
+          label="仕入先を検索(コード・仕入先名)"
+          placeholder="仕入先コードまたは仕入先名"
+          url={(q) => `/api/supplier-search?query=${encodeURIComponent(q)}`}
+          rowKey={(r) => r.supplier_code}
+          render={(r) => (
+            <>
+              <b>{r.supplier_code}</b> {r.supplier_name}
+            </>
+          )}
+          onPick={(r) => setM((cur) => ({ ...cur, supplier_code: r.supplier_code, supplier_name: r.supplier_name }))}
+        />
+      </div>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
         {input("own_code", "自社コード *", 90)}
         {input("product_code", "品番 *", 150)}
@@ -663,6 +704,87 @@ function MasterEditor({
           キャンセル
         </button>
       </div>
+    </div>
+  );
+}
+
+type ProductOption = { product_code: string; product_name: string; spec: string | null; primary_supplier_price: number | null };
+type SupplierOption = { supplier_code: string; supplier_name: string };
+
+// 検索窓1つ(コードでも名前でも)+検索ボタン+候補一覧。見積書作成の商品検索・仕入先検索と同じAPIを使う。
+function SearchPicker<T>({
+  label,
+  placeholder,
+  url,
+  rowKey,
+  render,
+  onPick,
+}: {
+  label: string;
+  placeholder: string;
+  url: (q: string) => string;
+  rowKey: (r: T) => string;
+  render: (r: T) => React.ReactNode;
+  onPick: (r: T) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [rows, setRows] = useState<T[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  async function search() {
+    if (!q.trim()) return;
+    setLoading(true);
+    try {
+      const res = await fetch(url(q.trim()));
+      const json = await res.json();
+      setRows(json.rows ?? []);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+  return (
+    <div style={{ minWidth: 380, flex: "1 1 380px" }}>
+      <div style={{ fontSize: 12, color: "var(--ink-faint)", marginBottom: 4 }}>{label}</div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input
+          value={q}
+          placeholder={placeholder}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              search();
+            }
+          }}
+          style={{ flex: 1 }}
+        />
+        <button className="ghost-btn" onClick={search} disabled={loading}>
+          {loading ? "検索中…" : "検索"}
+        </button>
+      </div>
+      {rows && (
+        <div style={{ border: "1px solid var(--line)", borderRadius: 8, marginTop: 6, maxHeight: 220, overflowY: "auto", fontSize: 12.5 }}>
+          {rows.length === 0 ? (
+            <div style={{ padding: 8, color: "var(--ink-faint)" }}>見つかりませんでした。</div>
+          ) : (
+            rows.map((r) => (
+              <button
+                key={rowKey(r)}
+                type="button"
+                onClick={() => {
+                  onPick(r);
+                  setRows(null);
+                  setQ("");
+                }}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 8px", border: "none", borderBottom: "1px solid #f2f4f7", background: "white", cursor: "pointer" }}
+              >
+                {render(r)}
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
