@@ -41,6 +41,11 @@ export default async function MenuPage() {
           <h1>太幸 統合版アプリ</h1>
           <p>用途に合わせて、下のパネルから進んでください。</p>
         </div>
+        <form action="/api/logout" method="post">
+          <button type="submit" className="ghost-btn">
+            ログアウト
+          </button>
+        </form>
       </header>
 
       <div
